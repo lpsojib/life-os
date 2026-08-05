@@ -1,21 +1,35 @@
 "use client";
 
 import { useState } from "react";
+import { createTask } from "../services/task.service";
 
 export default function AddTaskForm() {
   const [title, setTitle] = useState("");
-  const [priority, setPriority] = useState("medium");
+  const [priority, setPriority] = useState<"low" | "medium" | "high">(
+    "medium"
+  );
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (
+    e: React.FormEvent<HTMLFormElement>
+  ) => {
     e.preventDefault();
 
-    console.log({
-      title,
-      priority,
-    });
+    if (!title.trim()) return;
 
-    setTitle("");
-    setPriority("medium");
+    try {
+      await createTask({
+        title: title.trim(),
+        priority,
+      });
+
+      setTitle("");
+      setPriority("medium");
+
+      alert("✅ Task added successfully!");
+    } catch (error) {
+      console.error("Failed to add task:", error);
+      alert("❌ Failed to add task.");
+    }
   };
 
   return (
@@ -39,7 +53,11 @@ export default function AddTaskForm() {
 
         <select
           value={priority}
-          onChange={(e) => setPriority(e.target.value)}
+          onChange={(e) =>
+            setPriority(
+              e.target.value as "low" | "medium" | "high"
+            )
+          }
           className="w-full rounded-xl border p-3 outline-none focus:border-blue-500"
         >
           <option value="low">🟢 Low</option>
