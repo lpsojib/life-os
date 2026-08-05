@@ -1,6 +1,7 @@
 "use client";
 
 import { Bell, Menu, Moon, Search } from "lucide-react";
+import UserMenu from "./UserMenu";
 
 export default function Header() {
   return (
@@ -41,9 +42,10 @@ export default function Header() {
           <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-red-500" />
         </button>
 
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 font-semibold text-white">
+        {/* <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 font-semibold text-white">
           U
-        </div>
+        </div> */}
+        <UserMenu />
       </div>
     </header>
   );

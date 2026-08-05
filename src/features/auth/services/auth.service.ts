@@ -51,12 +51,10 @@ export const loginUser = async (
 /**
  * Login with Google
  */
-export const loginWithGoogle = async (): Promise<User> => {
+export const loginWithGoogle = async () => {
   const provider = new GoogleAuthProvider();
-
-  const credential = await signInWithPopup(auth, provider);
-
-  return credential.user;
+  const result = await signInWithPopup(auth, provider);
+  return result.user;
 };
 
 /**

@@ -1,4 +1,5 @@
 import LoginForm from "@/features/auth/components/LoginForm";
+import GoogleLoginButton from "@/features/auth/components/GoogleLoginButton";
 
 export default function LoginPage() {
   return (
@@ -13,6 +14,14 @@ export default function LoginPage() {
         </p>
 
         <LoginForm />
+
+        <div className="my-6 flex items-center">
+          <div className="h-px flex-1 bg-gray-300" />
+          <span className="mx-4 text-sm text-gray-500">OR</span>
+          <div className="h-px flex-1 bg-gray-300" />
+        </div>
+
+        <GoogleLoginButton />
       </div>
     </main>
   );
