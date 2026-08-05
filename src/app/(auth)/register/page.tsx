@@ -1,3 +1,5 @@
+import RegisterForm from "@/features/auth/components/RegisterForm";
+
 export default function RegisterPage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-100">
@@ -10,32 +12,7 @@ export default function RegisterPage() {
           Start your Life OS journey
         </p>
 
-        <form className="space-y-4">
-          <input
-            type="text"
-            placeholder="Full Name"
-            className="w-full rounded-lg border p-3"
-          />
-
-          <input
-            type="email"
-            placeholder="Email"
-            className="w-full rounded-lg border p-3"
-          />
-
-          <input
-            type="password"
-            placeholder="Password"
-            className="w-full rounded-lg border p-3"
-          />
-
-          <button
-            type="submit"
-            className="w-full rounded-lg bg-blue-600 p-3 font-semibold text-white"
-          >
-            Create Account
-          </button>
-        </form>
+        <RegisterForm />
       </div>
     </main>
   );
