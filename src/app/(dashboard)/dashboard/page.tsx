@@ -1,4 +1,5 @@
 import StatsCard from "@/components/cards/StatsCard";
+import AddTaskForm from "@/features/tasks/components/AddTaskForm";
 
 export default function DashboardPage() {
   return (
@@ -32,6 +33,8 @@ export default function DashboardPage() {
           description="Current experience"
         />
       </div>
+
+      <AddTaskForm />
     </div>
   );
 }
