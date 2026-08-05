@@ -1,31 +1,36 @@
+import StatsCard from "@/components/cards/StatsCard";
+
 export default function DashboardPage() {
   return (
-    <div>
-      <h1 className="mb-6 text-3xl font-bold">
+    <div className="space-y-6">
+      <h1 className="text-3xl font-bold">
         Welcome to Life OS 🚀
       </h1>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <div className="rounded-xl bg-white p-6 shadow">
-          <h2 className="text-lg font-semibold">Today&apos;s Tasks</h2>
-          <p className="mt-2 text-gray-500">
-            No tasks yet.
-          </p>
-        </div>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatsCard
+          title="Today's Tasks"
+          value={0}
+          description="Completed today"
+        />
 
-        <div className="rounded-xl bg-white p-6 shadow">
-          <h2 className="text-lg font-semibold">Habits</h2>
-          <p className="mt-2 text-gray-500">
-            No habits yet.
-          </p>
-        </div>
+        <StatsCard
+          title="Habits"
+          value={0}
+          description="Completed today"
+        />
 
-        <div className="rounded-xl bg-white p-6 shadow">
-          <h2 className="text-lg font-semibold">Goals</h2>
-          <p className="mt-2 text-gray-500">
-            No goals yet.
-          </p>
-        </div>
+        <StatsCard
+          title="Goals"
+          value={0}
+          description="Active goals"
+        />
+
+        <StatsCard
+          title="XP"
+          value={0}
+          description="Current experience"
+        />
       </div>
     </div>
   );
