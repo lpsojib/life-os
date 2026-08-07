@@ -1,15 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { onAuthStateChanged } from "firebase/auth";
+
+import { auth } from "@/lib/firebase";
 
 import { addTask } from "../services/task.service";
+import { getGoals } from "../../goals/services/goal.service";
+
 import {
   LifeArea,
   TaskPriority,
 } from "../types/task.types";
-
-import { getGoals } from "@/features/goals/services/goal.service";
-import { Goal } from "@/features/goals/types/goal.types";
 
 const lifeAreas: {
   value: LifeArea;
@@ -33,6 +35,11 @@ const priorities: {
   { value: "high", label: "High" },
 ];
 
+interface Goal {
+  id: string;
+  title: string;
+}
+
 interface AddTaskFormProps {
   onTaskAdded?: () => void;
 }
@@ -52,35 +59,47 @@ export default function AddTaskForm({
   const [goalId, setGoalId] = useState("");
 
   const [goals, setGoals] = useState<Goal[]>([]);
-  const [goalsLoading, setGoalsLoading] = useState(true);
 
   const [loading, setLoading] = useState(false);
+  const [loadingGoals, setLoadingGoals] = useState(true);
   const [error, setError] = useState("");
 
-  /**
-   * Load current user's goals
+  /*
+   * Load Goals after Firebase Authentication is ready
    */
   useEffect(() => {
-    const loadGoals = async () => {
-      try {
-        setGoalsLoading(true);
+    const unsubscribe = onAuthStateChanged(
+      auth,
+      async (user) => {
+        if (!user) {
+          setGoals([]);
+          setLoadingGoals(false);
+          return;
+        }
 
-        const userGoals = await getGoals();
+        try {
+          setLoadingGoals(true);
 
-        setGoals(userGoals);
-      } catch (error) {
-        console.error("Load goals error:", error);
+          const data = await getGoals();
 
-        setError("Failed to load goals.");
-      } finally {
-        setGoalsLoading(false);
+          setGoals(data as Goal[]);
+        } catch (error) {
+          console.error(
+            "Failed to load goals:",
+            error
+          );
+
+          setError("Failed to load goals.");
+        } finally {
+          setLoadingGoals(false);
+        }
       }
-    };
+    );
 
-    loadGoals();
+    return () => unsubscribe();
   }, []);
 
-  /**
+  /*
    * Add Task
    */
   const handleSubmit = async (
@@ -95,12 +114,17 @@ export default function AddTaskForm({
       return;
     }
 
+    if (!auth.currentUser) {
+      setError("Please login first.");
+      return;
+    }
+
     try {
       setLoading(true);
 
       await addTask(
-        title,
-        description,
+        title.trim(),
+        description.trim(),
         lifeArea,
         priority,
         goalId || null,
@@ -115,9 +139,14 @@ export default function AddTaskForm({
 
       onTaskAdded?.();
     } catch (error) {
-      console.error("Add task error:", error);
+      console.error(
+        "Add task error:",
+        error
+      );
 
-      setError("Failed to add task. Please try again.");
+      setError(
+        "Failed to add task. Please try again."
+      );
     } finally {
       setLoading(false);
     }
@@ -128,7 +157,6 @@ export default function AddTaskForm({
       onSubmit={handleSubmit}
       className="space-y-5 rounded-2xl bg-white p-6 shadow-sm"
     >
-      {/* Title */}
       <div>
         <label className="mb-2 block text-sm font-medium">
           Title
@@ -146,7 +174,6 @@ export default function AddTaskForm({
         />
       </div>
 
-      {/* Description */}
       <div>
         <label className="mb-2 block text-sm font-medium">
           Description
@@ -163,7 +190,6 @@ export default function AddTaskForm({
         />
       </div>
 
-      {/* Life Area */}
       <div>
         <label className="mb-2 block text-sm font-medium">
           Life Area
@@ -172,7 +198,9 @@ export default function AddTaskForm({
         <select
           value={lifeArea}
           onChange={(event) =>
-            setLifeArea(event.target.value as LifeArea)
+            setLifeArea(
+              event.target.value as LifeArea
+            )
           }
           className="w-full rounded-xl border p-3"
         >
@@ -187,7 +215,6 @@ export default function AddTaskForm({
         </select>
       </div>
 
-      {/* Priority */}
       <div>
         <label className="mb-2 block text-sm font-medium">
           Priority
@@ -213,7 +240,6 @@ export default function AddTaskForm({
         </select>
       </div>
 
-      {/* Goal */}
       <div>
         <label className="mb-2 block text-sm font-medium">
           Goal
@@ -225,40 +251,39 @@ export default function AddTaskForm({
             setGoalId(event.target.value)
           }
           className="w-full rounded-xl border p-3"
+          disabled={loadingGoals}
         >
-          <option value="">Regular</option>
+          <option value="">
+            {loadingGoals
+              ? "Loading goals..."
+              : "No Goal"}
+          </option>
 
-          {goalsLoading ? (
-            <option disabled>
-              Loading goals...
+          {goals.map((goal) => (
+            <option
+              key={goal.id}
+              value={goal.id}
+            >
+              {goal.title}
             </option>
-          ) : (
-            goals.map((goal) => (
-              <option
-                key={goal.id}
-                value={goal.id}
-              >
-                {goal.title}
-              </option>
-            ))
-          )}
+          ))}
         </select>
       </div>
 
-      {/* Error */}
       {error && (
         <p className="rounded-lg bg-red-50 p-3 text-sm text-red-600">
           {error}
         </p>
       )}
 
-      {/* Submit */}
       <button
         type="submit"
         disabled={loading}
         className="w-full rounded-xl bg-blue-600 p-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {loading ? "Adding Task..." : "Add Task"}
+        {loading
+          ? "Adding Task..."
+          : "Add Task"}
       </button>
     </form>
   );
