@@ -1,19 +1,33 @@
+export type TaskStatus = "daily" | "pending" | "completed";
+
+export type TaskPriority = "low" | "medium" | "high";
+
+export type LifeArea =
+  | "work"
+  | "learning"
+  | "health"
+  | "deen"
+  | "family"
+  | "finance"
+  | "personal";
+
 export interface Task {
   id: string;
 
   title: string;
+  description: string;
 
-  description?: string;
+  lifeArea: LifeArea;
+  priority: TaskPriority;
 
-  completed: boolean;
+  goalId: string | null;
 
-  priority: "low" | "medium" | "high";
+  status: TaskStatus;
 
-  createdAt: Date;
+  dueDate: string | null;
 
-  updatedAt: Date;
+  order: number;
 
-  completedAt?: Date;
-
-  userId: string;
+  createdAt: string;
+  completedAt: string | null;
 }
