@@ -1,32 +1,224 @@
-
 import {
   addDoc,
   collection,
-  serverTimestamp,
+  deleteDoc,
+  doc,
+  getDocs,
+  orderBy,
+  query,
+  Timestamp,
+  updateDoc,
 } from "firebase/firestore";
 
-import { auth, db } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
+import { auth } from "@/lib/firebase";
 
-export interface CreateTaskInput {
-  title: string;
-  priority: "low" | "medium" | "high";
-}
+import {
+  Task,
+  TaskPriority,
+  LifeArea,
+} from "../types/task.types";
 
-export async function createTask(data: CreateTaskInput) {
+const getTasksCollection = () => {
   const user = auth.currentUser;
 
   if (!user) {
     throw new Error("User is not authenticated.");
   }
 
-  await addDoc(
-    collection(db, "users", user.uid, "tasks"),
-    {
-      title: data.title,
-      priority: data.priority,
-      completed: false,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    }
+  return collection(db, "users", user.uid, "tasks");
+};
+
+/**
+ * Create Task
+ */
+export const addTask = async (
+  title: string,
+  description: string,
+  lifeArea: LifeArea,
+  priority: TaskPriority,
+  goalId: string | null,
+  dueDate: string | null
+): Promise<string> => {
+  const now = new Date();
+
+  const status =
+    dueDate && new Date(dueDate) > now
+      ? "pending"
+      : "daily";
+
+  const taskData = {
+    title: title.trim(),
+    description: description.trim(),
+
+    lifeArea,
+    priority,
+
+    goalId,
+
+    status,
+
+    dueDate,
+
+    order: Date.now(),
+
+    createdAt: Timestamp.now(),
+
+    completedAt: null,
+  };
+
+  const taskRef = await addDoc(
+    getTasksCollection(),
+    taskData
   );
-}
+
+  return taskRef.id;
+};
+
+/**
+ * Get User Tasks
+ */
+export const getTasks = async (): Promise<Task[]> => {
+  const tasksQuery = query(
+    getTasksCollection(),
+    orderBy("order", "asc")
+  );
+
+  const snapshot = await getDocs(tasksQuery);
+
+  return snapshot.docs.map((item) => {
+    const data = item.data();
+
+    return {
+      id: item.id,
+
+      title: data.title ?? "",
+      description: data.description ?? "",
+
+      lifeArea: data.lifeArea,
+      priority: data.priority,
+
+      goalId: data.goalId ?? null,
+
+      status: data.status,
+
+      dueDate: data.dueDate ?? null,
+
+      order: data.order ?? 0,
+
+      createdAt:
+        data.createdAt?.toDate?.().toISOString() ??
+        new Date().toISOString(),
+
+      completedAt:
+        data.completedAt?.toDate?.().toISOString() ??
+        null,
+    };
+  });
+};
+
+/**
+ * Complete Task
+ */
+export const completeTask = async (
+  taskId: string
+): Promise<void> => {
+  const user = auth.currentUser;
+
+  if (!user) {
+    throw new Error("User is not authenticated.");
+  }
+
+  const taskRef = doc(
+    db,
+    "users",
+    user.uid,
+    "tasks",
+    taskId
+  );
+
+  await updateDoc(taskRef, {
+    status: "completed",
+    completedAt: Timestamp.now(),
+  });
+};
+
+/**
+ * Restore Completed Task
+ */
+export const restoreTask = async (
+  taskId: string
+): Promise<void> => {
+  const user = auth.currentUser;
+
+  if (!user) {
+    throw new Error("User is not authenticated.");
+  }
+
+  const taskRef = doc(
+    db,
+    "users",
+    user.uid,
+    "tasks",
+    taskId
+  );
+
+  await updateDoc(taskRef, {
+    status: "daily",
+    completedAt: null,
+  });
+};
+
+/**
+ * Delete Task
+ */
+export const deleteTask = async (
+  taskId: string
+): Promise<void> => {
+  const user = auth.currentUser;
+
+  if (!user) {
+    throw new Error("User is not authenticated.");
+  }
+
+  const taskRef = doc(
+    db,
+    "users",
+    user.uid,
+    "tasks",
+    taskId
+  );
+
+  await deleteDoc(taskRef);
+};
+
+/**
+ * Update Task
+ */
+export const updateTask = async (
+  taskId: string,
+  updates: Partial<{
+    title: string;
+    description: string;
+    lifeArea: LifeArea;
+    priority: TaskPriority;
+    goalId: string | null;
+    dueDate: string | null;
+  }>
+): Promise<void> => {
+  const user = auth.currentUser;
+
+  if (!user) {
+    throw new Error("User is not authenticated.");
+  }
+
+  const taskRef = doc(
+    db,
+    "users",
+    user.uid,
+    "tasks",
+    taskId
+  );
+
+  await updateDoc(taskRef, updates);
+};
