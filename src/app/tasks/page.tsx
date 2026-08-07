@@ -2,6 +2,7 @@
 
 import AddTaskForm from "@/features/tasks/components/AddTaskForm";
 import TaskList from "@/features/tasks/components/TaskList";
+import CompletedTaskList from "@/features/tasks/components/CompletedTaskList";
 
 export default function TasksPage() {
   return (
@@ -18,6 +19,7 @@ export default function TasksPage() {
         </div>
 
         <div className="space-y-8">
+          {/* Add Task */}
           <section>
             <h2 className="mb-4 text-xl font-semibold">
               Add Task
@@ -26,6 +28,7 @@ export default function TasksPage() {
             <AddTaskForm />
           </section>
 
+          {/* Daily Tasks */}
           <section>
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-xl font-semibold">
@@ -34,6 +37,21 @@ export default function TasksPage() {
             </div>
 
             <TaskList />
+          </section>
+
+          {/* Completed Tasks */}
+          <section>
+            <div className="mb-4">
+              <h2 className="text-xl font-semibold">
+                Completed Tasks
+              </h2>
+
+              <p className="mt-1 text-sm text-gray-500">
+                Your completed tasks by date.
+              </p>
+            </div>
+
+            <CompletedTaskList />
           </section>
         </div>
       </div>

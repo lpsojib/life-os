@@ -10,8 +10,9 @@ import {
   updateDoc,
 } from "firebase/firestore";
 
-import { db } from "@/lib/firebase";
-import { auth } from "@/lib/firebase";
+import { onAuthStateChanged } from "firebase/auth";
+
+import { db, auth } from "@/lib/firebase";
 
 import {
   Task,
@@ -19,14 +20,39 @@ import {
   LifeArea,
 } from "../types/task.types";
 
-const getTasksCollection = () => {
-  const user = auth.currentUser;
-
-  if (!user) {
-    throw new Error("User is not authenticated.");
+/**
+ * Wait until Firebase finishes checking authentication.
+ */
+const getAuthenticatedUser = (): Promise<NonNullable<typeof auth.currentUser>> => {
+  if (auth.currentUser) {
+    return Promise.resolve(auth.currentUser);
   }
 
-  return collection(db, "users", user.uid, "tasks");
+  return new Promise((resolve, reject) => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      unsubscribe();
+
+      if (user) {
+        resolve(user);
+      } else {
+        reject(new Error("User is not authenticated."));
+      }
+    });
+  });
+};
+
+/**
+ * Get current user's Tasks collection
+ */
+const getTasksCollection = async () => {
+  const user = await getAuthenticatedUser();
+
+  return collection(
+    db,
+    "users",
+    user.uid,
+    "tasks"
+  );
 };
 
 /**
@@ -67,8 +93,11 @@ export const addTask = async (
     completedAt: null,
   };
 
+  const tasksCollection =
+    await getTasksCollection();
+
   const taskRef = await addDoc(
-    getTasksCollection(),
+    tasksCollection,
     taskData
   );
 
@@ -79,8 +108,11 @@ export const addTask = async (
  * Get User Tasks
  */
 export const getTasks = async (): Promise<Task[]> => {
+  const tasksCollection =
+    await getTasksCollection();
+
   const tasksQuery = query(
-    getTasksCollection(),
+    tasksCollection,
     orderBy("order", "asc")
   );
 
@@ -123,11 +155,7 @@ export const getTasks = async (): Promise<Task[]> => {
 export const completeTask = async (
   taskId: string
 ): Promise<void> => {
-  const user = auth.currentUser;
-
-  if (!user) {
-    throw new Error("User is not authenticated.");
-  }
+  const user = await getAuthenticatedUser();
 
   const taskRef = doc(
     db,
@@ -149,11 +177,7 @@ export const completeTask = async (
 export const restoreTask = async (
   taskId: string
 ): Promise<void> => {
-  const user = auth.currentUser;
-
-  if (!user) {
-    throw new Error("User is not authenticated.");
-  }
+  const user = await getAuthenticatedUser();
 
   const taskRef = doc(
     db,
@@ -175,11 +199,7 @@ export const restoreTask = async (
 export const deleteTask = async (
   taskId: string
 ): Promise<void> => {
-  const user = auth.currentUser;
-
-  if (!user) {
-    throw new Error("User is not authenticated.");
-  }
+  const user = await getAuthenticatedUser();
 
   const taskRef = doc(
     db,
@@ -206,11 +226,7 @@ export const updateTask = async (
     dueDate: string | null;
   }>
 ): Promise<void> => {
-  const user = auth.currentUser;
-
-  if (!user) {
-    throw new Error("User is not authenticated.");
-  }
+  const user = await getAuthenticatedUser();
 
   const taskRef = doc(
     db,
