@@ -11,10 +11,10 @@ export default function Header({
   onMenuClick,
 }: HeaderProps) {
   return (
-    <header className="flex h-16 items-center justify-between border-b bg-white px-4 md:px-6">
+    <header className="fixed left-0 right-0 top-0 z-30 flex h-16 items-center justify-between border-b bg-white px-4 md:left-64 md:px-6">
       {/* Left Side */}
       <div className="flex items-center gap-3">
-        {/* Mobile Menu Button */}
+        {/* Mobile Menu */}
         <button
           type="button"
           onClick={onMenuClick}
@@ -47,27 +47,22 @@ export default function Header({
 
       {/* Right Side */}
       <div className="flex items-center gap-2 md:gap-4">
-        {/* Dark Mode */}
         <button
           type="button"
           className="rounded-lg p-2 hover:bg-gray-100"
-          aria-label="Toggle dark mode"
         >
           <Moon size={20} />
         </button>
 
-        {/* Notification */}
         <button
           type="button"
           className="relative rounded-lg p-2 hover:bg-gray-100"
-          aria-label="Notifications"
         >
           <Bell size={20} />
 
           <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-red-500" />
         </button>
 
-        {/* User Menu */}
         <UserMenu />
       </div>
     </header>

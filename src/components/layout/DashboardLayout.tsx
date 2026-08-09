@@ -23,14 +23,16 @@ export default function DashboardLayout({
 
       {/* Main Area */}
       <div className="md:ml-64">
-        {/* Header */}
+        {/* Fixed Header */}
         <Header
           onMenuClick={() => setMenuOpen(true)}
         />
 
-        {/* Page Content */}
-        <main className="p-4 lg:p-8">
-          {children}
+        {/* Content */}
+        <main className="pt-16">
+          <div className="p-4 lg:p-8">
+            {children}
+          </div>
         </main>
       </div>
     </div>
