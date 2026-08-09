@@ -3,24 +3,39 @@
 import { Bell, Menu, Moon, Search } from "lucide-react";
 import UserMenu from "./UserMenu";
 
-export default function Header() {
+interface HeaderProps {
+  onMenuClick: () => void;
+}
+
+export default function Header({
+  onMenuClick,
+}: HeaderProps) {
   return (
-    <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b bg-white px-4 lg:px-8">
+    <header className="flex h-16 items-center justify-between border-b bg-white px-4 md:px-6">
       {/* Left Side */}
-      <div className="flex items-center gap-4">
-        <button className="lg:hidden">
+      <div className="flex items-center gap-3">
+        {/* Mobile Menu Button */}
+        <button
+          type="button"
+          onClick={onMenuClick}
+          className="rounded-lg p-2 hover:bg-gray-100 md:hidden"
+          aria-label="Open menu"
+        >
           <Menu size={24} />
         </button>
 
-        <h2 className="text-xl font-semibold">
+        <h2 className="text-xl font-semibold text-gray-900">
           Dashboard
         </h2>
       </div>
 
-      {/* Center Search */}
+      {/* Search */}
       <div className="hidden w-full max-w-md lg:block">
         <div className="flex items-center rounded-lg border px-3 py-2">
-          <Search size={18} className="text-gray-500" />
+          <Search
+            size={18}
+            className="text-gray-500"
+          />
 
           <input
             type="text"
@@ -31,20 +46,28 @@ export default function Header() {
       </div>
 
       {/* Right Side */}
-      <div className="flex items-center gap-4">
-        <button className="rounded-lg p-2 hover:bg-gray-100">
+      <div className="flex items-center gap-2 md:gap-4">
+        {/* Dark Mode */}
+        <button
+          type="button"
+          className="rounded-lg p-2 hover:bg-gray-100"
+          aria-label="Toggle dark mode"
+        >
           <Moon size={20} />
         </button>
 
-        <button className="relative rounded-lg p-2 hover:bg-gray-100">
+        {/* Notification */}
+        <button
+          type="button"
+          className="relative rounded-lg p-2 hover:bg-gray-100"
+          aria-label="Notifications"
+        >
           <Bell size={20} />
 
           <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-red-500" />
         </button>
 
-        {/* <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 font-semibold text-white">
-          U
-        </div> */}
+        {/* User Menu */}
         <UserMenu />
       </div>
     </header>
