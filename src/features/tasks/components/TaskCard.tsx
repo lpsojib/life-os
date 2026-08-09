@@ -12,12 +12,12 @@ export default function TaskCard({
   onComplete,
 }: TaskCardProps) {
   return (
-    <div className="flex items-center gap-3 rounded-xl border bg-white p-4 shadow-sm">
-      <input
-        type="checkbox"
-        checked={task.status === "completed"}
-        onChange={() => onComplete(task.id)}
-        className="h-5 w-5 cursor-pointer"
+    <div className="flex items-center gap-4 rounded-2xl bg-white p-4 shadow-sm transition hover:shadow-md">
+      <button
+        type="button"
+        onClick={() => onComplete(task.id)}
+        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-gray-300 transition hover:border-blue-500 hover:bg-blue-50"
+        aria-label={`Complete ${task.title}`}
       />
 
       <div className="min-w-0 flex-1">
@@ -31,12 +31,12 @@ export default function TaskCard({
           </p>
         )}
 
-        <div className="mt-2 flex flex-wrap gap-2 text-xs">
-          <span className="rounded-full bg-gray-100 px-2 py-1">
+        <div className="mt-2 flex flex-wrap gap-2">
+          <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs text-gray-600">
             {task.lifeArea}
           </span>
 
-          <span className="rounded-full bg-gray-100 px-2 py-1">
+          <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs text-blue-600">
             {task.priority}
           </span>
         </div>

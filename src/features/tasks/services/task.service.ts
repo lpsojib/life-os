@@ -10,68 +10,90 @@ import {
   updateDoc,
 } from "firebase/firestore";
 
-import { onAuthStateChanged } from "firebase/auth";
-
-import { db, auth } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
 
 import {
+  LifeArea,
   Task,
   TaskPriority,
-  LifeArea,
+  TaskStatus,
 } from "../types/task.types";
 
 /**
- * Wait until Firebase finishes checking authentication.
+ * Get current user's tasks collection
  */
-const getAuthenticatedUser = (): Promise<NonNullable<typeof auth.currentUser>> => {
-  if (auth.currentUser) {
-    return Promise.resolve(auth.currentUser);
+const getTasksCollection = () => {
+  const user = auth.currentUser;
+
+  if (!user) {
+    throw new Error("User is not authenticated.");
   }
 
-  return new Promise((resolve, reject) => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      unsubscribe();
-
-      if (user) {
-        resolve(user);
-      } else {
-        reject(new Error("User is not authenticated."));
-      }
-    });
-  });
+  return collection(db, "users", user.uid, "tasks");
 };
 
 /**
- * Get current user's Tasks collection
+ * Add Daily Task
+ *
+ * Daily task = আজকের task
+ * এখানে কোনো date থাকবে না।
  */
-const getTasksCollection = async () => {
-  const user = await getAuthenticatedUser();
+export const addDailyTask = async (
+  title: string,
+  description: string,
+  lifeArea: LifeArea,
+  priority: TaskPriority,
+  goalId: string | null
+): Promise<string> => {
+  const taskData = {
+    title: title.trim(),
+    description: description.trim(),
 
-  return collection(
-    db,
-    "users",
-    user.uid,
-    "tasks"
+    lifeArea,
+    priority,
+
+    goalId,
+
+    status: "daily" as TaskStatus,
+
+    activeDate: null,
+
+    order: Date.now(),
+
+    createdAt: Timestamp.now(),
+
+    completedAt: null,
+  };
+
+  const taskRef = await addDoc(
+    getTasksCollection(),
+    taskData
   );
+
+  return taskRef.id;
 };
 
 /**
- * Create Task
+ * Add Pending Task
+ *
+ * Pending task-এর Active Date থাকবে।
+ *
+ * Example:
+ * activeDate = 2026-08-10
+ *
+ * 10 August এ task automatically Daily হবে।
  */
-export const addTask = async (
+export const addPendingTask = async (
   title: string,
   description: string,
   lifeArea: LifeArea,
   priority: TaskPriority,
   goalId: string | null,
-  dueDate: string | null
+  activeDate: string
 ): Promise<string> => {
-  const now = new Date();
-
-  const status =
-    dueDate && new Date(dueDate) > now
-      ? "pending"
-      : "daily";
+  if (!activeDate) {
+    throw new Error("Active date is required.");
+  }
 
   const taskData = {
     title: title.trim(),
@@ -82,9 +104,9 @@ export const addTask = async (
 
     goalId,
 
-    status,
+    status: "pending" as TaskStatus,
 
-    dueDate,
+    activeDate,
 
     order: Date.now(),
 
@@ -93,11 +115,8 @@ export const addTask = async (
     completedAt: null,
   };
 
-  const tasksCollection =
-    await getTasksCollection();
-
   const taskRef = await addDoc(
-    tasksCollection,
+    getTasksCollection(),
     taskData
   );
 
@@ -105,36 +124,74 @@ export const addTask = async (
 };
 
 /**
- * Get User Tasks
+ * Get all tasks
+ *
+ * গুরুত্বপূর্ণ:
+ * Pending task-এর activeDate আজ বা তার আগের হলে
+ * সেটাকে automatically Daily করা হবে।
  */
 export const getTasks = async (): Promise<Task[]> => {
-  const tasksCollection =
-    await getTasksCollection();
-
   const tasksQuery = query(
-    tasksCollection,
+    getTasksCollection(),
     orderBy("order", "asc")
   );
 
   const snapshot = await getDocs(tasksQuery);
 
-  return snapshot.docs.map((item) => {
+  const today = new Date();
+
+  const todayString =
+    today.getFullYear() +
+    "-" +
+    String(today.getMonth() + 1).padStart(2, "0") +
+    "-" +
+    String(today.getDate()).padStart(2, "0");
+
+  const tasks: Task[] = [];
+
+  for (const item of snapshot.docs) {
     const data = item.data();
 
-    return {
+    let status = data.status as TaskStatus;
+
+    let activeDate =
+      data.activeDate ?? null;
+
+    /**
+     * Pending task-এর Active Date আজ হলে
+     * Pending → Daily
+     */
+    if (
+      status === "pending" &&
+      activeDate &&
+      activeDate <= todayString
+    ) {
+      status = "daily";
+
+      activeDate = null;
+
+      await updateDoc(item.ref, {
+        status: "daily",
+        activeDate: null,
+      });
+    }
+
+    tasks.push({
       id: item.id,
 
       title: data.title ?? "",
+
       description: data.description ?? "",
 
       lifeArea: data.lifeArea,
+
       priority: data.priority,
 
       goalId: data.goalId ?? null,
 
-      status: data.status,
+      status,
 
-      dueDate: data.dueDate ?? null,
+      activeDate,
 
       order: data.order ?? 0,
 
@@ -145,8 +202,10 @@ export const getTasks = async (): Promise<Task[]> => {
       completedAt:
         data.completedAt?.toDate?.().toISOString() ??
         null,
-    };
-  });
+    });
+  }
+
+  return tasks;
 };
 
 /**
@@ -155,7 +214,11 @@ export const getTasks = async (): Promise<Task[]> => {
 export const completeTask = async (
   taskId: string
 ): Promise<void> => {
-  const user = await getAuthenticatedUser();
+  const user = auth.currentUser;
+
+  if (!user) {
+    throw new Error("User is not authenticated.");
+  }
 
   const taskRef = doc(
     db,
@@ -173,11 +236,17 @@ export const completeTask = async (
 
 /**
  * Restore Completed Task
+ *
+ * Completed → Daily
  */
 export const restoreTask = async (
   taskId: string
 ): Promise<void> => {
-  const user = await getAuthenticatedUser();
+  const user = auth.currentUser;
+
+  if (!user) {
+    throw new Error("User is not authenticated.");
+  }
 
   const taskRef = doc(
     db,
@@ -189,6 +258,7 @@ export const restoreTask = async (
 
   await updateDoc(taskRef, {
     status: "daily",
+    activeDate: null,
     completedAt: null,
   });
 };
@@ -199,7 +269,11 @@ export const restoreTask = async (
 export const deleteTask = async (
   taskId: string
 ): Promise<void> => {
-  const user = await getAuthenticatedUser();
+  const user = auth.currentUser;
+
+  if (!user) {
+    throw new Error("User is not authenticated.");
+  }
 
   const taskRef = doc(
     db,
@@ -223,10 +297,15 @@ export const updateTask = async (
     lifeArea: LifeArea;
     priority: TaskPriority;
     goalId: string | null;
-    dueDate: string | null;
+    activeDate: string | null;
+    status: TaskStatus;
   }>
 ): Promise<void> => {
-  const user = await getAuthenticatedUser();
+  const user = auth.currentUser;
+
+  if (!user) {
+    throw new Error("User is not authenticated.");
+  }
 
   const taskRef = doc(
     db,

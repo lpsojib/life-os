@@ -2,53 +2,55 @@
 
 import { useEffect, useState } from "react";
 
-import {
-  getTasks,
-  completeTask,
-} from "../services/task.service";
-
+import { getTasks, completeTask } from "../services/task.service";
 import { Task } from "../types/task.types";
 
 import TaskCard from "./TaskCard";
+import { useAuthStore } from "@/store/auth.store";
 
 export default function TaskList() {
+  const user = useAuthStore((state) => state.user);
+  const authLoading = useAuthStore((state) => state.loading);
+
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    let cancelled = false;
+    // Firebase authentication এখনো check করছে
+    if (authLoading) {
+      return;
+    }
 
-    const fetchTasks = async () => {
+    // User login করা নেই
+    // এখানে কোনো setState() করা যাবে না
+    if (!user) {
+      return;
+    }
+
+    const loadTasks = async () => {
       try {
+        setError("");
+
         const allTasks = await getTasks();
 
-        if (cancelled) return;
-
+        // শুধু Daily task
         const dailyTasks = allTasks.filter(
           (task) => task.status === "daily"
         );
 
         setTasks(dailyTasks);
       } catch (error) {
-        if (cancelled) return;
+        console.error("Load daily tasks error:", error);
 
-        console.error("Load tasks error:", error);
-
-        setError("Failed to load tasks.");
+        setError("Failed to load daily tasks.");
       } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        setLoading(false);
       }
     };
 
-    fetchTasks();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    loadTasks();
+  }, [user, authLoading]);
 
   const handleComplete = async (taskId: string) => {
     try {
@@ -60,51 +62,86 @@ export default function TaskList() {
         )
       );
     } catch (error) {
-      console.error(
-        "Complete task error:",
-        error
-      );
+      console.error("Complete task error:", error);
 
       setError("Failed to complete task.");
     }
   };
 
-  if (loading) {
+  // Authentication checking
+  if (authLoading) {
     return (
-      <div className="rounded-2xl bg-white p-6 shadow-sm">
-        <p className="text-gray-500">
-          Loading tasks...
+      <div className="rounded-2xl border border-gray-200 bg-white p-6 text-center shadow-sm">
+        <p className="text-sm text-gray-500">
+          Checking authentication...
         </p>
       </div>
     );
   }
 
+  // User login করা নেই
+  if (!user) {
+    return (
+      <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center shadow-sm">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-gray-100">
+          🔐
+        </div>
+
+        <h3 className="mt-4 font-semibold text-gray-900">
+          Please login first
+        </h3>
+
+        <p className="mt-1 text-sm text-gray-500">
+          You need to be logged in to see your tasks.
+        </p>
+      </div>
+    );
+  }
+
+  // Tasks loading
+  if (loading) {
+    return (
+      <div className="rounded-2xl border border-gray-200 bg-white p-6 text-center shadow-sm">
+        <p className="text-sm text-gray-500">
+          Loading daily tasks...
+        </p>
+      </div>
+    );
+  }
+
+  // Error
   if (error) {
     return (
-      <div className="rounded-2xl bg-red-50 p-6">
-        <p className="text-sm text-red-600">
+      <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-center">
+        <p className="text-sm font-medium text-red-600">
           {error}
         </p>
       </div>
     );
   }
 
+  // কোনো Daily task নেই
   if (tasks.length === 0) {
     return (
-      <div className="rounded-2xl bg-white p-6 text-center shadow-sm">
-        <h3 className="text-lg font-semibold">
-          No daily tasks
+      <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-8 text-center shadow-sm">
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-2xl">
+          🎯
+        </div>
+
+        <h3 className="mt-4 font-semibold text-gray-900">
+          No tasks for today
         </h3>
 
         <p className="mt-1 text-sm text-gray-500">
-          Add a task to get started.
+          Create a task to get started.
         </p>
       </div>
     );
   }
 
+  // Daily Tasks
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {tasks.map((task) => (
         <TaskCard
           key={task.id}

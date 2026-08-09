@@ -2,21 +2,13 @@
 
 import { useState } from "react";
 
-import AddTaskForm from "@/features/tasks/components/AddTaskForm";
-import TaskList from "@/features/tasks/components/TaskList";
+import AddPendingTaskForm from "@/features/tasks/components/AddPendingTaskForm";
+import PendingTaskList from "@/features/tasks/components/PendingTaskList";
 import TaskNavigation from "@/features/tasks/components/TaskNavigation";
 
-export default function TasksPage() {
-  const [showCreateTask, setShowCreateTask] = useState(false);
-
-  const today = new Date();
-
-  const dateText = today.toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
+export default function PendingTasksPage() {
+  const [showForm, setShowForm] = useState(false);
+  const [refresh, setRefresh] = useState(0);
 
   return (
     <main className="min-h-screen bg-slate-50">
@@ -28,96 +20,93 @@ export default function TasksPage() {
         {/* Header */}
         <header className="mb-8">
           <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-100 text-2xl">
-              ☀️
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-100 text-2xl">
+              ⏳
             </div>
 
             <div>
-              <p className="text-sm font-semibold text-blue-600">
-                Today
+              <p className="text-sm font-semibold text-amber-600">
+                Tasks
               </p>
 
               <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-                Daily Tasks
+                Pending Tasks
               </h1>
             </div>
           </div>
 
           <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
             <p className="text-sm text-slate-500">
-              Today&apos;s date
+              Plan ahead
             </p>
 
             <p className="mt-1 text-lg font-semibold text-slate-800">
-              {dateText}
+              Schedule tasks for the future
             </p>
 
             <p className="mt-1 text-sm text-slate-500">
-              Focus on what matters today.
+              When the active date arrives, the task will automatically move to Daily Tasks.
             </p>
           </div>
         </header>
 
-        {/* Create Task Button */}
+        {/* Create Pending Task Button */}
         <div className="mb-8">
           <button
             type="button"
-            onClick={() =>
-              setShowCreateTask((current) => !current)
-            }
+            onClick={() => setShowForm((current) => !current)}
             className="flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-4 font-semibold text-white shadow-sm transition hover:bg-blue-700 active:scale-[0.99]"
           >
             <span className="text-xl">
-              {showCreateTask ? "×" : "+"}
+              {showForm ? "×" : "+"}
             </span>
 
             <span>
-              {showCreateTask
+              {showForm
                 ? "Close"
-                : "Create Daily Task"}
+                : "Create Pending Task"}
             </span>
           </button>
         </div>
 
-        {/* Create Task Form */}
-        {showCreateTask && (
+        {/* Create Pending Task Form */}
+        {showForm && (
           <section className="mb-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-100 bg-slate-50 px-5 py-5">
               <h2 className="text-xl font-bold text-slate-900">
-                Create Daily Task
+                Create Pending Task
               </h2>
 
               <p className="mt-1 text-sm text-slate-500">
-                Add a task that you want to complete today.
+                Choose the date when this task should become a Daily Task.
               </p>
             </div>
 
             <div className="p-5">
-              <AddTaskForm
+              <AddPendingTaskForm
+                key={refresh}
                 onTaskAdded={() => {
-                  setShowCreateTask(false);
-                  window.location.reload();
+                  setShowForm(false);
+                  setRefresh((value) => value + 1);
                 }}
               />
             </div>
           </section>
         )}
 
-        {/* Daily Tasks */}
+        {/* Pending Tasks */}
         <section>
-          <div className="mb-4 flex items-end justify-between">
-            <div>
-              <h2 className="text-xl font-bold text-slate-900">
-                Today&apos;s Tasks
-              </h2>
+          <div className="mb-4">
+            <h2 className="text-xl font-bold text-slate-900">
+              Scheduled Tasks
+            </h2>
 
-              <p className="mt-1 text-sm text-slate-500">
-                Complete your tasks for today.
-              </p>
-            </div>
+            <p className="mt-1 text-sm text-slate-500">
+              These tasks are waiting for their active date.
+            </p>
           </div>
 
-          <TaskList />
+          <PendingTaskList key={refresh} />
         </section>
 
       </div>

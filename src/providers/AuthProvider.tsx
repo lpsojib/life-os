@@ -11,7 +11,8 @@ interface Props {
 }
 
 export default function AuthProvider({ children }: Props) {
-  const { setUser, setLoading } = useAuthStore();
+  const setUser = useAuthStore((state) => state.setUser);
+  const setLoading = useAuthStore((state) => state.setLoading);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
