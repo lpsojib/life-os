@@ -11,23 +11,16 @@ interface AddGoalFormProps {
 export default function AddGoalForm({
   onGoalAdded,
 }: AddGoalFormProps) {
-  const [title, setTitle] =
-    useState("");
-
+  const [title, setTitle] = useState("");
   const [description, setDescription] =
     useState("");
-
   const [startDate, setStartDate] =
     useState("");
-
   const [endDate, setEndDate] =
     useState("");
-
   const [loading, setLoading] =
     useState(false);
-
-  const [error, setError] =
-    useState("");
+  const [error, setError] = useState("");
 
   const handleSubmit = async (
     event: React.FormEvent
@@ -37,9 +30,7 @@ export default function AddGoalForm({
     setError("");
 
     if (!title.trim()) {
-      setError(
-        "লক্ষ্যের নাম লিখুন।"
-      );
+      setError("লক্ষ্যের নাম লিখুন।");
       return;
     }
 
@@ -99,11 +90,11 @@ export default function AddGoalForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="rounded-2xl border bg-white p-5 shadow-sm"
+      className="rounded-2xl bg-white p-5 shadow-sm"
     >
       {/* Header */}
       <div className="mb-5">
-        <h2 className="text-lg font-bold text-gray-900">
+        <h2 className="text-lg font-semibold text-gray-900">
           নতুন লক্ষ্য
         </h2>
 
@@ -127,9 +118,7 @@ export default function AddGoalForm({
             type="text"
             value={title}
             onChange={(event) =>
-              setTitle(
-                event.target.value
-              )
+              setTitle(event.target.value)
             }
             placeholder="যেমন: Web Developer হওয়া"
             className="w-full rounded-xl border px-4 py-3 outline-none transition focus:ring-2 focus:ring-blue-500"

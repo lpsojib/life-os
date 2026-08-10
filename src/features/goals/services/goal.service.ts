@@ -3,6 +3,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   orderBy,
   query,
@@ -23,16 +24,15 @@ import {
   GoalTaskStatus,
 } from "../types/goal-task.types";
 
-/**
- * Current user's Goals collection
- */
+/* =========================================================
+   COLLECTION HELPERS
+========================================================= */
+
 const getGoalsCollection = () => {
   const user = auth.currentUser;
 
   if (!user) {
-    throw new Error(
-      "User is not authenticated."
-    );
+    throw new Error("User is not authenticated.");
   }
 
   return collection(
@@ -43,16 +43,11 @@ const getGoalsCollection = () => {
   );
 };
 
-/**
- * Current user's Goal Tasks collection
- */
 const getGoalTasksCollection = () => {
   const user = auth.currentUser;
 
   if (!user) {
-    throw new Error(
-      "User is not authenticated."
-    );
+    throw new Error("User is not authenticated.");
   }
 
   return collection(
@@ -72,35 +67,28 @@ const getGoalTasksCollection = () => {
  */
 export const addGoal = async (
   title: string,
+  description: string,
   startDate: string,
   endDate: string
 ): Promise<string> => {
   const user = auth.currentUser;
 
   if (!user) {
-    throw new Error(
-      "User is not authenticated."
-    );
+    throw new Error("User is not authenticated.");
   }
 
   const cleanTitle = title.trim();
+  const cleanDescription = description.trim();
 
   if (!cleanTitle) {
-    throw new Error(
-      "লক্ষ্যের নাম লিখুন।"
-    );
+    throw new Error("লক্ষ্যের নাম লিখুন।");
   }
 
   if (!startDate || !endDate) {
-    throw new Error(
-      "শুরু ও শেষের তারিখ দিন।"
-    );
+    throw new Error("শুরু ও শেষের তারিখ দিন।");
   }
 
-  if (
-    new Date(endDate) <
-    new Date(startDate)
-  ) {
+  if (new Date(endDate) < new Date(startDate)) {
     throw new Error(
       "শেষের তারিখ শুরু তারিখের পরে হতে হবে।"
     );
@@ -110,14 +98,13 @@ export const addGoal = async (
 
   const goalData = {
     title: cleanTitle,
+    description: cleanDescription,
     startDate,
     endDate,
     status: "active" as GoalStatus,
-
     totalTasks: 0,
     completedTasks: 0,
     progress: 0,
-
     createdAt: now,
     updatedAt: now,
   };
@@ -133,69 +120,36 @@ export const addGoal = async (
 /**
  * Get Active Goals
  */
-export const getGoals = async (): Promise<
-  Goal[]
-> => {
+export const getGoals = async (): Promise<Goal[]> => {
   const goalsQuery = query(
     getGoalsCollection(),
-    where(
-      "status",
-      "==",
-      "active"
-    ),
-    orderBy(
-      "createdAt",
-      "desc"
-    )
+    where("status", "==", "active"),
+    orderBy("createdAt", "desc")
   );
 
-  const snapshot =
-    await getDocs(goalsQuery);
+  const snapshot = await getDocs(goalsQuery);
 
-  return snapshot.docs.map(
-    (item) => {
-      const data = item.data();
+  return snapshot.docs.map((item) => {
+    const data = item.data();
 
-      return {
-        id: item.id,
-
-        title:
-          data.title ?? "",
-
-        description:
-          data.description ?? "",
-
-        startDate:
-          data.startDate ?? "",
-
-        endDate:
-          data.endDate ?? "",
-
-        status: "active",
-
-        totalTasks:
-          data.totalTasks ?? 0,
-
-        completedTasks:
-          data.completedTasks ?? 0,
-
-        progress:
-          data.progress ?? 0,
-
-        createdAt:
-          data.createdAt
-            ?.toDate?.()
-            .toISOString() ??
-          new Date().toISOString(),
-
-        updatedAt:
-          data.updatedAt
-            ?.toDate?.()
-            .toISOString() ??
-          new Date().toISOString(),
-      };
-    }
-  );
+    return {
+      id: item.id,
+      title: data.title ?? "",
+      description: data.description ?? "",
+      startDate: data.startDate ?? "",
+      endDate: data.endDate ?? "",
+      status: "active",
+      totalTasks: data.totalTasks ?? 0,
+      completedTasks: data.completedTasks ?? 0,
+      progress: data.progress ?? 0,
+      createdAt:
+        data.createdAt?.toDate?.().toISOString() ??
+        new Date().toISOString(),
+      updatedAt:
+        data.updatedAt?.toDate?.().toISOString() ??
+        new Date().toISOString(),
+    };
+  });
 };
 
 /**
@@ -205,64 +159,33 @@ export const getCompletedGoals =
   async (): Promise<Goal[]> => {
     const goalsQuery = query(
       getGoalsCollection(),
-      where(
-        "status",
-        "==",
-        "completed"
-      ),
-      orderBy(
-        "createdAt",
-        "desc"
-      )
+      where("status", "==", "completed"),
+      orderBy("createdAt", "desc")
     );
 
-    const snapshot =
-      await getDocs(goalsQuery);
+    const snapshot = await getDocs(goalsQuery);
 
-    return snapshot.docs.map(
-      (item) => {
-        const data = item.data();
+    return snapshot.docs.map((item) => {
+      const data = item.data();
 
-        return {
-          id: item.id,
-
-          title:
-            data.title ?? "",
-
-          description:
-            data.description ?? "",
-
-          startDate:
-            data.startDate ?? "",
-
-          endDate:
-            data.endDate ?? "",
-
-          status: "completed",
-
-          totalTasks:
-            data.totalTasks ?? 0,
-
-          completedTasks:
-            data.completedTasks ?? 0,
-
-          progress:
-            data.progress ?? 0,
-
-          createdAt:
-            data.createdAt
-              ?.toDate?.()
-              .toISOString() ??
-            new Date().toISOString(),
-
-          updatedAt:
-            data.updatedAt
-              ?.toDate?.()
-              .toISOString() ??
-            new Date().toISOString(),
-        };
-      }
-    );
+      return {
+        id: item.id,
+        title: data.title ?? "",
+        description: data.description ?? "",
+        startDate: data.startDate ?? "",
+        endDate: data.endDate ?? "",
+        status: "completed",
+        totalTasks: data.totalTasks ?? 0,
+        completedTasks: data.completedTasks ?? 0,
+        progress: data.progress ?? 0,
+        createdAt:
+          data.createdAt?.toDate?.().toISOString() ??
+          new Date().toISOString(),
+        updatedAt:
+          data.updatedAt?.toDate?.().toISOString() ??
+          new Date().toISOString(),
+      };
+    });
   };
 
 /**
@@ -274,9 +197,7 @@ export const completeGoal = async (
   const user = auth.currentUser;
 
   if (!user) {
-    throw new Error(
-      "User is not authenticated."
-    );
+    throw new Error("User is not authenticated.");
   }
 
   await updateDoc(
@@ -290,138 +211,90 @@ export const completeGoal = async (
     {
       status: "completed",
       progress: 100,
-      updatedAt:
-        Timestamp.now(),
+      updatedAt: Timestamp.now(),
     }
   );
 };
 
-/**
- * Update Goal Progress
- *
- * Goal-এর Task অনুযায়ী:
- *
- * totalTasks = মোট Task
- * completedTasks = সম্পন্ন Task
- * progress = percentage
- *
- * সব Task complete হলে
- * Goal automatically completed হবে।
- */
-const updateGoalProgress =
-  async (
-    goalId: string
-  ): Promise<void> => {
-    const user = auth.currentUser;
+/* =========================================================
+   GOAL PROGRESS
+========================================================= */
 
-    if (!user) {
-      throw new Error(
-        "User is not authenticated."
-      );
-    }
+const updateGoalProgress = async (
+  goalId: string
+): Promise<void> => {
+  const user = auth.currentUser;
 
-    const tasksQuery = query(
-      getGoalTasksCollection(),
-      where(
-        "goalId",
-        "==",
-        goalId
-      )
-    );
+  if (!user) {
+    throw new Error("User is not authenticated.");
+  }
 
-    const snapshot =
-      await getDocs(tasksQuery);
+  const tasksQuery = query(
+    getGoalTasksCollection(),
+    where("goalId", "==", goalId)
+  );
 
-    const totalTasks =
-      snapshot.size;
+  const snapshot = await getDocs(tasksQuery);
 
-    const completedTasks =
-      snapshot.docs.filter(
-        (item) =>
-          item.data().status ===
-          "completed"
-      ).length;
+  const totalTasks = snapshot.size;
 
-    const progress =
-      totalTasks > 0
-        ? Math.round(
-            (completedTasks /
-              totalTasks) *
-              100
-          )
-        : 0;
+  const completedTasks = snapshot.docs.filter(
+    (item) =>
+      item.data().status === "completed"
+  ).length;
 
-    /**
-     * সব Task complete
-     */
-    if (
-      totalTasks > 0 &&
-      completedTasks ===
-        totalTasks
-    ) {
-      await updateDoc(
-        doc(
-          db,
-          "users",
-          user.uid,
-          "goals",
-          goalId
-        ),
-        {
-          status: "completed",
-          totalTasks,
-          completedTasks,
-          progress: 100,
-          updatedAt:
-            Timestamp.now(),
-        }
-      );
+  const progress =
+    totalTasks > 0
+      ? Math.round(
+          (completedTasks / totalTasks) * 100
+        )
+      : 0;
 
-      return;
-    }
+  const goalRef = doc(
+    db,
+    "users",
+    user.uid,
+    "goals",
+    goalId
+  );
 
-    /**
-     * Goal এখনো active
-     */
-    await updateDoc(
-      doc(
-        db,
-        "users",
-        user.uid,
-        "goals",
-        goalId
-      ),
-      {
-        status: "active",
-        totalTasks,
-        completedTasks,
-        progress,
-        updatedAt:
-          Timestamp.now(),
-      }
-    );
-  };
+  if (
+    totalTasks > 0 &&
+    completedTasks === totalTasks
+  ) {
+    await updateDoc(goalRef, {
+      status: "completed",
+      totalTasks,
+      completedTasks,
+      progress: 100,
+      updatedAt: Timestamp.now(),
+    });
 
-/**
- * Delete Goal
- *
- * Goal-এর সাথে সম্পর্কিত
- * সব Task-ও delete হবে।
- */
+    return;
+  }
+
+  await updateDoc(goalRef, {
+    status: "active",
+    totalTasks,
+    completedTasks,
+    progress,
+    updatedAt: Timestamp.now(),
+  });
+};
+
+/* =========================================================
+   DELETE GOAL
+========================================================= */
+
 export const deleteGoal = async (
   goalId: string
 ): Promise<void> => {
   const user = auth.currentUser;
 
   if (!user) {
-    throw new Error(
-      "User is not authenticated."
-    );
+    throw new Error("User is not authenticated.");
   }
 
-  /**
-   * Delete Goal
-   */
   await deleteDoc(
     doc(
       db,
@@ -432,36 +305,24 @@ export const deleteGoal = async (
     )
   );
 
-  /**
-   * Find Goal Tasks
-   */
   const tasksQuery = query(
     getGoalTasksCollection(),
-    where(
-      "goalId",
-      "==",
-      goalId
-    )
+    where("goalId", "==", goalId)
   );
 
-  const snapshot =
-    await getDocs(tasksQuery);
+  const snapshot = await getDocs(tasksQuery);
 
-  /**
-   * Delete all Goal Tasks
-   */
   await Promise.all(
-    snapshot.docs.map(
-      (item) =>
-        deleteDoc(
-          doc(
-            db,
-            "users",
-            user.uid,
-            "goalTasks",
-            item.id
-          )
+    snapshot.docs.map((item) =>
+      deleteDoc(
+        doc(
+          db,
+          "users",
+          user.uid,
+          "goalTasks",
+          item.id
         )
+      )
     )
   );
 };
@@ -480,46 +341,29 @@ export const addGoalTask = async (
   const user = auth.currentUser;
 
   if (!user) {
-    throw new Error(
-      "User is not authenticated."
-    );
+    throw new Error("User is not authenticated.");
   }
 
-  const cleanTitle =
-    title.trim();
+  const cleanTitle = title.trim();
 
   if (!cleanTitle) {
-    throw new Error(
-      "টাস্কের নাম লিখুন।"
-    );
+    throw new Error("টাস্কের নাম লিখুন।");
   }
 
   const taskData = {
     goalId,
-
     title: cleanTitle,
-
-    status:
-      "pending" as GoalTaskStatus,
-
-    createdAt:
-      Timestamp.now(),
-
+    status: "pending" as GoalTaskStatus,
+    createdAt: Timestamp.now(),
     completedAt: null,
   };
 
-  const taskRef =
-    await addDoc(
-      getGoalTasksCollection(),
-      taskData
-    );
-
-  /**
-   * Update Goal progress
-   */
-  await updateGoalProgress(
-    goalId
+  const taskRef = await addDoc(
+    getGoalTasksCollection(),
+    taskData
   );
+
+  await updateGoalProgress(goalId);
 
   return taskRef.id;
 };
@@ -527,243 +371,147 @@ export const addGoalTask = async (
 /**
  * Get Tasks of a Goal
  */
-export const getGoalTasks =
-  async (
-    goalId: string
-  ): Promise<GoalTask[]> => {
-    const tasksQuery = query(
-      getGoalTasksCollection(),
-      where(
-        "goalId",
-        "==",
-        goalId
-      ),
-      orderBy(
-        "createdAt",
-        "asc"
-      )
-    );
+export const getGoalTasks = async (
+  goalId: string
+): Promise<GoalTask[]> => {
+  const tasksQuery = query(
+    getGoalTasksCollection(),
+    where("goalId", "==", goalId),
+    orderBy("createdAt", "asc")
+  );
 
-    const snapshot =
-      await getDocs(
-        tasksQuery
-      );
+  const snapshot = await getDocs(tasksQuery);
 
-    return snapshot.docs.map(
-      (item) => {
-        const data =
-          item.data();
+  return snapshot.docs.map((item) => {
+    const data = item.data();
 
-        return {
-          id: item.id,
-
-          goalId:
-            data.goalId ??
-            goalId,
-
-          title:
-            data.title ?? "",
-
-          status:
-            data.status ===
-            "completed"
-              ? "completed"
-              : "pending",
-
-          createdAt:
-            data.createdAt
-              ?.toDate?.()
-              .toISOString() ??
-            new Date().toISOString(),
-
-          completedAt:
-            data.completedAt
-              ?.toDate?.()
-              .toISOString() ??
-            null,
-        };
-      }
-    );
-  };
+    return {
+      id: item.id,
+      goalId: data.goalId ?? goalId,
+      title: data.title ?? "",
+      status:
+        data.status === "completed"
+          ? "completed"
+          : "pending",
+      createdAt:
+        data.createdAt?.toDate?.().toISOString() ??
+        new Date().toISOString(),
+      completedAt:
+        data.completedAt?.toDate?.().toISOString() ??
+        null,
+    };
+  });
+};
 
 /**
  * Toggle Goal Task
- *
- * pending → completed
- * completed → pending
  */
-export const toggleGoalTask =
-  async (
-    taskId: string,
-    completed: boolean
-  ): Promise<void> => {
-    const user = auth.currentUser;
+export const toggleGoalTask = async (
+  taskId: string,
+  completed: boolean
+): Promise<void> => {
+  const user = auth.currentUser;
 
-    if (!user) {
-      throw new Error(
-        "User is not authenticated."
-      );
-    }
+  if (!user) {
+    throw new Error("User is not authenticated.");
+  }
 
-    /**
-     * Get current task
-     */
-    const taskRef = doc(
+  const taskRef = doc(
+    db,
+    "users",
+    user.uid,
+    "goalTasks",
+    taskId
+  );
+
+  const taskSnapshot = await getDoc(taskRef);
+
+  if (!taskSnapshot.exists()) {
+    throw new Error("Goal task not found.");
+  }
+
+  const taskData = taskSnapshot.data();
+
+  const goalId = taskData.goalId;
+
+  if (!goalId) {
+    throw new Error("Goal ID not found.");
+  }
+
+  await updateDoc(taskRef, {
+    status: completed ? "completed" : "pending",
+    completedAt: completed
+      ? Timestamp.now()
+      : null,
+  });
+
+  await updateGoalProgress(goalId);
+};
+
+/**
+ * Update Goal Task
+ */
+export const updateGoalTask = async (
+  taskId: string,
+  title: string
+): Promise<void> => {
+  const user = auth.currentUser;
+
+  if (!user) {
+    throw new Error("User is not authenticated.");
+  }
+
+  const cleanTitle = title.trim();
+
+  if (!cleanTitle) {
+    throw new Error("টাস্কের নাম লিখুন।");
+  }
+
+  await updateDoc(
+    doc(
       db,
       "users",
       user.uid,
       "goalTasks",
       taskId
-    );
-
-    const taskSnapshot =
-      await getDocs(
-        query(
-          getGoalTasksCollection(),
-          where(
-            "__name__",
-            "==",
-            taskId
-          )
-        )
-      );
-
-    if (taskSnapshot.empty) {
-      throw new Error(
-        "Goal task not found."
-      );
+    ),
+    {
+      title: cleanTitle,
     }
-
-    const taskData =
-      taskSnapshot.docs[0].data();
-
-    const goalId =
-      taskData.goalId;
-
-    /**
-     * Update Task
-     */
-    await updateDoc(
-      taskRef,
-      {
-        status: completed
-          ? "completed"
-          : "pending",
-
-        completedAt:
-          completed
-            ? Timestamp.now()
-            : null,
-      }
-    );
-
-    /**
-     * Update Goal Progress
-     *
-     * এখানে automatic completion
-     * check হবে।
-     */
-    await updateGoalProgress(
-      goalId
-    );
-  };
-
-/**
- * Update Goal Task
- */
-export const updateGoalTask =
-  async (
-    taskId: string,
-    title: string
-  ): Promise<void> => {
-    const user = auth.currentUser;
-
-    if (!user) {
-      throw new Error(
-        "User is not authenticated."
-      );
-    }
-
-    const cleanTitle =
-      title.trim();
-
-    if (!cleanTitle) {
-      throw new Error(
-        "টাস্কের নাম লিখুন।"
-      );
-    }
-
-    await updateDoc(
-      doc(
-        db,
-        "users",
-        user.uid,
-        "goalTasks",
-        taskId
-      ),
-      {
-        title: cleanTitle,
-      }
-    );
-  };
+  );
+};
 
 /**
  * Delete Goal Task
  */
-export const deleteGoalTask =
-  async (
-    taskId: string
-  ): Promise<void> => {
-    const user = auth.currentUser;
+export const deleteGoalTask = async (
+  taskId: string
+): Promise<void> => {
+  const user = auth.currentUser;
 
-    if (!user) {
-      throw new Error(
-        "User is not authenticated."
-      );
-    }
+  if (!user) {
+    throw new Error("User is not authenticated.");
+  }
 
-    /**
-     * Find task first
-     */
-    const taskSnapshot =
-      await getDocs(
-        query(
-          getGoalTasksCollection(),
-          where(
-            "__name__",
-            "==",
-            taskId
-          )
-        )
-      );
+  const taskRef = doc(
+    db,
+    "users",
+    user.uid,
+    "goalTasks",
+    taskId
+  );
 
-    if (taskSnapshot.empty) {
-      throw new Error(
-        "Goal task not found."
-      );
-    }
+  const taskSnapshot = await getDoc(taskRef);
 
-    const goalId =
-      taskSnapshot.docs[0]
-        .data().goalId;
+  if (!taskSnapshot.exists()) {
+    throw new Error("Goal task not found.");
+  }
 
-    /**
-     * Delete Task
-     */
-    await deleteDoc(
-      doc(
-        db,
-        "users",
-        user.uid,
-        "goalTasks",
-        taskId
-      )
-    );
+  const goalId = taskSnapshot.data().goalId;
 
-    /**
-     * Recalculate Goal
-     */
-    await updateGoalProgress(
-      goalId
-    );
-  };
+  await deleteDoc(taskRef);
+
+  if (goalId) {
+    await updateGoalProgress(goalId);
+  }
+};
