@@ -12,7 +12,6 @@ import { auth } from "@/lib/firebase";
 
 import {
   getGoals,
-  expireGoal,
 } from "../services/goal.service";
 
 import { Goal } from "../types/goal.types";
@@ -22,27 +21,6 @@ import GoalCard from "./GoalCard";
 interface GoalListProps {
   refreshKey?: number;
 }
-
-const parseDate = (
-  dateString: string
-) => {
-  const [year, month, day] =
-    dateString.split("-").map(Number);
-
-  return new Date(
-    year,
-    month - 1,
-    day
-  );
-};
-
-const getToday = () => {
-  const today = new Date();
-
-  today.setHours(0, 0, 0, 0);
-
-  return today;
-};
 
 export default function GoalList({
   refreshKey = 0,
@@ -57,7 +35,7 @@ export default function GoalList({
     useState("");
 
   /**
-   * Load active goals
+   * Load Active Goals
    */
   const loadGoals = useCallback(
     async () => {
@@ -65,34 +43,10 @@ export default function GoalList({
         setLoading(true);
         setError("");
 
-        const activeGoals =
+        const data =
           await getGoals();
 
-        const today = getToday();
-
-        const validGoals: Goal[] =
-          [];
-
-        /**
-         * Automatically expire goals
-         * whose End Date has passed.
-         */
-        for (const goal of activeGoals) {
-          const endDate =
-            parseDate(
-              goal.endDate
-            );
-
-          if (today > endDate) {
-            await expireGoal(
-              goal.id
-            );
-          } else {
-            validGoals.push(goal);
-          }
-        }
-
-        setGoals(validGoals);
+        setGoals(data);
       } catch (error) {
         console.error(
           "Load goals error:",
@@ -111,6 +65,7 @@ export default function GoalList({
 
   /**
    * Wait for Firebase Authentication
+   * before loading Goals.
    */
   useEffect(() => {
     const unsubscribe =
@@ -135,14 +90,17 @@ export default function GoalList({
     return () => {
       unsubscribe();
     };
-  }, [loadGoals, refreshKey]);
+  }, [
+    loadGoals,
+    refreshKey,
+  ]);
 
   /**
-   * Loading
+   * Loading State
    */
   if (loading) {
     return (
-      <div className="rounded-2xl border bg-white p-8 text-center">
+      <div className="rounded-2xl border bg-white p-6 text-center">
         <p className="text-sm text-gray-500">
           লক্ষ্য লোড হচ্ছে...
         </p>
@@ -151,35 +109,67 @@ export default function GoalList({
   }
 
   /**
-   * Error
+   * Error State
    */
   if (error) {
     return (
-      <div className="rounded-2xl bg-red-50 p-4 text-center text-sm text-red-600">
-        {error}
+      <div className="rounded-2xl border border-red-100 bg-red-50 p-5">
+        <p className="text-sm text-red-600">
+          {error}
+        </p>
       </div>
     );
   }
 
   /**
-   * Empty state
+   * No Goals
    */
   if (goals.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed bg-white p-8 text-center">
-        <p className="font-medium text-gray-700">
-          এখনো কোনো সক্রিয় লক্ষ্য নেই।
-        </p>
+      <div className="rounded-2xl border bg-white p-8 text-center">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-6 w-6"
+          >
+            <circle
+              cx="12"
+              cy="12"
+              r="9"
+            />
+
+            <circle
+              cx="12"
+              cy="12"
+              r="5"
+            />
+
+            <circle
+              cx="12"
+              cy="12"
+              r="1"
+            />
+          </svg>
+        </div>
+
+        <h3 className="mt-4 font-semibold text-gray-900">
+          এখনো কোনো লক্ষ্য নেই
+        </h3>
 
         <p className="mt-1 text-sm text-gray-500">
-          নতুন লক্ষ্য যোগ করে শুরু করুন।
+          নতুন লক্ষ্য তৈরি করলে এখানে দেখা যাবে।
         </p>
       </div>
     );
   }
 
   /**
-   * Goal list
+   * Goal List
    */
   return (
     <div className="space-y-4">

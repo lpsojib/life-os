@@ -1,6 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 import {
   addGoalTask,
@@ -18,7 +23,7 @@ interface GoalCardProps {
 }
 
 const formatDate = (dateString: string) => {
-  const date = new Date(dateString);
+  const date = new Date(`${dateString}T00:00:00`);
 
   const months = [
     "জানু",
@@ -43,7 +48,7 @@ const getDaysLeft = (endDate: string) => {
 
   today.setHours(0, 0, 0, 0);
 
-  const end = new Date(endDate);
+  const end = new Date(`${endDate}T00:00:00`);
 
   end.setHours(0, 0, 0, 0);
 
@@ -66,14 +71,17 @@ const getDaysLeft = (endDate: string) => {
 export default function GoalCard({
   goal,
 }: GoalCardProps) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] =
+    useState(false);
 
-  const [tasks, setTasks] = useState<GoalTask[]>([]);
+  const [tasks, setTasks] =
+    useState<GoalTask[]>([]);
 
   const [loadingTasks, setLoadingTasks] =
     useState(false);
 
-  const [error, setError] = useState("");
+  const [taskError, setTaskError] =
+    useState("");
 
   const [newTask, setNewTask] =
     useState("");
@@ -87,20 +95,14 @@ export default function GoalCard({
   /**
    * Load Goal Tasks from Firebase
    */
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadTasks = async () => {
+  const loadTasks = useCallback(
+    async () => {
       try {
         setLoadingTasks(true);
-        setError("");
+        setTaskError("");
 
         const goalTasks =
           await getGoalTasks(goal.id);
-
-        if (cancelled) {
-          return;
-        }
 
         setTasks(goalTasks);
       } catch (error) {
@@ -109,24 +111,26 @@ export default function GoalCard({
           error
         );
 
-        if (!cancelled) {
-          setError(
-            "গোলের টাস্কগুলো লোড করা যায়নি।"
-          );
-        }
+        setTaskError(
+          "Goal-এর টাস্কগুলো লোড করা যায়নি।"
+        );
       } finally {
-        if (!cancelled) {
-          setLoadingTasks(false);
-        }
+        setLoadingTasks(false);
       }
-    };
+    },
+    [goal.id]
+  );
+
+  /**
+   * Load tasks when Goal Card opens
+   */
+  useEffect(() => {
+    if (!expanded) {
+      return;
+    }
 
     loadTasks();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [goal.id]);
+  }, [expanded, loadTasks]);
 
   /**
    * Completed Task Count
@@ -146,7 +150,7 @@ export default function GoalCard({
   const totalCount = tasks.length;
 
   /**
-   * Goal Progress
+   * Progress
    */
   const progress =
     totalCount > 0
@@ -161,25 +165,28 @@ export default function GoalCard({
    * Goal Status
    */
   const status =
-    totalCount > 0 && progress === 100
+    progress === 100 && totalCount > 0
       ? "সম্পন্ন"
       : "চলছে";
 
+  /**
+   * Days Left
+   */
   const daysLeft = getDaysLeft(
     goal.endDate
   );
 
   /**
-   * Toggle Task
+   * Toggle Goal Task
    */
-  const toggleTask = async (
+  const handleToggleTask = async (
     task: GoalTask
   ) => {
     const completed =
       task.status !== "completed";
 
     try {
-      setError("");
+      setTaskError("");
 
       await toggleGoalTask(
         task.id,
@@ -208,14 +215,14 @@ export default function GoalCard({
         error
       );
 
-      setError(
+      setTaskError(
         "টাস্কের অবস্থা পরিবর্তন করা যায়নি।"
       );
     }
   };
 
   /**
-   * Start Edit
+   * Start Editing
    */
   const startEdit = (
     task: GoalTask
@@ -225,7 +232,7 @@ export default function GoalCard({
   };
 
   /**
-   * Cancel Edit
+   * Cancel Editing
    */
   const cancelEdit = () => {
     setEditingTaskId(null);
@@ -233,7 +240,7 @@ export default function GoalCard({
   };
 
   /**
-   * Save Edit
+   * Save Edited Task
    */
   const saveEdit = async () => {
     if (!editingTaskId) {
@@ -248,7 +255,7 @@ export default function GoalCard({
     }
 
     try {
-      setError("");
+      setTaskError("");
 
       await updateGoalTask(
         editingTaskId,
@@ -274,16 +281,16 @@ export default function GoalCard({
         error
       );
 
-      setError(
+      setTaskError(
         "টাস্ক আপডেট করা যায়নি।"
       );
     }
   };
 
   /**
-   * Add Task
+   * Add New Goal Task
    */
-  const addTask = async () => {
+  const handleAddTask = async () => {
     const value =
       newTask.trim();
 
@@ -292,7 +299,7 @@ export default function GoalCard({
     }
 
     try {
-      setError("");
+      setTaskError("");
 
       const taskId =
         await addGoalTask(
@@ -322,14 +329,14 @@ export default function GoalCard({
         error
       );
 
-      setError(
+      setTaskError(
         "টাস্ক যোগ করা যায়নি।"
       );
     }
   };
 
   /**
-   * Delete Task
+   * Delete Goal Task
    */
   const handleDeleteTask = async (
     taskId: string
@@ -344,11 +351,9 @@ export default function GoalCard({
     }
 
     try {
-      setError("");
+      setTaskError("");
 
-      await deleteGoalTask(
-        taskId
-      );
+      await deleteGoalTask(taskId);
 
       setTasks((currentTasks) =>
         currentTasks.filter(
@@ -362,7 +367,7 @@ export default function GoalCard({
         error
       );
 
-      setError(
+      setTaskError(
         "টাস্ক মুছে ফেলা যায়নি।"
       );
     }
@@ -371,12 +376,12 @@ export default function GoalCard({
   return (
     <article className="overflow-hidden rounded-2xl border bg-white shadow-sm">
       {/* Goal Main */}
-      <div className="flex items-center gap-4 p-4">
+      <div className="flex items-center gap-4 p-5">
         {/* Progress Ring */}
         <div className="relative h-14 w-14 shrink-0">
           <svg
             viewBox="0 0 54 54"
-            className="-rotate-90 h-14 w-14"
+            className="h-14 w-14 -rotate-90"
           >
             <circle
               cx="27"
@@ -482,45 +487,177 @@ export default function GoalCard({
       {expanded && (
         <div className="border-t bg-gray-50">
           <div className="p-4">
-            {/* Error */}
-            {error && (
-              <div className="mb-3 rounded-lg bg-red-50 p-3 text-sm text-red-600">
-                {error}
-              </div>
-            )}
-
             {/* Loading */}
-            {loadingTasks ? (
+            {loadingTasks && (
               <div className="py-5 text-center text-sm text-gray-400">
                 টাস্ক লোড হচ্ছে...
               </div>
-            ) : tasks.length > 0 ? (
-              <div className="space-y-1">
-                {tasks.map(
-                  (task) => {
-                    const editing =
-                      editingTaskId ===
-                      task.id;
+            )}
 
-                    if (editing) {
+            {/* Error */}
+            {taskError && (
+              <div className="mb-3 rounded-xl bg-red-50 p-3 text-sm text-red-600">
+                {taskError}
+              </div>
+            )}
+
+            {/* Tasks */}
+            {!loadingTasks &&
+              tasks.length > 0 && (
+                <div className="space-y-1">
+                  {tasks.map(
+                    (task) => {
+                      const editing =
+                        editingTaskId ===
+                        task.id;
+
+                      if (editing) {
+                        return (
+                          <div
+                            key={task.id}
+                            className="flex items-center gap-2 rounded-xl bg-white p-2"
+                          >
+                            {/* Check */}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleToggleTask(
+                                  task
+                                )
+                              }
+                              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition ${
+                                task.status ===
+                                "completed"
+                                  ? "border-green-500 bg-green-500 text-white"
+                                  : "border-gray-300 bg-white"
+                              }`}
+                            >
+                              {task.status ===
+                                "completed" && (
+                                <svg
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="3"
+                                  className="h-4 w-4"
+                                >
+                                  <polyline points="20 6 9 17 4 12" />
+                                </svg>
+                              )}
+                            </button>
+
+                            {/* Edit Input */}
+                            <input
+                              autoFocus
+                              type="text"
+                              value={
+                                editingText
+                              }
+                              onChange={(
+                                event
+                              ) =>
+                                setEditingText(
+                                  event
+                                    .target
+                                    .value
+                                )
+                              }
+                              onKeyDown={(
+                                event
+                              ) => {
+                                if (
+                                  event.key ===
+                                  "Enter"
+                                ) {
+                                  saveEdit();
+                                }
+
+                                if (
+                                  event.key ===
+                                  "Escape"
+                                ) {
+                                  cancelEdit();
+                                }
+                              }}
+                              className="min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+
+                            {/* Save */}
+                            <button
+                              type="button"
+                              onClick={
+                                saveEdit
+                              }
+                              aria-label="সেভ করো"
+                              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-green-600 hover:bg-green-50"
+                            >
+                              <svg
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2.6"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                className="h-5 w-5"
+                              >
+                                <polyline points="20 6 9 17 4 12" />
+                              </svg>
+                            </button>
+
+                            {/* Cancel */}
+                            <button
+                              type="button"
+                              onClick={
+                                cancelEdit
+                              }
+                              aria-label="বাতিল করো"
+                              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100"
+                            >
+                              <svg
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2.4"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                className="h-5 w-5"
+                              >
+                                <line
+                                  x1="18"
+                                  y1="6"
+                                  x2="6"
+                                  y2="18"
+                                />
+                                <line
+                                  x1="6"
+                                  y1="6"
+                                  x2="18"
+                                  y2="18"
+                                />
+                              </svg>
+                            </button>
+                          </div>
+                        );
+                      }
+
                       return (
                         <div
                           key={task.id}
-                          className="flex items-center gap-2 rounded-xl bg-white p-2"
+                          className="flex items-center gap-3 rounded-xl bg-white px-3 py-2.5"
                         >
                           {/* Check */}
                           <button
                             type="button"
                             onClick={() =>
-                              toggleTask(
+                              handleToggleTask(
                                 task
                               )
                             }
-                            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition ${
+                            className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition ${
                               task.status ===
                               "completed"
                                 ? "border-green-500 bg-green-500 text-white"
-                                : "border-gray-300 bg-white"
+                                : "border-gray-300 bg-white hover:border-blue-400"
                             }`}
                           >
                             {task.status ===
@@ -530,6 +667,8 @@ export default function GoalCard({
                                 fill="none"
                                 stroke="currentColor"
                                 strokeWidth="3"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
                                 className="h-4 w-4"
                               >
                                 <polyline points="20 6 9 17 4 12" />
@@ -537,216 +676,90 @@ export default function GoalCard({
                             )}
                           </button>
 
-                          {/* Edit Input */}
-                          <input
-                            autoFocus
-                            type="text"
-                            value={
-                              editingText
-                            }
-                            onChange={(
-                              event
-                            ) =>
-                              setEditingText(
-                                event
-                                  .target
-                                  .value
-                              )
-                            }
-                            onKeyDown={(
-                              event
-                            ) => {
-                              if (
-                                event.key ===
-                                "Enter"
-                              ) {
-                                saveEdit();
-                              }
-
-                              if (
-                                event.key ===
-                                "Escape"
-                              ) {
-                                cancelEdit();
-                              }
-                            }}
-                            className="min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-
-                          {/* Save */}
+                          {/* Task Text */}
                           <button
                             type="button"
-                            onClick={
-                              saveEdit
+                            onClick={() =>
+                              startEdit(
+                                task
+                              )
                             }
-                            aria-label="সেভ করো"
-                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-green-600 hover:bg-green-50"
+                            className={`min-w-0 flex-1 text-left text-sm ${
+                              task.status ===
+                              "completed"
+                                ? "text-gray-400 line-through"
+                                : "text-gray-700"
+                            }`}
+                          >
+                            {task.title}
+                          </button>
+
+                          {/* Edit */}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              startEdit(
+                                task
+                              )
+                            }
+                            aria-label="এডিট করো"
+                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700"
                           >
                             <svg
                               viewBox="0 0 24 24"
                               fill="none"
                               stroke="currentColor"
-                              strokeWidth="2.6"
+                              strokeWidth="2.2"
                               strokeLinecap="round"
                               strokeLinejoin="round"
-                              className="h-5 w-5"
+                              className="h-4 w-4"
                             >
-                              <polyline points="20 6 9 17 4 12" />
+                              <path d="M12 20h9" />
+                              <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
                             </svg>
                           </button>
 
-                          {/* Cancel */}
+                          {/* Delete */}
                           <button
                             type="button"
-                            onClick={
-                              cancelEdit
+                            onClick={() =>
+                              handleDeleteTask(
+                                task.id
+                              )
                             }
-                            aria-label="বাতিল করো"
-                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100"
+                            aria-label="মুছে ফেলো"
+                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500"
                           >
                             <svg
                               viewBox="0 0 24 24"
                               fill="none"
                               stroke="currentColor"
-                              strokeWidth="2.4"
+                              strokeWidth="2.2"
                               strokeLinecap="round"
                               strokeLinejoin="round"
-                              className="h-5 w-5"
+                              className="h-4 w-4"
                             >
-                              <line
-                                x1="18"
-                                y1="6"
-                                x2="6"
-                                y2="18"
-                              />
-                              <line
-                                x1="6"
-                                y1="6"
-                                x2="18"
-                                y2="18"
-                              />
+                              <polyline points="3 6 5 6 21 6" />
+                              <path d="M19 6l-1 14H6L5 6" />
+                              <path d="M10 11v6" />
+                              <path d="M14 11v6" />
+                              <path d="M9 6V4h6v2" />
                             </svg>
                           </button>
                         </div>
                       );
                     }
+                  )}
+                </div>
+              )}
 
-                    return (
-                      <div
-                        key={task.id}
-                        className="flex items-center gap-3 rounded-xl bg-white px-3 py-2.5"
-                      >
-                        {/* Check */}
-                        <button
-                          type="button"
-                          onClick={() =>
-                            toggleTask(
-                              task
-                            )
-                          }
-                          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition ${
-                            task.status ===
-                            "completed"
-                              ? "border-green-500 bg-green-500 text-white"
-                              : "border-gray-300 bg-white hover:border-blue-400"
-                          }`}
-                        >
-                          {task.status ===
-                            "completed" && (
-                            <svg
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="3"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              className="h-4 w-4"
-                            >
-                              <polyline points="20 6 9 17 4 12" />
-                            </svg>
-                          )}
-                        </button>
-
-                        {/* Task Text */}
-                        <button
-                          type="button"
-                          onClick={() =>
-                            startEdit(
-                              task
-                            )
-                          }
-                          className={`min-w-0 flex-1 text-left text-sm ${
-                            task.status ===
-                            "completed"
-                              ? "text-gray-400 line-through"
-                              : "text-gray-700"
-                          }`}
-                        >
-                          {task.title}
-                        </button>
-
-                        {/* Edit */}
-                        <button
-                          type="button"
-                          onClick={() =>
-                            startEdit(
-                              task
-                            )
-                          }
-                          aria-label="এডিট করো"
-                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700"
-                        >
-                          <svg
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2.2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            className="h-4 w-4"
-                          >
-                            <path d="M12 20h9" />
-                            <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                          </svg>
-                        </button>
-
-                        {/* Delete */}
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleDeleteTask(
-                              task.id
-                            )
-                          }
-                          aria-label="মুছে ফেলো"
-                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500"
-                        >
-                          <svg
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2.2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            className="h-4 w-4"
-                          >
-                            <polyline points="3 6 5 6 21 6" />
-                            <path d="M19 6l-1 14H6L4 6" />
-                            <path d="M10 11v6" />
-                            <path d="M14 11v6" />
-                            <path d="M9 6V4h6v2" />
-                          </svg>
-                        </button>
-                      </div>
-                    );
-                  }
-                )}
-              </div>
-            ) : (
-              <div className="py-5 text-center text-sm text-gray-400">
-                এখনো কোনো টাস্ক যোগ করা হয়নি
-              </div>
-            )}
+            {/* No Tasks */}
+            {!loadingTasks &&
+              tasks.length === 0 && (
+                <div className="py-5 text-center text-sm text-gray-400">
+                  এখনো কোনো টাস্ক যোগ করা হয়নি
+                </div>
+              )}
 
             {/* Add Task */}
             <div className="mt-3 flex items-center gap-2">
@@ -763,7 +776,7 @@ export default function GoalCard({
                     event.key ===
                     "Enter"
                   ) {
-                    addTask();
+                    handleAddTask();
                   }
                 }}
                 placeholder="নতুন টাস্ক লিখো..."
@@ -772,7 +785,9 @@ export default function GoalCard({
 
               <button
                 type="button"
-                onClick={addTask}
+                onClick={
+                  handleAddTask
+                }
                 className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-xl font-medium text-white transition hover:bg-blue-700"
               >
                 +
