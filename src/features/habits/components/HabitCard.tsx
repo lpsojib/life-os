@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 import {
   Habit,
@@ -74,6 +74,11 @@ export default function HabitCard({
   onToggle,
 }: HabitCardProps) {
   /**
+   * Expand / Collapse
+   */
+  const [expanded, setExpanded] = useState(false);
+
+  /**
    * Completion Map
    */
   const completionMap = useMemo(() => {
@@ -121,9 +126,6 @@ export default function HabitCard({
 
   /**
    * কত দিন ইতিমধ্যে পার হয়েছে
-   *
-   * Start Date-এর আগে কোনো দিন count হবে না।
-   * End Date-এর পরে target-এর বেশি count হবে না।
    */
   const elapsedDays = useMemo(() => {
     if (today < startDate) {
@@ -177,19 +179,14 @@ export default function HabitCard({
 
   /**
    * Current Streak
-   *
-   * আজ থেকে পিছনের দিকে
-   * ধারাবাহিকভাবে কত দিন complete
    */
   const currentStreak = useMemo(() => {
     let streak = 0;
 
-    const currentDate = new Date(
-      today
-    );
+    const currentDate = new Date(today);
 
     /**
-     * যদি Habit এখনো শুরু না হয়ে থাকে
+     * Habit এখনো শুরু হয়নি
      */
     if (today < startDate) {
       return 0;
@@ -197,7 +194,6 @@ export default function HabitCard({
 
     /**
      * End Date পার হয়ে গেলে
-     * End Date থেকে হিসাব শুরু হবে।
      */
     if (today > endDate) {
       currentDate.setTime(
@@ -261,203 +257,279 @@ export default function HabitCard({
   };
 
   return (
-    <article className="rounded-2xl border bg-white p-5 shadow-sm">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h3 className="text-lg font-semibold text-gray-900">
+    <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md">
+
+      {/* =========================
+          COMPACT HEADER
+      ========================== */}
+      <div className="flex items-center gap-4 p-4 sm:p-5">
+
+        {/* Progress Circle */}
+        <div className="relative flex h-16 w-16 shrink-0 items-center justify-center rounded-full border-[7px] border-slate-100 sm:h-20 sm:w-20">
+          <div
+            className="absolute inset-[-7px] rounded-full"
+            style={{
+              background: `conic-gradient(
+                #2563eb ${progress * 3.6}deg,
+                transparent ${progress * 3.6}deg
+              )`,
+              mask: "radial-gradient(farthest-side, transparent calc(100% - 7px), #000 0)",
+              WebkitMask:
+                "radial-gradient(farthest-side, transparent calc(100% - 7px), #000 0)",
+            }}
+          />
+
+          <span className="relative text-sm font-bold text-slate-800 sm:text-base">
+            {progress}%
+          </span>
+        </div>
+
+        {/* Habit Main Info */}
+        <div className="min-w-0 flex-1">
+          <h3 className="line-clamp-2 text-base font-bold text-slate-900 sm:text-lg">
             {habit.name}
           </h3>
 
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-xs text-slate-500 sm:text-sm">
             {habit.targetDays} দিনের অভ্যাস
-          </p>
-
-          <p className="mt-1 text-sm text-gray-500">
+            <span className="mx-1.5">•</span>
             প্রতিদিন {habit.time}
           </p>
-        </div>
 
-        <div className="rounded-full bg-blue-50 px-3 py-1 text-sm font-semibold text-blue-600">
-          {progress}%
-        </div>
-      </div>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <span className="rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-600">
+              {progress}% সম্পন্ন
+            </span>
 
-      {/* Timeline */}
-      <div className="mt-4 rounded-xl bg-gray-50 p-4">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <p className="text-xs text-gray-500">
-              শুরু
-            </p>
-
-            <p className="mt-1 text-sm font-semibold text-gray-800">
-              {formatDate(
-                habit.startDate
-              )}
-            </p>
-          </div>
-
-          <div>
-            <p className="text-xs text-gray-500">
-              শেষ
-            </p>
-
-            <p className="mt-1 text-sm font-semibold text-gray-800">
-              {formatDate(
-                habit.endDate
-              )}
-            </p>
+            <span className="text-xs text-slate-500">
+              {completedCount}/{habit.targetDays} দিন
+            </span>
           </div>
         </div>
+
+        {/* =========================
+            ARROW BUTTON
+        ========================== */}
+        <button
+          type="button"
+          onClick={() =>
+            setExpanded((current) => !current)
+          }
+          aria-label={
+            expanded
+              ? "Collapse habit details"
+              : "Expand habit details"
+          }
+          aria-expanded={expanded}
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition-all duration-200 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 active:scale-95"
+        >
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={`transition-transform duration-300 ${
+              expanded
+                ? "rotate-180"
+                : ""
+            }`}
+          >
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </button>
       </div>
 
-      {/* 7 Days */}
-      <div className="mt-5">
-        <p className="mb-3 text-sm font-medium text-gray-700">
-          গত ৭ দিন
-        </p>
+      {/* =========================
+          EXPANDED CONTENT
+      ========================== */}
+      {expanded && (
+        <div className="border-t border-slate-100 px-4 pb-5 pt-4 sm:px-5">
 
-        <div className="grid grid-cols-7 gap-2">
-          {lastSevenDays.map(
-            (date) => {
-              const dateKey =
-                getDateKey(date);
+          {/* Timeline */}
+          <div className="rounded-xl bg-slate-50 p-4">
+            <div className="grid grid-cols-2 gap-4">
 
-              const completed =
-                completionMap.get(
-                  dateKey
-                ) ?? false;
+              <div>
+                <p className="text-xs text-slate-500">
+                  শুরু
+                </p>
 
-              const isBeforeStart =
-                date < startDate;
-
-              const isAfterEnd =
-                date > endDate;
-
-              const isFuture =
-                date > today;
-
-              const isDisabled =
-                isBeforeStart ||
-                isAfterEnd ||
-                isFuture;
-
-              return (
-                <button
-                  key={dateKey}
-                  type="button"
-                  disabled={isDisabled}
-                  onClick={() =>
-                    onToggle(
-                      dateKey,
-                      !completed
-                    )
-                  }
-                  className={`flex aspect-square flex-col items-center justify-center rounded-xl border text-xs transition ${
-                    completed
-                      ? "border-green-200 bg-green-50 text-green-600"
-                      : isDisabled
-                      ? "border-gray-100 bg-gray-100 text-gray-300"
-                      : "border-gray-200 bg-gray-50 text-gray-400 hover:bg-gray-100"
-                  }`}
-                >
-                  <span>
-                    {date.toLocaleDateString(
-                      "bn-BD",
-                      {
-                        weekday:
-                          "short",
-                      }
-                    )}
-                  </span>
-
-                  <span className="mt-1 text-sm font-semibold">
-                    {date.getDate()}
-                  </span>
-
-                  {completed && (
-                    <span className="mt-0.5">
-                      ✓
-                    </span>
+                <p className="mt-1 text-sm font-semibold text-slate-800">
+                  {formatDate(
+                    habit.startDate
                   )}
-                </button>
-              );
-            }
-          )}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-xs text-slate-500">
+                  শেষ
+                </p>
+
+                <p className="mt-1 text-sm font-semibold text-slate-800">
+                  {formatDate(
+                    habit.endDate
+                  )}
+                </p>
+              </div>
+
+            </div>
+          </div>
+
+          {/* 7 Days */}
+          <div className="mt-5">
+            <p className="mb-3 text-sm font-semibold text-slate-700">
+              গত ৭ দিন
+            </p>
+
+            <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
+              {lastSevenDays.map(
+                (date) => {
+                  const dateKey =
+                    getDateKey(date);
+
+                  const completed =
+                    completionMap.get(
+                      dateKey
+                    ) ?? false;
+
+                  const isBeforeStart =
+                    date < startDate;
+
+                  const isAfterEnd =
+                    date > endDate;
+
+                  const isFuture =
+                    date > today;
+
+                  const isDisabled =
+                    isBeforeStart ||
+                    isAfterEnd ||
+                    isFuture;
+
+                  return (
+                    <button
+                      key={dateKey}
+                      type="button"
+                      disabled={isDisabled}
+                      onClick={() =>
+                        onToggle(
+                          dateKey,
+                          !completed
+                        )
+                      }
+                      className={`flex aspect-square flex-col items-center justify-center rounded-xl border text-[10px] transition sm:text-xs ${
+                        completed
+                          ? "border-green-200 bg-green-50 text-green-600"
+                          : isDisabled
+                          ? "border-slate-100 bg-slate-100 text-slate-300"
+                          : "border-slate-200 bg-slate-50 text-slate-400 hover:bg-slate-100"
+                      }`}
+                    >
+                      <span>
+                        {date.toLocaleDateString(
+                          "bn-BD",
+                          {
+                            weekday: "short",
+                          }
+                        )}
+                      </span>
+
+                      <span className="mt-0.5 text-sm font-semibold">
+                        {date.getDate()}
+                      </span>
+
+                      {completed && (
+                        <span className="mt-0.5">
+                          ✓
+                        </span>
+                      )}
+                    </button>
+                  );
+                }
+              )}
+            </div>
+          </div>
+
+          {/* Stats */}
+          <div className="mt-5 grid grid-cols-3 gap-2 sm:gap-3">
+
+            {/* Target */}
+            <div className="rounded-xl bg-blue-50 p-3 text-center">
+              <p className="text-xs text-slate-500">
+                লক্ষ্য
+              </p>
+
+              <p className="mt-1 text-lg font-bold text-slate-900">
+                {habit.targetDays}
+              </p>
+            </div>
+
+            {/* Completed */}
+            <div className="rounded-xl bg-green-50 p-3 text-center">
+              <p className="text-xs text-slate-500">
+                সম্পন্ন
+              </p>
+
+              <p className="mt-1 text-lg font-bold text-green-600">
+                {completedCount}
+              </p>
+            </div>
+
+            {/* Missed */}
+            <div className="rounded-xl bg-red-50 p-3 text-center">
+              <p className="text-xs text-slate-500">
+                বাদ
+              </p>
+
+              <p className="mt-1 text-lg font-bold text-red-500">
+                {missedCount}
+              </p>
+            </div>
+
+          </div>
+
+          {/* Streak */}
+          <div className="mt-4 flex items-center justify-between rounded-xl bg-orange-50 px-4 py-3">
+            <span className="text-sm text-slate-600">
+              ধারাবাহিকতা
+            </span>
+
+            <span className="font-bold text-orange-600">
+              🔥 {currentStreak} দিন
+            </span>
+          </div>
+
+          {/* Progress */}
+          <div className="mt-4">
+            <div className="mb-2 flex items-center justify-between text-sm">
+              <span className="text-slate-500">
+                অগ্রগতি
+              </span>
+
+              <span className="font-semibold text-slate-700">
+                {completedCount}/
+                {habit.targetDays} (
+                {progress}%)
+              </span>
+            </div>
+
+            <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+              <div
+                className="h-full rounded-full bg-blue-600 transition-all duration-500"
+                style={{
+                  width: `${progress}%`,
+                }}
+              />
+            </div>
+          </div>
+
         </div>
-      </div>
-
-      {/* Stats */}
-      <div className="mt-5 grid grid-cols-3 gap-3">
-        {/* Target */}
-        <div className="rounded-xl bg-blue-50 p-3 text-center">
-          <p className="text-xs text-gray-500">
-            লক্ষ্য
-          </p>
-
-          <p className="mt-1 text-lg font-bold text-gray-900">
-            {habit.targetDays}
-          </p>
-        </div>
-
-        {/* Completed */}
-        <div className="rounded-xl bg-green-50 p-3 text-center">
-          <p className="text-xs text-gray-500">
-            সম্পন্ন
-          </p>
-
-          <p className="mt-1 text-lg font-bold text-green-600">
-            {completedCount}
-          </p>
-        </div>
-
-        {/* Missed */}
-        <div className="rounded-xl bg-red-50 p-3 text-center">
-          <p className="text-xs text-gray-500">
-            বাদ
-          </p>
-
-          <p className="mt-1 text-lg font-bold text-red-500">
-            {missedCount}
-          </p>
-        </div>
-      </div>
-
-      {/* Streak */}
-      <div className="mt-4 flex items-center justify-between rounded-xl bg-orange-50 px-4 py-3">
-        <span className="text-sm text-gray-600">
-          ধারাবাহিকতা
-        </span>
-
-        <span className="font-bold text-orange-600">
-          🔥 {currentStreak} দিন
-        </span>
-      </div>
-
-      {/* Progress */}
-      <div className="mt-4">
-        <div className="mb-2 flex items-center justify-between text-sm">
-          <span className="text-gray-500">
-            অগ্রগতি
-          </span>
-
-          <span className="font-semibold text-gray-700">
-            {completedCount}/
-            {habit.targetDays} (
-            {progress}%)
-          </span>
-        </div>
-
-        <div className="h-2 overflow-hidden rounded-full bg-gray-100">
-          <div
-            className="h-full rounded-full bg-blue-600 transition-all"
-            style={{
-              width: `${progress}%`,
-            }}
-          />
-        </div>
-      </div>
+      )}
     </article>
   );
 }
