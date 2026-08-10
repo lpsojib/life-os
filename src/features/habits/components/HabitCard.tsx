@@ -1,6 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import {
+  useMemo,
+  useState,
+} from "react";
 
 import {
   Habit,
@@ -48,24 +51,115 @@ const parseDate = (dateString: string) => {
 };
 
 /**
- * গত ৭ দিনের তারিখ
+ * এই সপ্তাহের দিনগুলো
+ *
+ * Week starts:
+ * Saturday
+ *
+ * Saturday → Friday
  */
-const getLastSevenDays = () => {
+const getCurrentWeekDays = () => {
+  const today = new Date();
+
+  today.setHours(0, 0, 0, 0);
+
+  const day = today.getDay();
+
+  /**
+   * JavaScript:
+   * Sunday = 0
+   * Monday = 1
+   * Tuesday = 2
+   * Wednesday = 3
+   * Thursday = 4
+   * Friday = 5
+   * Saturday = 6
+   *
+   * Saturday কে week start করতে:
+   */
+  const daysFromSaturday =
+    (day + 1) % 7;
+
+  const saturday = new Date(today);
+
+  saturday.setDate(
+    today.getDate() -
+      daysFromSaturday
+  );
+
   const days: Date[] = [];
 
-  for (let index = 6; index >= 0; index--) {
-    const date = new Date();
-
-    date.setHours(0, 0, 0, 0);
+  for (let index = 0; index < 7; index++) {
+    const date = new Date(saturday);
 
     date.setDate(
-      date.getDate() - index
+      saturday.getDate() + index
     );
 
     days.push(date);
   }
 
   return days;
+};
+
+/**
+ * 12-hour time formatter
+ *
+ * Example:
+ * 13:00 → 1:00 PM
+ * 14:00 → 2:00 PM
+ */
+const formatTime12Hour = (
+  time: string
+) => {
+  if (!time) {
+    return "";
+  }
+
+  const parts = time.split(":");
+
+  if (parts.length < 2) {
+    return time;
+  }
+
+  const hour = Number(parts[0]);
+  const minute = parts[1];
+
+  if (
+    Number.isNaN(hour)
+  ) {
+    return time;
+  }
+
+  const period =
+    hour >= 12 ? "PM" : "AM";
+
+  const displayHour =
+    hour % 12 || 12;
+
+  return `${displayHour}:${minute} ${period}`;
+};
+
+/**
+ * Bangla date
+ */
+const formatDate = (
+  dateString: string
+) => {
+  if (!dateString) {
+    return "";
+  }
+
+  return parseDate(
+    dateString
+  ).toLocaleDateString(
+    "bn-BD",
+    {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    }
+  );
 };
 
 export default function HabitCard({
@@ -76,7 +170,8 @@ export default function HabitCard({
   /**
    * Expand / Collapse
    */
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] =
+    useState(false);
 
   /**
    * Completion Map
@@ -103,14 +198,18 @@ export default function HabitCard({
    * Habit Start Date
    */
   const startDate = useMemo(() => {
-    return parseDate(habit.startDate);
+    return parseDate(
+      habit.startDate
+    );
   }, [habit.startDate]);
 
   /**
    * Habit End Date
    */
   const endDate = useMemo(() => {
-    return parseDate(habit.endDate);
+    return parseDate(
+      habit.endDate
+    );
   }, [habit.endDate]);
 
   /**
@@ -125,7 +224,7 @@ export default function HabitCard({
   }, []);
 
   /**
-   * কত দিন ইতিমধ্যে পার হয়েছে
+   * Elapsed Days
    */
   const elapsedDays = useMemo(() => {
     if (today < startDate) {
@@ -183,18 +282,13 @@ export default function HabitCard({
   const currentStreak = useMemo(() => {
     let streak = 0;
 
-    const currentDate = new Date(today);
+    const currentDate =
+      new Date(today);
 
-    /**
-     * Habit এখনো শুরু হয়নি
-     */
     if (today < startDate) {
       return 0;
     }
 
-    /**
-     * End Date পার হয়ে গেলে
-     */
     if (today > endDate) {
       currentDate.setTime(
         endDate.getTime()
@@ -229,32 +323,10 @@ export default function HabitCard({
   ]);
 
   /**
-   * Last 7 Days
+   * Saturday → Friday
    */
-  const lastSevenDays =
-    getLastSevenDays();
-
-  /**
-   * Format Date in Bangla
-   */
-  const formatDate = (
-    dateString: string
-  ) => {
-    if (!dateString) {
-      return "";
-    }
-
-    return parseDate(
-      dateString
-    ).toLocaleDateString(
-      "bn-BD",
-      {
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-      }
-    );
-  };
+  const currentWeekDays =
+    getCurrentWeekDays();
 
   return (
     <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md">
@@ -262,10 +334,12 @@ export default function HabitCard({
       {/* =========================
           COMPACT HEADER
       ========================== */}
+
       <div className="flex items-center gap-4 p-4 sm:p-5">
 
         {/* Progress Circle */}
         <div className="relative flex h-16 w-16 shrink-0 items-center justify-center rounded-full border-[7px] border-slate-100 sm:h-20 sm:w-20">
+
           <div
             className="absolute inset-[-7px] rounded-full"
             style={{
@@ -273,7 +347,8 @@ export default function HabitCard({
                 #2563eb ${progress * 3.6}deg,
                 transparent ${progress * 3.6}deg
               )`,
-              mask: "radial-gradient(farthest-side, transparent calc(100% - 7px), #000 0)",
+              mask:
+                "radial-gradient(farthest-side, transparent calc(100% - 7px), #000 0)",
               WebkitMask:
                 "radial-gradient(farthest-side, transparent calc(100% - 7px), #000 0)",
             }}
@@ -286,34 +361,46 @@ export default function HabitCard({
 
         {/* Habit Main Info */}
         <div className="min-w-0 flex-1">
+
           <h3 className="line-clamp-2 text-base font-bold text-slate-900 sm:text-lg">
             {habit.name}
           </h3>
 
           <p className="mt-1 text-xs text-slate-500 sm:text-sm">
             {habit.targetDays} দিনের অভ্যাস
-            <span className="mx-1.5">•</span>
-            প্রতিদিন {habit.time}
+
+            <span className="mx-1.5">
+              •
+            </span>
+
+            প্রতিদিন{" "}
+            {formatTime12Hour(
+              habit.time
+            )}
           </p>
 
           <div className="mt-2 flex flex-wrap items-center gap-2">
+
             <span className="rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-600">
               {progress}% সম্পন্ন
             </span>
 
             <span className="text-xs text-slate-500">
-              {completedCount}/{habit.targetDays} দিন
+              {completedCount}/
+              {habit.targetDays} দিন
             </span>
+
           </div>
         </div>
 
-        {/* =========================
-            ARROW BUTTON
-        ========================== */}
+        {/* Expand Arrow */}
         <button
           type="button"
           onClick={() =>
-            setExpanded((current) => !current)
+            setExpanded(
+              (current) =>
+                !current
+            )
           }
           aria-label={
             expanded
@@ -346,11 +433,13 @@ export default function HabitCard({
       {/* =========================
           EXPANDED CONTENT
       ========================== */}
+
       {expanded && (
         <div className="border-t border-slate-100 px-4 pb-5 pt-4 sm:px-5">
 
           {/* Timeline */}
           <div className="rounded-xl bg-slate-50 p-4">
+
             <div className="grid grid-cols-2 gap-4">
 
               <div>
@@ -380,78 +469,122 @@ export default function HabitCard({
             </div>
           </div>
 
-          {/* 7 Days */}
+          {/* =========================
+              WEEKLY TRACKER
+          ========================== */}
+
           <div className="mt-5">
-            <p className="mb-3 text-sm font-semibold text-slate-700">
-              গত ৭ দিন
-            </p>
 
-            <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
-              {lastSevenDays.map(
-                (date) => {
-                  const dateKey =
-                    getDateKey(date);
+            <div className="mb-3 flex items-center justify-between">
 
-                  const completed =
-                    completionMap.get(
-                      dateKey
-                    ) ?? false;
+              <div>
+                <p className="text-sm font-semibold text-slate-700">
+                  এই সপ্তাহ
+                </p>
 
-                  const isBeforeStart =
-                    date < startDate;
+                <p className="mt-0.5 text-xs text-slate-400">
+                  শনিবার থেকে শুক্রবার
+                </p>
+              </div>
 
-                  const isAfterEnd =
-                    date > endDate;
+              {/* Time */}
+              <span className="rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-600">
+                {formatTime12Hour(
+                  habit.time
+                )}
+              </span>
 
-                  const isFuture =
-                    date > today;
+            </div>
 
-                  const isDisabled =
-                    isBeforeStart ||
-                    isAfterEnd ||
-                    isFuture;
+            {/* Week */}
+            <div className="relative">
 
-                  return (
-                    <button
-                      key={dateKey}
-                      type="button"
-                      disabled={isDisabled}
-                      onClick={() =>
-                        onToggle(
-                          dateKey,
-                          !completed
-                        )
-                      }
-                      className={`flex aspect-square flex-col items-center justify-center rounded-xl border text-[10px] transition sm:text-xs ${
-                        completed
-                          ? "border-green-200 bg-green-50 text-green-600"
-                          : isDisabled
-                          ? "border-slate-100 bg-slate-100 text-slate-300"
-                          : "border-slate-200 bg-slate-50 text-slate-400 hover:bg-slate-100"
-                      }`}
-                    >
-                      <span>
-                        {date.toLocaleDateString(
-                          "bn-BD",
-                          {
-                            weekday: "short",
-                          }
+              <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
+
+                {currentWeekDays.map(
+                  (date) => {
+                    const dateKey =
+                      getDateKey(date);
+
+                    const completed =
+                      completionMap.get(
+                        dateKey
+                      ) ?? false;
+
+                    const isBeforeStart =
+                      date < startDate;
+
+                    const isAfterEnd =
+                      date > endDate;
+
+                    const isFuture =
+                      date > today;
+
+                    const isDisabled =
+                      isBeforeStart ||
+                      isAfterEnd ||
+                      isFuture;
+
+                    const weekday =
+                      date.toLocaleDateString(
+                        "bn-BD",
+                        {
+                          weekday: "short",
+                        }
+                      );
+
+                    const isToday =
+                      date.getTime() ===
+                      today.getTime();
+
+                    return (
+                      <button
+                        key={dateKey}
+                        type="button"
+                        disabled={
+                          isDisabled
+                        }
+                        onClick={() =>
+                          onToggle(
+                            dateKey,
+                            !completed
+                          )
+                        }
+                        className={`relative flex min-h-[72px] flex-col items-center justify-center rounded-xl border text-[10px] transition sm:min-h-[80px] sm:text-xs ${
+                          completed
+                            ? "border-green-200 bg-green-50 text-green-600"
+                            : isDisabled
+                            ? "border-slate-100 bg-slate-100 text-slate-300"
+                            : "border-slate-200 bg-slate-50 text-slate-500 hover:border-blue-200 hover:bg-blue-50"
+                        }`}
+                      >
+
+                        {/* Today */}
+                        {isToday && (
+                          <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-blue-500" />
                         )}
-                      </span>
 
-                      <span className="mt-0.5 text-sm font-semibold">
-                        {date.getDate()}
-                      </span>
-
-                      {completed && (
-                        <span className="mt-0.5">
-                          ✓
+                        <span className="font-medium">
+                          {weekday}
                         </span>
-                      )}
-                    </button>
-                  );
-                }
-              )}
+
+                        <span className="mt-1 text-base font-bold">
+                          {date.getDate()}
+                        </span>
+
+                        {completed && (
+                          <span className="mt-0.5 text-sm">
+                            ✓
+                          </span>
+                        )}
+
+                      </button>
+                    );
+                  }
+                )}
+
+              </div>
+
             </div>
           </div>
 
@@ -460,6 +593,7 @@ export default function HabitCard({
 
             {/* Target */}
             <div className="rounded-xl bg-blue-50 p-3 text-center">
+
               <p className="text-xs text-slate-500">
                 লক্ষ্য
               </p>
@@ -467,10 +601,12 @@ export default function HabitCard({
               <p className="mt-1 text-lg font-bold text-slate-900">
                 {habit.targetDays}
               </p>
+
             </div>
 
             {/* Completed */}
             <div className="rounded-xl bg-green-50 p-3 text-center">
+
               <p className="text-xs text-slate-500">
                 সম্পন্ন
               </p>
@@ -478,10 +614,12 @@ export default function HabitCard({
               <p className="mt-1 text-lg font-bold text-green-600">
                 {completedCount}
               </p>
+
             </div>
 
             {/* Missed */}
             <div className="rounded-xl bg-red-50 p-3 text-center">
+
               <p className="text-xs text-slate-500">
                 বাদ
               </p>
@@ -489,12 +627,14 @@ export default function HabitCard({
               <p className="mt-1 text-lg font-bold text-red-500">
                 {missedCount}
               </p>
+
             </div>
 
           </div>
 
           {/* Streak */}
           <div className="mt-4 flex items-center justify-between rounded-xl bg-orange-50 px-4 py-3">
+
             <span className="text-sm text-slate-600">
               ধারাবাহিকতা
             </span>
@@ -502,11 +642,14 @@ export default function HabitCard({
             <span className="font-bold text-orange-600">
               🔥 {currentStreak} দিন
             </span>
+
           </div>
 
           {/* Progress */}
           <div className="mt-4">
+
             <div className="mb-2 flex items-center justify-between text-sm">
+
               <span className="text-slate-500">
                 অগ্রগতি
               </span>
@@ -516,20 +659,25 @@ export default function HabitCard({
                 {habit.targetDays} (
                 {progress}%)
               </span>
+
             </div>
 
             <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+
               <div
                 className="h-full rounded-full bg-blue-600 transition-all duration-500"
                 style={{
                   width: `${progress}%`,
                 }}
               />
+
             </div>
+
           </div>
 
         </div>
       )}
+
     </article>
   );
 }
