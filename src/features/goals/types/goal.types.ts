@@ -1,8 +1,62 @@
+export type GoalStatus =
+  | "active"
+  | "completed"
+  | "expired";
+
 export interface Goal {
   id: string;
 
+  /**
+   * Goal name
+   * Example: Become Web Developer
+   */
   title: string;
+
+  /**
+   * Optional description
+   */
   description: string;
 
+  /**
+   * Goal start date
+   * Format: YYYY-MM-DD
+   */
+  startDate: string;
+
+  /**
+   * Goal end date
+   * Format: YYYY-MM-DD
+   */
+  endDate: string;
+
+  /**
+   * active / completed / expired
+   */
+  status: GoalStatus;
+
+  /**
+   * Total tasks under this goal
+   */
+  totalTasks: number;
+
+  /**
+   * Completed tasks under this goal
+   */
+  completedTasks: number;
+
+  /**
+   * Progress percentage
+   * 0 - 100
+   */
+  progress: number;
+
+  /**
+   * Firebase created time
+   */
   createdAt: string;
+
+  /**
+   * Firebase updated time
+   */
+  updatedAt: string;
 }
