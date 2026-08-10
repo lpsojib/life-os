@@ -17,23 +17,25 @@ import { auth, db } from "@/lib/firebase";
 import {
   Goal,
   GoalStatus,
-} from "../types/goal.types";
-
-import {
   GoalTask,
-  GoalTaskStatus,
-} from "../types/goal-task.types";
+} from "../types/goal.types";
 
 /* =========================================================
    COLLECTION HELPERS
 ========================================================= */
 
-const getGoalsCollection = () => {
+const getCurrentUser = () => {
   const user = auth.currentUser;
 
   if (!user) {
     throw new Error("User is not authenticated.");
   }
+
+  return user;
+};
+
+const getGoalsCollection = () => {
+  const user = getCurrentUser();
 
   return collection(
     db,
@@ -44,11 +46,7 @@ const getGoalsCollection = () => {
 };
 
 const getGoalTasksCollection = () => {
-  const user = auth.currentUser;
-
-  if (!user) {
-    throw new Error("User is not authenticated.");
-  }
+  const user = getCurrentUser();
 
   return collection(
     db,
@@ -59,23 +57,52 @@ const getGoalTasksCollection = () => {
 };
 
 /* =========================================================
+   HELPERS
+========================================================= */
+
+const convertTimestampToISOString = (
+  value: unknown
+): string => {
+  if (
+    value &&
+    typeof value === "object" &&
+    "toDate" in value &&
+    typeof (value as { toDate?: unknown }).toDate ===
+      "function"
+  ) {
+    return (
+      value as {
+        toDate: () => Date;
+      }
+    )
+      .toDate()
+      .toISOString();
+  }
+
+  if (typeof value === "string") {
+    return value;
+  }
+
+  return new Date().toISOString();
+};
+
+/* =========================================================
    GOAL
 ========================================================= */
 
 /**
  * Add Goal
+ *
+ * Goal + Goal Tasks একসাথে তৈরি হবে।
  */
 export const addGoal = async (
   title: string,
   description: string,
   startDate: string,
-  endDate: string
+  endDate: string,
+  taskTitles: string[] = []
 ): Promise<string> => {
-  const user = auth.currentUser;
-
-  if (!user) {
-    throw new Error("User is not authenticated.");
-  }
+  const user = getCurrentUser();
 
   const cleanTitle = title.trim();
   const cleanDescription = description.trim();
@@ -85,16 +112,24 @@ export const addGoal = async (
   }
 
   if (!startDate || !endDate) {
-    throw new Error("শুরু ও শেষের তারিখ দিন।");
-  }
-
-  if (new Date(endDate) < new Date(startDate)) {
     throw new Error(
-      "শেষের তারিখ শুরু তারিখের পরে হতে হবে।"
+      "শুরু ও শেষের তারিখ দিন।"
     );
   }
 
+  if (endDate < startDate) {
+    throw new Error(
+      "শেষের তারিখ শুরুর তারিখের পরে হতে হবে।"
+    );
+  }
+
+  const cleanTasks = taskTitles
+    .map((task) => task.trim())
+    .filter(Boolean);
+
   const now = Timestamp.now();
+
+  /* Create Goal */
 
   const goalData = {
     title: cleanTitle,
@@ -102,103 +137,241 @@ export const addGoal = async (
     startDate,
     endDate,
     status: "active" as GoalStatus,
-    totalTasks: 0,
+
+    totalTasks: cleanTasks.length,
     completedTasks: 0,
     progress: 0,
+
     createdAt: now,
     updatedAt: now,
   };
 
   const goalRef = await addDoc(
-    getGoalsCollection(),
+    collection(
+      db,
+      "users",
+      user.uid,
+      "goals"
+    ),
     goalData
   );
+
+  /* Create Goal Tasks */
+
+  if (cleanTasks.length > 0) {
+    const goalTasksCollection =
+      collection(
+        db,
+        "users",
+        user.uid,
+        "goalTasks"
+      );
+
+    await Promise.all(
+      cleanTasks.map((taskTitle) =>
+        addDoc(goalTasksCollection, {
+          goalId: goalRef.id,
+          title: taskTitle,
+          status: "pending",
+          createdAt: now,
+          completedAt: null,
+          updatedAt: now,
+        })
+      )
+    );
+  }
 
   return goalRef.id;
 };
 
-/**
- * Get Active Goals
- */
-export const getGoals = async (): Promise<Goal[]> => {
+/* =========================================================
+   GET ACTIVE GOALS
+========================================================= */
+
+export const getGoals = async (): Promise<
+  Goal[]
+> => {
   const goalsQuery = query(
     getGoalsCollection(),
     where("status", "==", "active"),
     orderBy("createdAt", "desc")
   );
 
-  const snapshot = await getDocs(goalsQuery);
+  const snapshot =
+    await getDocs(goalsQuery);
 
   return snapshot.docs.map((item) => {
     const data = item.data();
 
     return {
       id: item.id,
+
       title: data.title ?? "",
-      description: data.description ?? "",
-      startDate: data.startDate ?? "",
-      endDate: data.endDate ?? "",
-      status: "active",
-      totalTasks: data.totalTasks ?? 0,
-      completedTasks: data.completedTasks ?? 0,
-      progress: data.progress ?? 0,
+
+      description:
+        data.description ?? "",
+
+      startDate:
+        data.startDate ?? "",
+
+      endDate:
+        data.endDate ?? "",
+
+      status:
+        "active" as GoalStatus,
+
+      totalTasks:
+        data.totalTasks ?? 0,
+
+      completedTasks:
+        data.completedTasks ?? 0,
+
+      progress:
+        data.progress ?? 0,
+
       createdAt:
-        data.createdAt?.toDate?.().toISOString() ??
-        new Date().toISOString(),
+        convertTimestampToISOString(
+          data.createdAt
+        ),
+
       updatedAt:
-        data.updatedAt?.toDate?.().toISOString() ??
-        new Date().toISOString(),
+        convertTimestampToISOString(
+          data.updatedAt
+        ),
     };
   });
 };
 
-/**
- * Get Completed Goals
- */
+/* =========================================================
+   GET COMPLETED GOALS
+========================================================= */
+
 export const getCompletedGoals =
   async (): Promise<Goal[]> => {
     const goalsQuery = query(
       getGoalsCollection(),
-      where("status", "==", "completed"),
+      where(
+        "status",
+        "==",
+        "completed"
+      ),
       orderBy("createdAt", "desc")
     );
 
-    const snapshot = await getDocs(goalsQuery);
+    const snapshot =
+      await getDocs(goalsQuery);
 
     return snapshot.docs.map((item) => {
       const data = item.data();
 
       return {
         id: item.id,
+
         title: data.title ?? "",
-        description: data.description ?? "",
-        startDate: data.startDate ?? "",
-        endDate: data.endDate ?? "",
-        status: "completed",
-        totalTasks: data.totalTasks ?? 0,
-        completedTasks: data.completedTasks ?? 0,
-        progress: data.progress ?? 0,
+
+        description:
+          data.description ?? "",
+
+        startDate:
+          data.startDate ?? "",
+
+        endDate:
+          data.endDate ?? "",
+
+        status:
+          "completed" as GoalStatus,
+
+        totalTasks:
+          data.totalTasks ?? 0,
+
+        completedTasks:
+          data.completedTasks ?? 0,
+
+        progress:
+          data.progress ?? 0,
+
         createdAt:
-          data.createdAt?.toDate?.().toISOString() ??
-          new Date().toISOString(),
+          convertTimestampToISOString(
+            data.createdAt
+          ),
+
         updatedAt:
-          data.updatedAt?.toDate?.().toISOString() ??
-          new Date().toISOString(),
+          convertTimestampToISOString(
+            data.updatedAt
+          ),
       };
     });
   };
 
-/**
- * Complete Goal
- */
+/* =========================================================
+   GET EXPIRED GOALS
+========================================================= */
+
+export const getExpiredGoals =
+  async (): Promise<Goal[]> => {
+    const goalsQuery = query(
+      getGoalsCollection(),
+      where(
+        "status",
+        "==",
+        "expired"
+      ),
+      orderBy("createdAt", "desc")
+    );
+
+    const snapshot =
+      await getDocs(goalsQuery);
+
+    return snapshot.docs.map((item) => {
+      const data = item.data();
+
+      return {
+        id: item.id,
+
+        title: data.title ?? "",
+
+        description:
+          data.description ?? "",
+
+        startDate:
+          data.startDate ?? "",
+
+        endDate:
+          data.endDate ?? "",
+
+        status:
+          "expired" as GoalStatus,
+
+        totalTasks:
+          data.totalTasks ?? 0,
+
+        completedTasks:
+          data.completedTasks ?? 0,
+
+        progress:
+          data.progress ?? 0,
+
+        createdAt:
+          convertTimestampToISOString(
+            data.createdAt
+          ),
+
+        updatedAt:
+          convertTimestampToISOString(
+            data.updatedAt
+          ),
+      };
+    });
+  };
+
+/* =========================================================
+   COMPLETE GOAL
+========================================================= */
+
 export const completeGoal = async (
   goalId: string
 ): Promise<void> => {
-  const user = auth.currentUser;
-
-  if (!user) {
-    throw new Error("User is not authenticated.");
-  }
+  const user = getCurrentUser();
 
   await updateDoc(
     doc(
@@ -217,36 +390,82 @@ export const completeGoal = async (
 };
 
 /* =========================================================
-   GOAL PROGRESS
+   DELETE GOAL
 ========================================================= */
 
-const updateGoalProgress = async (
+/**
+ * Goal delete করলে তার সব Goal Task-ও delete হবে।
+ */
+export const deleteGoal = async (
   goalId: string
 ): Promise<void> => {
-  const user = auth.currentUser;
+  const user = getCurrentUser();
 
-  if (!user) {
-    throw new Error("User is not authenticated.");
-  }
+  const goalRef = doc(
+    db,
+    "users",
+    user.uid,
+    "goals",
+    goalId
+  );
+
+  await deleteDoc(goalRef);
 
   const tasksQuery = query(
     getGoalTasksCollection(),
     where("goalId", "==", goalId)
   );
 
-  const snapshot = await getDocs(tasksQuery);
+  const snapshot =
+    await getDocs(tasksQuery);
+
+  await Promise.all(
+    snapshot.docs.map((item) =>
+      deleteDoc(
+        doc(
+          db,
+          "users",
+          user.uid,
+          "goalTasks",
+          item.id
+        )
+      )
+    )
+  );
+};
+
+/* =========================================================
+   GOAL PROGRESS
+========================================================= */
+
+const updateGoalProgress = async (
+  goalId: string
+): Promise<void> => {
+  const user = getCurrentUser();
+
+  const tasksQuery = query(
+    getGoalTasksCollection(),
+    where("goalId", "==", goalId)
+  );
+
+  const snapshot =
+    await getDocs(tasksQuery);
 
   const totalTasks = snapshot.size;
 
-  const completedTasks = snapshot.docs.filter(
-    (item) =>
-      item.data().status === "completed"
-  ).length;
+  const completedTasks =
+    snapshot.docs.filter(
+      (item) =>
+        item.data().status ===
+        "completed"
+    ).length;
 
   const progress =
     totalTasks > 0
       ? Math.round(
-          (completedTasks / totalTasks) * 100
+          (completedTasks /
+            totalTasks) *
+            100
         )
       : 0;
 
@@ -283,51 +502,6 @@ const updateGoalProgress = async (
 };
 
 /* =========================================================
-   DELETE GOAL
-========================================================= */
-
-export const deleteGoal = async (
-  goalId: string
-): Promise<void> => {
-  const user = auth.currentUser;
-
-  if (!user) {
-    throw new Error("User is not authenticated.");
-  }
-
-  await deleteDoc(
-    doc(
-      db,
-      "users",
-      user.uid,
-      "goals",
-      goalId
-    )
-  );
-
-  const tasksQuery = query(
-    getGoalTasksCollection(),
-    where("goalId", "==", goalId)
-  );
-
-  const snapshot = await getDocs(tasksQuery);
-
-  await Promise.all(
-    snapshot.docs.map((item) =>
-      deleteDoc(
-        doc(
-          db,
-          "users",
-          user.uid,
-          "goalTasks",
-          item.id
-        )
-      )
-    )
-  );
-};
-
-/* =========================================================
    GOAL TASK
 ========================================================= */
 
@@ -338,24 +512,42 @@ export const addGoalTask = async (
   goalId: string,
   title: string
 ): Promise<string> => {
-  const user = auth.currentUser;
-
-  if (!user) {
-    throw new Error("User is not authenticated.");
-  }
+  const user = getCurrentUser();
 
   const cleanTitle = title.trim();
 
   if (!cleanTitle) {
-    throw new Error("টাস্কের নাম লিখুন।");
+    throw new Error(
+      "টাস্কের নাম লিখুন।"
+    );
   }
+
+  const goalRef = doc(
+    db,
+    "users",
+    user.uid,
+    "goals",
+    goalId
+  );
+
+  const goalSnapshot =
+    await getDoc(goalRef);
+
+  if (!goalSnapshot.exists()) {
+    throw new Error(
+      "লক্ষ্যটি খুঁজে পাওয়া যায়নি।"
+    );
+  }
+
+  const now = Timestamp.now();
 
   const taskData = {
     goalId,
     title: cleanTitle,
-    status: "pending" as GoalTaskStatus,
-    createdAt: Timestamp.now(),
+    status: "pending",
+    createdAt: now,
     completedAt: null,
+    updatedAt: now,
   };
 
   const taskRef = await addDoc(
@@ -374,31 +566,49 @@ export const addGoalTask = async (
 export const getGoalTasks = async (
   goalId: string
 ): Promise<GoalTask[]> => {
+  getCurrentUser();
+
   const tasksQuery = query(
     getGoalTasksCollection(),
     where("goalId", "==", goalId),
     orderBy("createdAt", "asc")
   );
 
-  const snapshot = await getDocs(tasksQuery);
+  const snapshot =
+    await getDocs(tasksQuery);
 
   return snapshot.docs.map((item) => {
     const data = item.data();
 
     return {
       id: item.id,
-      goalId: data.goalId ?? goalId,
-      title: data.title ?? "",
-      status:
-        data.status === "completed"
-          ? "completed"
-          : "pending",
+
+      goalId:
+        data.goalId ?? goalId,
+
+      title:
+        data.title ?? "",
+
+      completed:
+        data.status ===
+        "completed",
+
       createdAt:
-        data.createdAt?.toDate?.().toISOString() ??
-        new Date().toISOString(),
+        convertTimestampToISOString(
+          data.createdAt
+        ),
+
       completedAt:
-        data.completedAt?.toDate?.().toISOString() ??
-        null,
+        data.completedAt
+          ? convertTimestampToISOString(
+              data.completedAt
+            )
+          : null,
+
+      updatedAt:
+        convertTimestampToISOString(
+          data.updatedAt
+        ),
     };
   });
 };
@@ -410,11 +620,7 @@ export const toggleGoalTask = async (
   taskId: string,
   completed: boolean
 ): Promise<void> => {
-  const user = auth.currentUser;
-
-  if (!user) {
-    throw new Error("User is not authenticated.");
-  }
+  const user = getCurrentUser();
 
   const taskRef = doc(
     db,
@@ -424,28 +630,42 @@ export const toggleGoalTask = async (
     taskId
   );
 
-  const taskSnapshot = await getDoc(taskRef);
+  const taskSnapshot =
+    await getDoc(taskRef);
 
   if (!taskSnapshot.exists()) {
-    throw new Error("Goal task not found.");
+    throw new Error(
+      "Goal task not found."
+    );
   }
 
-  const taskData = taskSnapshot.data();
+  const taskData =
+    taskSnapshot.data();
 
-  const goalId = taskData.goalId;
+  const goalId =
+    taskData.goalId;
 
   if (!goalId) {
-    throw new Error("Goal ID not found.");
+    throw new Error(
+      "Goal ID not found."
+    );
   }
 
   await updateDoc(taskRef, {
-    status: completed ? "completed" : "pending",
+    status: completed
+      ? "completed"
+      : "pending",
+
     completedAt: completed
       ? Timestamp.now()
       : null,
+
+    updatedAt: Timestamp.now(),
   });
 
-  await updateGoalProgress(goalId);
+  await updateGoalProgress(
+    goalId
+  );
 };
 
 /**
@@ -455,16 +675,14 @@ export const updateGoalTask = async (
   taskId: string,
   title: string
 ): Promise<void> => {
-  const user = auth.currentUser;
-
-  if (!user) {
-    throw new Error("User is not authenticated.");
-  }
+  const user = getCurrentUser();
 
   const cleanTitle = title.trim();
 
   if (!cleanTitle) {
-    throw new Error("টাস্কের নাম লিখুন।");
+    throw new Error(
+      "টাস্কের নাম লিখুন।"
+    );
   }
 
   await updateDoc(
@@ -477,6 +695,7 @@ export const updateGoalTask = async (
     ),
     {
       title: cleanTitle,
+      updatedAt: Timestamp.now(),
     }
   );
 };
@@ -487,11 +706,7 @@ export const updateGoalTask = async (
 export const deleteGoalTask = async (
   taskId: string
 ): Promise<void> => {
-  const user = auth.currentUser;
-
-  if (!user) {
-    throw new Error("User is not authenticated.");
-  }
+  const user = getCurrentUser();
 
   const taskRef = doc(
     db,
@@ -501,17 +716,23 @@ export const deleteGoalTask = async (
     taskId
   );
 
-  const taskSnapshot = await getDoc(taskRef);
+  const taskSnapshot =
+    await getDoc(taskRef);
 
   if (!taskSnapshot.exists()) {
-    throw new Error("Goal task not found.");
+    throw new Error(
+      "Goal task not found."
+    );
   }
 
-  const goalId = taskSnapshot.data().goalId;
+  const goalId =
+    taskSnapshot.data().goalId;
 
   await deleteDoc(taskRef);
 
   if (goalId) {
-    await updateGoalProgress(goalId);
+    await updateGoalProgress(
+      goalId
+    );
   }
 };

@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { useState } from "react";
 
 import {
   addGoalTask,
@@ -15,14 +10,24 @@ import {
   updateGoalTask,
 } from "../services/goal.service";
 
-import { Goal } from "../types/goal.types";
-import { GoalTask } from "../types/goal-task.types";
+import {
+  Goal,
+  GoalTask,
+} from "../types/goal.types";
 
 interface GoalCardProps {
   goal: Goal;
 }
 
+/* =========================================================
+   DATE HELPERS
+========================================================= */
+
 const formatDate = (dateString: string) => {
+  if (!dateString) {
+    return "";
+  }
+
   const date = new Date(`${dateString}T00:00:00`);
 
   const months = [
@@ -44,6 +49,10 @@ const formatDate = (dateString: string) => {
 };
 
 const getDaysLeft = (endDate: string) => {
+  if (!endDate) {
+    return "";
+  }
+
   const today = new Date();
 
   today.setHours(0, 0, 0, 0);
@@ -67,6 +76,10 @@ const getDaysLeft = (endDate: string) => {
 
   return `${diff} দিন বাকি`;
 };
+
+/* =========================================================
+   GOAL CARD
+========================================================= */
 
 export default function GoalCard({
   goal,
@@ -92,93 +105,81 @@ export default function GoalCard({
   const [editingText, setEditingText] =
     useState("");
 
-  /**
-   * Load Goal Tasks from Firebase
-   */
-  const loadTasks = useCallback(
-    async () => {
-      try {
-        setLoadingTasks(true);
-        setTaskError("");
+  /* =========================================================
+     LOAD TASKS
+  ========================================================= */
 
-        const goalTasks =
-          await getGoalTasks(goal.id);
+  const loadTasks = async () => {
+    try {
+      setLoadingTasks(true);
+      setTaskError("");
 
-        setTasks(goalTasks);
-      } catch (error) {
-        console.error(
-          "Load goal tasks error:",
-          error
-        );
+      const goalTasks =
+        await getGoalTasks(goal.id);
 
-        setTaskError(
-          "Goal-এর টাস্কগুলো লোড করা যায়নি।"
-        );
-      } finally {
-        setLoadingTasks(false);
-      }
-    },
-    [goal.id]
-  );
+      setTasks(goalTasks);
+    } catch (error) {
+      console.error(
+        "Load goal tasks error:",
+        error
+      );
 
-  /**
-   * Load tasks when Goal Card opens
-   */
-  useEffect(() => {
-    if (!expanded) {
-      return;
+      setTaskError(
+        "Goal-এর টাস্কগুলো লোড করা যায়নি।"
+      );
+    } finally {
+      setLoadingTasks(false);
     }
+  };
 
-    loadTasks();
-  }, [expanded, loadTasks]);
+  /* =========================================================
+     EXPAND / COLLAPSE
+  ========================================================= */
 
-  /**
-   * Completed Task Count
-   */
-  const completedCount = useMemo(
-    () =>
-      tasks.filter(
-        (task) =>
-          task.status === "completed"
-      ).length,
-    [tasks]
-  );
+  const handleExpand = () => {
+    const nextExpanded = !expanded;
 
-  /**
-   * Total Task Count
-   */
+    setExpanded(nextExpanded);
+
+    if (nextExpanded) {
+      void loadTasks();
+    }
+  };
+
+  /* =========================================================
+     TASK COUNTS
+  ========================================================= */
+
+  const completedCount =
+    tasks.filter(
+      (task) =>
+        task.status === "completed"
+    ).length;
+
   const totalCount = tasks.length;
 
-  /**
-   * Progress
-   */
   const progress =
     totalCount > 0
       ? Math.round(
-          (completedCount /
-            totalCount) *
+          (completedCount / totalCount) *
             100
         )
       : 0;
 
-  /**
-   * Goal Status
-   */
   const status =
-    progress === 100 && totalCount > 0
+    progress === 100 &&
+    totalCount > 0
       ? "সম্পন্ন"
       : "চলছে";
 
-  /**
-   * Days Left
-   */
   const daysLeft = getDaysLeft(
     goal.endDate
   );
 
-  /**
-   * Toggle Goal Task
-   */
+  /* =========================================================
+     TOGGLE TASK
+  ========================================================= */
+
   const handleToggleTask = async (
     task: GoalTask
   ) => {
@@ -221,9 +222,10 @@ export default function GoalCard({
     }
   };
 
-  /**
-   * Start Editing
-   */
+  /* =========================================================
+     START EDIT
+  ========================================================= */
+
   const startEdit = (
     task: GoalTask
   ) => {
@@ -231,17 +233,19 @@ export default function GoalCard({
     setEditingText(task.title);
   };
 
-  /**
-   * Cancel Editing
-   */
+  /* =========================================================
+     CANCEL EDIT
+  ========================================================= */
+
   const cancelEdit = () => {
     setEditingTaskId(null);
     setEditingText("");
   };
 
-  /**
-   * Save Edited Task
-   */
+  /* =========================================================
+     SAVE EDIT
+  ========================================================= */
+
   const saveEdit = async () => {
     if (!editingTaskId) {
       return;
@@ -287,9 +291,10 @@ export default function GoalCard({
     }
   };
 
-  /**
-   * Add New Goal Task
-   */
+  /* =========================================================
+     ADD TASK
+  ========================================================= */
+
   const handleAddTask = async () => {
     const value =
       newTask.trim();
@@ -315,6 +320,8 @@ export default function GoalCard({
         createdAt:
           new Date().toISOString(),
         completedAt: null,
+        updatedAt:
+          new Date().toISOString(),
       };
 
       setTasks((currentTasks) => [
@@ -335,9 +342,10 @@ export default function GoalCard({
     }
   };
 
-  /**
-   * Delete Goal Task
-   */
+  /* =========================================================
+     DELETE TASK
+  ========================================================= */
+
   const handleDeleteTask = async (
     taskId: string
   ) => {
@@ -353,7 +361,9 @@ export default function GoalCard({
     try {
       setTaskError("");
 
-      await deleteGoalTask(taskId);
+      await deleteGoalTask(
+        taskId
+      );
 
       setTasks((currentTasks) =>
         currentTasks.filter(
@@ -373,16 +383,26 @@ export default function GoalCard({
     }
   };
 
+  /* =========================================================
+     RENDER
+  ========================================================= */
+
   return (
-    <article className="overflow-hidden rounded-2xl border bg-white shadow-sm">
-      {/* Goal Main */}
-      <div className="flex items-center gap-4 p-5">
+    <article className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+      {/* =====================================================
+          GOAL MAIN
+      ===================================================== */}
+
+      <div className="flex items-center gap-4 p-4 sm:p-5">
         {/* Progress Ring */}
+
         <div className="relative h-14 w-14 shrink-0">
           <svg
             viewBox="0 0 54 54"
             className="h-14 w-14 -rotate-90"
           >
+            {/* Background */}
+
             <circle
               cx="27"
               cy="27"
@@ -392,6 +412,8 @@ export default function GoalCard({
               strokeWidth="4"
               className="text-gray-100"
             />
+
+            {/* Progress */}
 
             <circle
               cx="27"
@@ -423,8 +445,9 @@ export default function GoalCard({
         </div>
 
         {/* Goal Body */}
+
         <div className="min-w-0 flex-1">
-          <p className="font-semibold text-gray-900">
+          <p className="truncate font-semibold text-gray-900">
             {goal.title}
           </p>
 
@@ -455,14 +478,15 @@ export default function GoalCard({
         </div>
 
         {/* Expand Button */}
+
         <button
           type="button"
-          onClick={() =>
-            setExpanded(
-              (current) => !current
-            )
+          onClick={handleExpand}
+          aria-label={
+            expanded
+              ? "টাস্ক লুকাও"
+              : "টাস্ক দেখাও"
           }
-          aria-label="টাস্ক দেখাও"
           className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 ${
             expanded
               ? "rotate-180"
@@ -483,11 +507,15 @@ export default function GoalCard({
         </button>
       </div>
 
-      {/* Task Panel */}
+      {/* =====================================================
+          TASK PANEL
+      ===================================================== */}
+
       {expanded && (
         <div className="border-t bg-gray-50">
           <div className="p-4">
             {/* Loading */}
+
             {loadingTasks && (
               <div className="py-5 text-center text-sm text-gray-400">
                 টাস্ক লোড হচ্ছে...
@@ -495,6 +523,7 @@ export default function GoalCard({
             )}
 
             {/* Error */}
+
             {taskError && (
               <div className="mb-3 rounded-xl bg-red-50 p-3 text-sm text-red-600">
                 {taskError}
@@ -502,6 +531,7 @@ export default function GoalCard({
             )}
 
             {/* Tasks */}
+
             {!loadingTasks &&
               tasks.length > 0 && (
                 <div className="space-y-1">
@@ -511,6 +541,10 @@ export default function GoalCard({
                         editingTaskId ===
                         task.id;
 
+                      /* =========================
+                         EDIT MODE
+                      ========================= */
+
                       if (editing) {
                         return (
                           <div
@@ -518,10 +552,11 @@ export default function GoalCard({
                             className="flex items-center gap-2 rounded-xl bg-white p-2"
                           >
                             {/* Check */}
+
                             <button
                               type="button"
                               onClick={() =>
-                                handleToggleTask(
+                                void handleToggleTask(
                                   task
                                 )
                               }
@@ -539,6 +574,8 @@ export default function GoalCard({
                                   fill="none"
                                   stroke="currentColor"
                                   strokeWidth="3"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
                                   className="h-4 w-4"
                                 >
                                   <polyline points="20 6 9 17 4 12" />
@@ -547,6 +584,7 @@ export default function GoalCard({
                             </button>
 
                             {/* Edit Input */}
+
                             <input
                               autoFocus
                               type="text"
@@ -557,8 +595,7 @@ export default function GoalCard({
                                 event
                               ) =>
                                 setEditingText(
-                                  event
-                                    .target
+                                  event.target
                                     .value
                                 )
                               }
@@ -569,7 +606,7 @@ export default function GoalCard({
                                   event.key ===
                                   "Enter"
                                 ) {
-                                  saveEdit();
+                                  void saveEdit();
                                 }
 
                                 if (
@@ -583,10 +620,11 @@ export default function GoalCard({
                             />
 
                             {/* Save */}
+
                             <button
                               type="button"
-                              onClick={
-                                saveEdit
+                              onClick={() =>
+                                void saveEdit()
                               }
                               aria-label="সেভ করো"
                               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-green-600 hover:bg-green-50"
@@ -605,6 +643,7 @@ export default function GoalCard({
                             </button>
 
                             {/* Cancel */}
+
                             <button
                               type="button"
                               onClick={
@@ -628,6 +667,7 @@ export default function GoalCard({
                                   x2="6"
                                   y2="18"
                                 />
+
                                 <line
                                   x1="6"
                                   y1="6"
@@ -640,16 +680,21 @@ export default function GoalCard({
                         );
                       }
 
+                      /* =========================
+                         NORMAL TASK
+                      ========================= */
+
                       return (
                         <div
                           key={task.id}
                           className="flex items-center gap-3 rounded-xl bg-white px-3 py-2.5"
                         >
                           {/* Check */}
+
                           <button
                             type="button"
                             onClick={() =>
-                              handleToggleTask(
+                              void handleToggleTask(
                                 task
                               )
                             }
@@ -677,6 +722,7 @@ export default function GoalCard({
                           </button>
 
                           {/* Task Text */}
+
                           <button
                             type="button"
                             onClick={() =>
@@ -695,6 +741,7 @@ export default function GoalCard({
                           </button>
 
                           {/* Edit */}
+
                           <button
                             type="button"
                             onClick={() =>
@@ -720,10 +767,11 @@ export default function GoalCard({
                           </button>
 
                           {/* Delete */}
+
                           <button
                             type="button"
                             onClick={() =>
-                              handleDeleteTask(
+                              void handleDeleteTask(
                                 task.id
                               )
                             }
@@ -754,6 +802,7 @@ export default function GoalCard({
               )}
 
             {/* No Tasks */}
+
             {!loadingTasks &&
               tasks.length === 0 && (
                 <div className="py-5 text-center text-sm text-gray-400">
@@ -762,6 +811,7 @@ export default function GoalCard({
               )}
 
             {/* Add Task */}
+
             <div className="mt-3 flex items-center gap-2">
               <input
                 type="text"
@@ -776,7 +826,7 @@ export default function GoalCard({
                     event.key ===
                     "Enter"
                   ) {
-                    handleAddTask();
+                    void handleAddTask();
                   }
                 }}
                 placeholder="নতুন টাস্ক লিখো..."
@@ -785,8 +835,8 @@ export default function GoalCard({
 
               <button
                 type="button"
-                onClick={
-                  handleAddTask
+                onClick={() =>
+                  void handleAddTask()
                 }
                 className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-xl font-medium text-white transition hover:bg-blue-700"
               >
@@ -795,6 +845,7 @@ export default function GoalCard({
             </div>
 
             {/* Timeline */}
+
             <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-gray-500">
               <span>
                 শুরু:{" "}
