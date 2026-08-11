@@ -6,7 +6,7 @@ export default function AboutPage() {
       {/* About Image */}
       <div className="overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-sm">
         <img
-          src="/about-life-os.jpg"
+          src="/about/lp-sojib.jpeg"
           alt="Life OS"
           className="h-56 w-full object-cover sm:h-72 md:h-96"
         />
