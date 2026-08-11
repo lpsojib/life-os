@@ -6,10 +6,11 @@ import {
   CheckSquare,
   Flame,
   Target,
-  Calendar,
   BookOpen,
   Timer,
   Wallet,
+  Bell,
+  Info,
   Bot,
   Settings,
   X,
@@ -42,11 +43,6 @@ const menuItems = [
     icon: Target,
   },
   {
-    title: "Planner",
-    href: "/planner",
-    icon: Calendar,
-  },
-  {
     title: "Journal",
     href: "/journal",
     icon: BookOpen,
@@ -60,6 +56,16 @@ const menuItems = [
     title: "Finance",
     href: "/finance",
     icon: Wallet,
+  },
+  {
+    title: "Reminder",
+    href: "/reminder",
+    icon: Bell,
+  },
+  {
+    title: "About",
+    href: "/about",
+    icon: Info,
   },
   {
     title: "AI",
