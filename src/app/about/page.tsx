@@ -6,10 +6,8 @@ import aboutImage from "./lp-sojib.jpeg";
 export default function AboutPage() {
   return (
     <div className="mx-auto w-full max-w-4xl">
-      {/* =========================
-          Profile Image
-          ========================= */}
-      <div className="overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-sm">
+      {/* Profile Image */}
+      <div className="overflow-hidden rounded-3xl bg-white shadow-sm">
         <Image
           src={aboutImage}
           alt="LP Sojib - Web Developer"
@@ -18,23 +16,17 @@ export default function AboutPage() {
         />
       </div>
 
-      {/* =========================
-          About Content
-          ========================= */}
-      <div className="mt-8 text-center">
-        <p className="text-sm font-semibold uppercase tracking-wider text-blue-600">
-          About Me
-        </p>
-
-        <h1 className="mt-2 text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
+      {/* About Me */}
+      <div className="mt-8">
+        <h1 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
           LP Sojib
         </h1>
 
-        <p className="mt-2 text-lg font-medium text-gray-500">
+        <p className="mt-2 text-lg font-medium text-blue-600">
           Web Developer
         </p>
 
-        <div className="mx-auto mt-6 max-w-2xl space-y-4 text-base leading-8 text-gray-600 sm:text-lg">
+        <div className="mt-6 space-y-4 text-base leading-8 text-gray-600 sm:text-lg">
           <p>
             আমি LP Sojib। আমি একজন Web Developer এবং Life OS-এর
             নির্মাতা। আমার লক্ষ্য হলো প্রযুক্তিকে ব্যবহার করে
@@ -44,54 +36,48 @@ export default function AboutPage() {
           <p>
             আমরা প্রতিদিন অনেক কাজ করি, নতুন নতুন লক্ষ্য তৈরি করি,
             ভালো অভ্যাস গড়ার চেষ্টা করি এবং গুরুত্বপূর্ণ বিষয়গুলো
-            মনে রাখার চেষ্টা করি। কিন্তু সবকিছু আলাদা আলাদাভাবে
-            পরিচালনা করা অনেক সময় কঠিন হয়ে যায়।
+            মনে রাখার চেষ্টা করি। কিন্তু সবকিছু আলাদাভাবে পরিচালনা
+            করা অনেক সময় কঠিন হয়ে যায়।
+          </p>
+
+          <p>
+            এই সমস্যার একটি সহজ সমাধান হিসেবে Life OS তৈরি করা হয়েছে।
+            এটি এমন একটি personal system যেখানে জীবনের গুরুত্বপূর্ণ
+            বিষয়গুলো এক জায়গা থেকে পরিচালনা করা যায়।
           </p>
         </div>
       </div>
 
-      {/* =========================
-          Why Life OS
-          ========================= */}
-      <section className="mt-12 rounded-3xl border border-gray-200 bg-white p-6 shadow-sm sm:p-8">
-        <div className="text-center">
-          <p className="text-sm font-semibold text-blue-600">
-            Why Life OS?
-          </p>
+      {/* Why Life OS */}
+      <section className="mt-12">
+        <h2 className="text-2xl font-bold text-gray-900 sm:text-3xl">
+          Life OS কেন দরকার?
+        </h2>
 
-          <h2 className="mt-2 text-2xl font-bold text-gray-900 sm:text-3xl">
-            আমাদের Life OS কেন দরকার?
-          </h2>
-        </div>
-
-        <div className="mx-auto mt-6 max-w-3xl space-y-4 text-base leading-8 text-gray-600">
+        <div className="mt-5 space-y-4 text-base leading-8 text-gray-600 sm:text-lg">
           <p>
-            Life OS তৈরি করার মূল উদ্দেশ্য হলো জীবনের গুরুত্বপূর্ণ
-            বিষয়গুলোকে একটি জায়গায় নিয়ে আসা। Tasks, Habits, Goals,
-            Journal, Focus, Finance, Reminder এবং AI—সবকিছু যেন
-            সহজে পরিচালনা করা যায়।
+            Life OS-এর মূল উদ্দেশ্য হলো জীবনের গুরুত্বপূর্ণ বিষয়গুলোকে
+            একটি জায়গায় নিয়ে আসা। Tasks, Habits, Goals, Journal,
+            Focus, Finance, Reminder এবং AI—সবকিছু যেন সহজে
+            পরিচালনা করা যায়।
           </p>
 
           <p>
-            একটি ভালো system আমাদের শুধু কাজ মনে রাখতে সাহায্য করে
-            না; বরং কোন কাজটি গুরুত্বপূর্ণ, কোন লক্ষ্য নিয়ে আমরা
-            এগোচ্ছি এবং আমাদের দৈনন্দিন অগ্রগতি কেমন হচ্ছে—সেটাও
-            বুঝতে সাহায্য করে।
+            একটি ভালো system আমাদের শুধু কাজ মনে রাখতে সাহায্য করে না;
+            বরং কোন কাজটি গুরুত্বপূর্ণ, কোন লক্ষ্য নিয়ে আমরা এগোচ্ছি
+            এবং আমাদের দৈনন্দিন অগ্রগতি কেমন হচ্ছে—সেটাও বুঝতে সাহায্য করে।
           </p>
 
           <p>
-            Life OS-এর মাধ্যমে আমি এমন একটি personal system তৈরি
-            করতে চাই, যেখানে একজন মানুষ তার নিজের জীবনকে নিজের
+            Life OS-এর মাধ্যমে একজন মানুষ তার নিজের জীবনকে নিজের
             মতো করে organize এবং manage করতে পারে।
           </p>
         </div>
       </section>
 
-      {/* =========================
-          Life OS Features
-          ========================= */}
-      <section className="mt-8">
-        <h2 className="text-center text-2xl font-bold text-gray-900">
+      {/* Features */}
+      <section className="mt-12">
+        <h2 className="text-2xl font-bold text-gray-900 sm:text-3xl">
           Life OS-এ কী আছে?
         </h2>
 
@@ -103,7 +89,7 @@ export default function AboutPage() {
 
           <Feature
             title="Habits"
-            text="নতুন ভালো অভ্যাস তৈরি করুন এবং আপনার streak ধরে রাখুন।"
+            text="নতুন ভালো অভ্যাস তৈরি করুন এবং আপনার অগ্রগতি ধরে রাখুন।"
           />
 
           <Feature
@@ -143,10 +129,8 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* =========================
-          Closing
-          ========================= */}
-      <div className="mt-12 pb-6 text-center">
+      {/* Closing */}
+      <div className="mt-12 border-t border-gray-200 pt-8 pb-6">
         <p className="text-lg font-semibold text-gray-900">
           Build your life. Organize your day. Reach your goals.
         </p>
@@ -159,9 +143,6 @@ export default function AboutPage() {
   );
 }
 
-/* =========================
-   Feature Card
-   ========================= */
 function Feature({
   title,
   text,
@@ -170,7 +151,7 @@ function Feature({
   text: string;
 }) {
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-md">
+    <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
       <h3 className="font-semibold text-gray-900">
         {title}
       </h3>

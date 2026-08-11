@@ -1,74 +1,218 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
 
-import { getTasks, completeTask } from "../services/task.service";
+import {
+  completeTask,
+  getTasks,
+  syncPendingTasks,
+} from "../services/task.service";
+
 import { Task } from "../types/task.types";
 
 import TaskCard from "./TaskCard";
 import { useAuthStore } from "@/store/auth.store";
 
 export default function TaskList() {
-  const user = useAuthStore((state) => state.user);
-  const authLoading = useAuthStore((state) => state.loading);
+  const user = useAuthStore(
+    (state) => state.user
+  );
 
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(true);
+  const authLoading = useAuthStore(
+    (state) => state.loading
+  );
+
+  const [tasks, setTasks] = useState<Task[]>(
+    []
+  );
+
+  const [loading, setLoading] =
+    useState(true);
+
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    // Firebase authentication এখনো check করছে
-    if (authLoading) {
-      return;
-    }
+  /**
+   * Load Daily Tasks
+   *
+   * Firebase / Offline storage থেকে
+   * task load করবে।
+   */
+  const loadTasks = useCallback(
+    async () => {
+      if (!user) {
+        return;
+      }
 
-    // User login করা নেই
-    // এখানে কোনো setState() করা যাবে না
-    if (!user) {
-      return;
-    }
-
-    const loadTasks = async () => {
       try {
         setError("");
 
         const allTasks = await getTasks();
 
-        // শুধু Daily task
-        const dailyTasks = allTasks.filter(
-          (task) => task.status === "daily"
-        );
+        /**
+         * শুধু Daily Tasks
+         */
+        const dailyTasks =
+          allTasks.filter(
+            (task) =>
+              task.status === "daily"
+          );
 
         setTasks(dailyTasks);
       } catch (error) {
-        console.error("Load daily tasks error:", error);
+        console.error(
+          "Load daily tasks error:",
+          error
+        );
 
-        setError("Failed to load daily tasks.");
+        setError(
+          "Failed to load daily tasks."
+        );
       } finally {
         setLoading(false);
       }
+    },
+    [user]
+  );
+
+  /**
+   * Initial Task Load
+   *
+   * সরাসরি effect-এর মধ্যে
+   * loadTasks() call করা হচ্ছে না।
+   *
+   * Browser task queue-তে defer করা হচ্ছে।
+   */
+  useEffect(() => {
+    if (authLoading || !user) {
+      return;
+    }
+
+    const timer = window.setTimeout(
+      () => {
+        void loadTasks();
+      },
+      0
+    );
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [
+    authLoading,
+    user,
+    loadTasks,
+  ]);
+
+  /**
+   * Online / Offline listener
+   *
+   * Internet চলে গেলে:
+   * Local data ব্যবহার করবে।
+   *
+   * Internet ফিরে এলে:
+   * Pending tasks Firebase-এ sync করবে।
+   */
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    const handleOnline = () => {
+      const syncTimer =
+        window.setTimeout(
+          async () => {
+            try {
+              await syncPendingTasks();
+            } catch (error) {
+              console.error(
+                "Offline task sync error:",
+                error
+              );
+            }
+
+            await loadTasks();
+          },
+          0
+        );
+
+      return syncTimer;
     };
 
-    loadTasks();
-  }, [user, authLoading]);
+    const handleOffline = () => {
+      const loadTimer =
+        window.setTimeout(() => {
+          void loadTasks();
+        }, 0);
 
-  const handleComplete = async (taskId: string) => {
+      window.setTimeout(() => {
+        window.clearTimeout(loadTimer);
+      }, 0);
+    };
+
+    window.addEventListener(
+      "online",
+      handleOnline
+    );
+
+    window.addEventListener(
+      "offline",
+      handleOffline
+    );
+
+    return () => {
+      window.removeEventListener(
+        "online",
+        handleOnline
+      );
+
+      window.removeEventListener(
+        "offline",
+        handleOffline
+      );
+    };
+  }, [user, loadTasks]);
+
+  /**
+   * Complete Task
+   */
+  const handleComplete = async (
+    taskId: string
+  ) => {
     try {
+      setError("");
+
       await completeTask(taskId);
 
-      setTasks((currentTasks) =>
-        currentTasks.filter(
-          (task) => task.id !== taskId
-        )
+      /**
+       * Complete করার সাথে সাথে
+       * Daily list থেকে remove হবে।
+       */
+      setTasks(
+        (currentTasks) =>
+          currentTasks.filter(
+            (task) =>
+              task.id !== taskId
+          )
       );
     } catch (error) {
-      console.error("Complete task error:", error);
+      console.error(
+        "Complete task error:",
+        error
+      );
 
-      setError("Failed to complete task.");
+      setError(
+        "Failed to complete task."
+      );
     }
   };
 
-  // Authentication checking
+  /**
+   * Authentication checking
+   */
   if (authLoading) {
     return (
       <div className="rounded-2xl border border-gray-200 bg-white p-6 text-center shadow-sm">
@@ -79,7 +223,9 @@ export default function TaskList() {
     );
   }
 
-  // User login করা নেই
+  /**
+   * User not logged in
+   */
   if (!user) {
     return (
       <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center shadow-sm">
@@ -92,13 +238,16 @@ export default function TaskList() {
         </h3>
 
         <p className="mt-1 text-sm text-gray-500">
-          You need to be logged in to see your tasks.
+          You need to be logged in to see
+          your tasks.
         </p>
       </div>
     );
   }
 
-  // Tasks loading
+  /**
+   * Loading
+   */
   if (loading) {
     return (
       <div className="rounded-2xl border border-gray-200 bg-white p-6 text-center shadow-sm">
@@ -109,7 +258,9 @@ export default function TaskList() {
     );
   }
 
-  // Error
+  /**
+   * Error
+   */
   if (error) {
     return (
       <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-center">
@@ -120,7 +271,9 @@ export default function TaskList() {
     );
   }
 
-  // কোনো Daily task নেই
+  /**
+   * No Daily Tasks
+   */
   if (tasks.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-8 text-center shadow-sm">
@@ -139,14 +292,18 @@ export default function TaskList() {
     );
   }
 
-  // Daily Tasks
+  /**
+   * Daily Tasks
+   */
   return (
     <div className="space-y-3">
       {tasks.map((task) => (
         <TaskCard
           key={task.id}
           task={task}
-          onComplete={handleComplete}
+          onComplete={
+            handleComplete
+          }
         />
       ))}
     </div>
