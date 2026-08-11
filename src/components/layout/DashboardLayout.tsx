@@ -1,6 +1,7 @@
 "use client";
 
 import { ReactNode, useState } from "react";
+
 import Sidebar from "./Sidebar";
 import Header from "./Header";
 
@@ -11,26 +12,40 @@ interface DashboardLayoutProps {
 export default function DashboardLayout({
   children,
 }: DashboardLayoutProps) {
-  const [menuOpen, setMenuOpen] = useState<boolean>(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const openMenu = () => {
+    setMenuOpen(true);
+  };
+
+  const closeMenu = () => {
+    setMenuOpen(false);
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Sidebar */}
+      {/* =========================
+          Sidebar / Mobile Menu
+          ========================= */}
       <Sidebar
         isOpen={menuOpen}
-        onClose={() => setMenuOpen(false)}
+        onClose={closeMenu}
       />
 
-      {/* Main Area */}
+      {/* =========================
+          Main Area
+          ========================= */}
       <div className="md:ml-64">
-        {/* Fixed Header */}
-        <Header
-          onMenuClick={() => setMenuOpen(true)}
-        />
+        {/* =========================
+            Fixed Header
+            ========================= */}
+        <Header onMenuClick={openMenu} />
 
-        {/* Content */}
+        {/* =========================
+            Page Content
+            ========================= */}
         <main className="pt-16">
-          <div className="p-4 lg:p-8">
+          <div className="p-4 sm:p-6 lg:p-8">
             {children}
           </div>
         </main>

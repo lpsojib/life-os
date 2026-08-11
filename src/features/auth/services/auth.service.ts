@@ -1,15 +1,30 @@
 import {
+  browserLocalPersistence,
   createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  signOut,
   GoogleAuthProvider,
+  setPersistence,
+  signInWithEmailAndPassword,
   signInWithPopup,
+  signOut,
   updateProfile,
   User,
 } from "firebase/auth";
 
-// import { auth } from "@/lib/firebase";
 import { auth } from "../../../lib/firebase";
+
+/**
+ * Keep Firebase login session in the browser.
+ *
+ * User will remain logged in after:
+ * - Page refresh
+ * - Browser close/reopen
+ * - Development server restart
+ *
+ * User will be logged out only after explicitly calling logoutUser().
+ */
+const enableAuthPersistence = async (): Promise<void> => {
+  await setPersistence(auth, browserLocalPersistence);
+};
 
 /**
  * Register with Email & Password
@@ -19,6 +34,8 @@ export const registerUser = async (
   email: string,
   password: string
 ): Promise<User> => {
+  await enableAuthPersistence();
+
   const credential = await createUserWithEmailAndPassword(
     auth,
     email,
@@ -39,6 +56,8 @@ export const loginUser = async (
   email: string,
   password: string
 ): Promise<User> => {
+  await enableAuthPersistence();
+
   const credential = await signInWithEmailAndPassword(
     auth,
     email,
@@ -51,14 +70,24 @@ export const loginUser = async (
 /**
  * Login with Google
  */
-export const loginWithGoogle = async () => {
+export const loginWithGoogle = async (): Promise<User> => {
+  await enableAuthPersistence();
+
   const provider = new GoogleAuthProvider();
-  const result = await signInWithPopup(auth, provider);
+
+  const result = await signInWithPopup(
+    auth,
+    provider
+  );
+
   return result.user;
 };
 
 /**
  * Logout
+ *
+ * The user will be logged out only when
+ * this function is called.
  */
 export const logoutUser = async (): Promise<void> => {
   await signOut(auth);

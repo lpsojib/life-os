@@ -79,39 +79,57 @@ export default function Sidebar({
 }: SidebarProps) {
   return (
     <>
-      {isOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/40 md:hidden"
-          onClick={onClose}
-        />
-      )}
+      {/* =========================
+          Mobile Overlay
+          ========================= */}
+      <div
+        className={`fixed inset-0 z-40 bg-black/40 transition-opacity duration-300 md:hidden ${
+          isOpen
+            ? "pointer-events-auto opacity-100"
+            : "pointer-events-none opacity-0"
+        }`}
+        onClick={onClose}
+        aria-hidden="true"
+      />
 
+      {/* =========================
+          Sidebar
+          ========================= */}
       <aside
-        className={`fixed left-0 top-0 z-50 flex h-screen w-64 flex-col border-r bg-white transition-transform duration-300 ${
+        className={`fixed left-0 top-0 z-50 flex h-screen w-64 flex-col border-r border-gray-200 bg-white shadow-xl transition-transform duration-300 ease-in-out md:shadow-none ${
           isOpen
             ? "translate-x-0"
             : "-translate-x-full md:translate-x-0"
         }`}
       >
-        {/* Logo */}
-        <div className="flex h-16 items-center justify-between border-b px-6">
-          <h1 className="text-xl font-bold text-blue-600">
+        {/* =========================
+            Logo / Header
+            ========================= */}
+        <div className="flex h-16 shrink-0 items-center justify-between border-b border-gray-200 px-5">
+          <Link
+            href="/dashboard"
+            onClick={onClose}
+            className="text-xl font-bold text-blue-600"
+          >
             Life OS
-          </h1>
+          </Link>
 
+          {/* Mobile Close Button */}
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-2 hover:bg-gray-100 md:hidden"
+            className="rounded-lg p-2 text-gray-500 transition hover:bg-gray-100 hover:text-gray-900 md:hidden"
             aria-label="Close menu"
           >
             <X size={22} />
           </button>
         </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto p-4">
-          <ul className="space-y-2">
+        {/* =========================
+            Navigation
+            ========================= */}
+        <nav className="flex-1 overflow-y-auto px-3 py-4">
+          <ul className="space-y-1">
             {menuItems.map((item) => {
               const Icon = item.icon;
 
@@ -120,9 +138,13 @@ export default function Sidebar({
                   <Link
                     href={item.href}
                     onClick={onClose}
-                    className="flex items-center gap-3 rounded-xl px-4 py-3 transition hover:bg-blue-50 hover:text-blue-600"
+                    className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-gray-700 transition hover:bg-blue-50 hover:text-blue-600"
                   >
-                    <Icon size={20} />
+                    <Icon
+                      size={20}
+                      strokeWidth={2}
+                    />
+
                     <span>{item.title}</span>
                   </Link>
                 </li>
