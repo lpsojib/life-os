@@ -7,7 +7,6 @@ export default function CompletedTasksPage() {
   return (
     <main className="min-h-screen bg-slate-50">
       <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
-
         {/* Task Navigation */}
         <TaskNavigation />
 
@@ -29,6 +28,7 @@ export default function CompletedTasksPage() {
             </div>
           </div>
 
+          {/* Information Card */}
           <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
             <p className="text-sm text-slate-500">
               Your progress
@@ -39,7 +39,8 @@ export default function CompletedTasksPage() {
             </p>
 
             <p className="mt-1 text-sm text-slate-500">
-              Review your completed tasks and keep track of your progress.
+              Review your completed tasks and keep track of
+              your progress.
             </p>
           </div>
         </header>
@@ -58,7 +59,6 @@ export default function CompletedTasksPage() {
 
           <CompletedTaskList />
         </section>
-
       </div>
     </main>
   );

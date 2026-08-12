@@ -28,19 +28,55 @@ export interface Task {
 
   priority: TaskPriority;
 
+  /**
+   * Future Goal connection.
+   * Currently optional.
+   */
   goalId: string | null;
 
+  /**
+   * daily / pending / completed
+   */
   status: TaskStatus;
 
   /**
-   * শুধুমাত্র Pending Task-এর জন্য ব্যবহার হবে।
-   * এই date এলে Pending → Daily হবে।
+   * Task due date.
+   *
+   * YYYY-MM-DD
    */
-  activeDate: string | null;
+  dueDate: string | null;
 
+  /**
+   * Pending task active date.
+   *
+   * YYYY-MM-DD
+   */
+  activeDate?: string | null;
+
+  /**
+   * If true:
+   *
+   * Task will automatically remain
+   * as a Daily Task every day.
+   *
+   * If false:
+   *
+   * It is a normal one-time task.
+   */
+  repeatDaily: boolean;
+
+  /**
+   * Used for task ordering.
+   */
   order: number;
 
+  /**
+   * Task creation time.
+   */
   createdAt: string;
 
+  /**
+   * Completion time.
+   */
   completedAt: string | null;
 }

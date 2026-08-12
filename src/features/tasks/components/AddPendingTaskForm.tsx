@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+
 import { addPendingTask } from "../services/task.service";
+
 import {
   LifeArea,
   TaskPriority,
@@ -11,22 +13,52 @@ const lifeAreas: {
   value: LifeArea;
   label: string;
 }[] = [
-  { value: "work", label: "💼 Work" },
-  { value: "learning", label: "📚 Learning" },
-  { value: "health", label: "💪 Health" },
-  { value: "deen", label: "🕌 Deen" },
-  { value: "family", label: "👨‍👩‍👧 Family" },
-  { value: "finance", label: "💰 Finance" },
-  { value: "personal", label: "🎯 Personal" },
+  {
+    value: "work",
+    label: "💼 Work",
+  },
+  {
+    value: "learning",
+    label: "📚 Learning",
+  },
+  {
+    value: "health",
+    label: "💪 Health",
+  },
+  {
+    value: "deen",
+    label: "🕌 Deen",
+  },
+  {
+    value: "family",
+    label: "👨‍👩‍👧 Family",
+  },
+  {
+    value: "finance",
+    label: "💰 Finance",
+  },
+  {
+    value: "personal",
+    label: "🎯 Personal",
+  },
 ];
 
 const priorities: {
   value: TaskPriority;
   label: string;
 }[] = [
-  { value: "low", label: "🟢 Low" },
-  { value: "medium", label: "🟡 Medium" },
-  { value: "high", label: "🔴 High" },
+  {
+    value: "low",
+    label: "🟢 Low",
+  },
+  {
+    value: "medium",
+    label: "🟡 Medium",
+  },
+  {
+    value: "high",
+    label: "🔴 High",
+  },
 ];
 
 interface AddPendingTaskFormProps {
@@ -37,17 +69,48 @@ export default function AddPendingTaskForm({
   onTaskAdded,
 }: AddPendingTaskFormProps) {
   const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
+  const [description, setDescription] =
+    useState("");
+
   const [lifeArea, setLifeArea] =
     useState<LifeArea>("personal");
+
   const [priority, setPriority] =
     useState<TaskPriority>("medium");
-  const [goalId, setGoalId] = useState("");
-  const [activeDate, setActiveDate] = useState("");
 
-  const [loading, setLoading] = useState(false);
+  const [goalId, setGoalId] = useState("");
+
+  const [activeDate, setActiveDate] =
+    useState("");
+
+  const [loading, setLoading] =
+    useState(false);
+
   const [error, setError] = useState("");
 
+  /**
+   * Today's date
+   *
+   * Browser local date ব্যবহার করা হচ্ছে।
+   */
+  const getTodayDate = () => {
+    const now = new Date();
+
+    const year = now.getFullYear();
+    const month = String(
+      now.getMonth() + 1
+    ).padStart(2, "0");
+
+    const day = String(
+      now.getDate()
+    ).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+  };
+
+  /**
+   * Submit Pending Task
+   */
   const handleSubmit = async (
     event: React.FormEvent<HTMLFormElement>
   ) => {
@@ -55,28 +118,69 @@ export default function AddPendingTaskForm({
 
     setError("");
 
-    if (!title.trim()) {
-      setError("Task title is required.");
+    const trimmedTitle = title.trim();
+    const trimmedDescription =
+      description.trim();
+    const trimmedGoalId = goalId.trim();
+
+    /**
+     * Title validation
+     */
+    if (!trimmedTitle) {
+      setError(
+        "Task title is required."
+      );
+
       return;
     }
 
+    /**
+     * Active Date validation
+     */
     if (!activeDate) {
-      setError("Please select an active date.");
+      setError(
+        "Please select an active date."
+      );
+
+      return;
+    }
+
+    /**
+     * Active date must not be
+     * before today.
+     */
+    if (activeDate < getTodayDate()) {
+      setError(
+        "Active date cannot be in the past."
+      );
+
       return;
     }
 
     try {
       setLoading(true);
 
+      /**
+       * Task service will decide:
+       *
+       * Offline:
+       * IndexedDB
+       *
+       * Online:
+       * Firebase
+       */
       await addPendingTask(
-        title,
-        description,
+        trimmedTitle,
+        trimmedDescription,
         lifeArea,
         priority,
-        goalId || null,
+        trimmedGoalId || null,
         activeDate
       );
 
+      /**
+       * Reset form
+       */
       setTitle("");
       setDescription("");
       setLifeArea("personal");
@@ -84,9 +188,15 @@ export default function AddPendingTaskForm({
       setGoalId("");
       setActiveDate("");
 
+      /**
+       * Notify parent component
+       */
       onTaskAdded?.();
     } catch (error) {
-      console.error("Add pending task error:", error);
+      console.error(
+        "Add pending task error:",
+        error
+      );
 
       setError(
         "Failed to add pending task. Please try again."
@@ -99,55 +209,74 @@ export default function AddPendingTaskForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="space-y-5 rounded-2xl bg-white p-6 shadow-sm"
+      className="space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
     >
       {/* Title */}
       <div>
-        <label className="mb-2 block text-sm font-medium text-gray-700">
-          Title
+        <label
+          htmlFor="pending-task-title"
+          className="mb-2 block text-sm font-semibold text-slate-700"
+        >
+          Task Title
         </label>
 
         <input
+          id="pending-task-title"
           type="text"
           value={title}
           onChange={(event) =>
             setTitle(event.target.value)
           }
           placeholder="What do you need to do?"
-          className="w-full rounded-xl border border-gray-200 p-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+          disabled={loading}
+          className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
           required
         />
       </div>
 
       {/* Description */}
       <div>
-        <label className="mb-2 block text-sm font-medium text-gray-700">
+        <label
+          htmlFor="pending-task-description"
+          className="mb-2 block text-sm font-semibold text-slate-700"
+        >
           Description
         </label>
 
         <textarea
+          id="pending-task-description"
           value={description}
           onChange={(event) =>
-            setDescription(event.target.value)
+            setDescription(
+              event.target.value
+            )
           }
           placeholder="Add some details..."
           rows={3}
-          className="w-full resize-none rounded-xl border border-gray-200 p-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+          disabled={loading}
+          className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 p-3 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
         />
       </div>
 
       {/* Life Area */}
       <div>
-        <label className="mb-2 block text-sm font-medium text-gray-700">
+        <label
+          htmlFor="pending-task-life-area"
+          className="mb-2 block text-sm font-semibold text-slate-700"
+        >
           Life Area
         </label>
 
         <select
+          id="pending-task-life-area"
           value={lifeArea}
           onChange={(event) =>
-            setLifeArea(event.target.value as LifeArea)
+            setLifeArea(
+              event.target.value as LifeArea
+            )
           }
-          className="w-full rounded-xl border border-gray-200 p-3 outline-none"
+          disabled={loading}
+          className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {lifeAreas.map((area) => (
             <option
@@ -162,18 +291,23 @@ export default function AddPendingTaskForm({
 
       {/* Priority */}
       <div>
-        <label className="mb-2 block text-sm font-medium text-gray-700">
+        <label
+          htmlFor="pending-task-priority"
+          className="mb-2 block text-sm font-semibold text-slate-700"
+        >
           Priority
         </label>
 
         <select
+          id="pending-task-priority"
           value={priority}
           onChange={(event) =>
             setPriority(
               event.target.value as TaskPriority
             )
           }
-          className="w-full rounded-xl border border-gray-200 p-3 outline-none"
+          disabled={loading}
+          className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {priorities.map((item) => (
             <option
@@ -188,56 +322,86 @@ export default function AddPendingTaskForm({
 
       {/* Goal */}
       <div>
-        <label className="mb-2 block text-sm font-medium text-gray-700">
+        <label
+          htmlFor="pending-task-goal"
+          className="mb-2 block text-sm font-semibold text-slate-700"
+        >
           Goal
         </label>
 
         <input
+          id="pending-task-goal"
           type="text"
           value={goalId}
           onChange={(event) =>
             setGoalId(event.target.value)
           }
           placeholder="Goal ID (optional)"
-          className="w-full rounded-xl border border-gray-200 p-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+          disabled={loading}
+          className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
         />
+
+        <p className="mt-1.5 text-xs text-slate-400">
+          Optional: connect this task with a
+          goal.
+        </p>
       </div>
 
       {/* Active Date */}
       <div>
-        <label className="mb-2 block text-sm font-medium text-gray-700">
+        <label
+          htmlFor="pending-task-active-date"
+          className="mb-2 block text-sm font-semibold text-slate-700"
+        >
           Active Date
         </label>
 
         <input
+          id="pending-task-active-date"
           type="date"
           value={activeDate}
           onChange={(event) =>
-            setActiveDate(event.target.value)
+            setActiveDate(
+              event.target.value
+            )
           }
-          min={new Date().toISOString().split("T")[0]}
-          className="w-full rounded-xl border border-gray-200 p-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+          min={getTodayDate()}
+          disabled={loading}
+          className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
           required
         />
 
-        <p className="mt-2 text-xs text-gray-500">
-          এই তারিখে task টি automatically Daily Tasks-এ চলে
+        <p className="mt-2 text-xs leading-5 text-slate-500">
+          📅 এই তারিখে Pending Task
+          automatically Daily Tasks-এ চলে
           আসবে।
+        </p>
+      </div>
+
+      {/* Offline Information */}
+      <div className="rounded-xl border border-blue-100 bg-blue-50 p-3">
+        <p className="text-xs leading-5 text-blue-700">
+          💾 Internet না থাকলেও task তৈরি
+          হবে। Internet ফিরে এলে task
+          Firebase-এর সাথে sync হবে।
         </p>
       </div>
 
       {/* Error */}
       {error && (
-        <div className="rounded-xl bg-red-50 p-3 text-sm text-red-600">
+        <div
+          role="alert"
+          className="rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-600"
+        >
           {error}
         </div>
       )}
 
-      {/* Button */}
+      {/* Submit Button */}
       <button
         type="submit"
         disabled={loading}
-        className="w-full rounded-xl bg-blue-600 p-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+        className="w-full rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {loading
           ? "Creating Pending Task..."

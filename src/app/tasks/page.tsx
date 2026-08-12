@@ -8,6 +8,7 @@ import TaskNavigation from "@/features/tasks/components/TaskNavigation";
 
 export default function TasksPage() {
   const [showCreateTask, setShowCreateTask] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const today = new Date();
 
@@ -18,10 +19,14 @@ export default function TasksPage() {
     year: "numeric",
   });
 
+  const handleTaskAdded = () => {
+    setShowCreateTask(false);
+    setRefreshKey((current) => current + 1);
+  };
+
   return (
     <main className="min-h-screen bg-slate-50">
       <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
-
         {/* Task Navigation */}
         <TaskNavigation />
 
@@ -43,6 +48,7 @@ export default function TasksPage() {
             </div>
           </div>
 
+          {/* Date Card */}
           <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
             <p className="text-sm text-slate-500">
               Today&apos;s date
@@ -94,10 +100,7 @@ export default function TasksPage() {
 
             <div className="p-5">
               <AddTaskForm
-                onTaskAdded={() => {
-                  setShowCreateTask(false);
-                  window.location.reload();
-                }}
+                onTaskAdded={handleTaskAdded}
               />
             </div>
           </section>
@@ -117,9 +120,8 @@ export default function TasksPage() {
             </div>
           </div>
 
-          <TaskList />
+          <TaskList key={refreshKey} />
         </section>
-
       </div>
     </main>
   );

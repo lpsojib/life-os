@@ -1,8 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { getTasks, restoreTask } from "../services/task.service";
+import {
+  getTasks,
+  restoreTask,
+  syncPendingTasks,
+} from "../services/task.service";
+
 import { Task } from "../types/task.types";
 
 import CompletedTaskCard from "./CompletedTaskCard";
@@ -19,52 +24,129 @@ export default function CompletedTaskList() {
   const [error, setError] = useState("");
 
   /**
-   * Load Completed Tasks
+   * Load completed tasks
+   *
+   * Firebase অথবা IndexedDB থেকে
+   * completed tasks load করবে।
    */
-  useEffect(() => {
-    // Firebase authentication এখনো check করছে
-    if (authLoading) {
+  const loadCompletedTasks = useCallback(async () => {
+    if (!user) {
+      setTasks([]);
+      setLoading(false);
       return;
     }
 
-    // User login করা নেই
+    try {
+      setError("");
+      setLoading(true);
+
+      const allTasks = await getTasks();
+
+      const completedTasks = allTasks.filter(
+        (task) => task.status === "completed"
+      );
+
+      setTasks(completedTasks);
+    } catch (error) {
+      console.error("Load completed tasks error:", error);
+
+      setError("Failed to load completed tasks.");
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
+
+  /**
+   * Initial load
+   */
+  useEffect(() => {
+    if (authLoading || !user) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      void loadCompletedTasks();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [authLoading, user, loadCompletedTasks]);
+
+  /**
+   * Online / Offline support
+   *
+   * Online হলে pending local data Firebase-এ sync হবে।
+   * তারপর completed task আবার load হবে।
+   */
+  useEffect(() => {
     if (!user) {
       return;
     }
 
-    const fetchCompletedTasks = async () => {
-      try {
-        setLoading(true);
-        setError("");
+    const handleOnline = () => {
+      const timer = window.setTimeout(() => {
+        void (async () => {
+          try {
+            await syncPendingTasks();
+          } catch (error) {
+            console.error(
+              "Completed task sync error:",
+              error
+            );
+          }
 
-        const allTasks = await getTasks();
+          await loadCompletedTasks();
+        })();
+      }, 0);
 
-        // শুধু Completed task
-        const completedTasks = allTasks.filter(
-          (task) => task.status === "completed"
-        );
-
-        setTasks(completedTasks);
-      } catch (error) {
-        console.error("Load completed tasks error:", error);
-
-        setError("Failed to load completed tasks.");
-      } finally {
-        setLoading(false);
-      }
+      return () => {
+        window.clearTimeout(timer);
+      };
     };
 
-    fetchCompletedTasks();
-  }, [user, authLoading]);
+    const handleOffline = () => {
+      const timer = window.setTimeout(() => {
+        void loadCompletedTasks();
+      }, 0);
+
+      return () => {
+        window.clearTimeout(timer);
+      };
+    };
+
+    const onlineHandler = () => {
+      handleOnline();
+    };
+
+    const offlineHandler = () => {
+      handleOffline();
+    };
+
+    window.addEventListener("online", onlineHandler);
+    window.addEventListener("offline", offlineHandler);
+
+    return () => {
+      window.removeEventListener("online", onlineHandler);
+      window.removeEventListener("offline", offlineHandler);
+    };
+  }, [user, loadCompletedTasks]);
 
   /**
-   * Restore Completed Task
+   * Restore completed task
+   *
    * Completed → Daily
    */
   const handleRestore = async (taskId: string) => {
     try {
+      setError("");
+
       await restoreTask(taskId);
 
+      /**
+       * Restore করার সাথে সাথে
+       * completed list থেকে task remove হবে।
+       */
       setTasks((currentTasks) =>
         currentTasks.filter((task) => task.id !== taskId)
       );
@@ -78,18 +160,24 @@ export default function CompletedTaskList() {
   /**
    * Group completed tasks by date
    */
-  const groupedTasks = useMemo(() => {
+  const groupedTasks = useMemo<CompletedGroup>(() => {
     const groups: CompletedGroup = {};
 
     tasks.forEach((task) => {
-      const date = task.completedAt
-        ? new Date(task.completedAt).toLocaleDateString("en-US", {
+      let date = "Unknown Date";
+
+      if (task.completedAt) {
+        const parsedDate = new Date(task.completedAt);
+
+        if (!Number.isNaN(parsedDate.getTime())) {
+          date = parsedDate.toLocaleDateString("en-US", {
             weekday: "long",
             month: "long",
             day: "numeric",
             year: "numeric",
-          })
-        : "Unknown Date";
+          });
+        }
+      }
 
       if (!groups[date]) {
         groups[date] = [];
@@ -102,7 +190,7 @@ export default function CompletedTaskList() {
   }, [tasks]);
 
   /**
-   * Authentication Loading
+   * Authentication loading
    */
   if (authLoading) {
     return (
@@ -119,7 +207,7 @@ export default function CompletedTaskList() {
   }
 
   /**
-   * User Not Logged In
+   * User not logged in
    */
   if (!user) {
     return (
@@ -140,7 +228,7 @@ export default function CompletedTaskList() {
   }
 
   /**
-   * Loading Tasks
+   * Loading
    */
   if (loading) {
     return (
@@ -176,7 +264,9 @@ export default function CompletedTaskList() {
 
         <button
           type="button"
-          onClick={() => window.location.reload()}
+          onClick={() => {
+            void loadCompletedTasks();
+          }}
           className="mt-4 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-700"
         >
           Try Again
@@ -186,7 +276,7 @@ export default function CompletedTaskList() {
   }
 
   /**
-   * No Completed Tasks
+   * No completed tasks
    */
   if (tasks.length === 0) {
     return (
@@ -208,7 +298,7 @@ export default function CompletedTaskList() {
   }
 
   /**
-   * Completed Tasks
+   * Completed tasks
    */
   return (
     <div className="space-y-8">
@@ -228,9 +318,7 @@ export default function CompletedTaskList() {
 
                 <p className="text-xs text-gray-500">
                   {dateTasks.length}{" "}
-                  {dateTasks.length === 1
-                    ? "task"
-                    : "tasks"}{" "}
+                  {dateTasks.length === 1 ? "task" : "tasks"}{" "}
                   completed
                 </p>
               </div>

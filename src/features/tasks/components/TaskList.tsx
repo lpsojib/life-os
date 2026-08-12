@@ -8,14 +8,72 @@ import {
 
 import {
   completeTask,
+  deleteTask,
   getTasks,
   syncPendingTasks,
+  updateTask,
 } from "../services/task.service";
 
-import { Task } from "../types/task.types";
+import {
+  LifeArea,
+  Task,
+  TaskPriority,
+} from "../types/task.types";
 
 import TaskCard from "./TaskCard";
 import { useAuthStore } from "@/store/auth.store";
+
+const lifeAreas: {
+  value: LifeArea;
+  label: string;
+}[] = [
+  {
+    value: "work",
+    label: "💼 Work",
+  },
+  {
+    value: "learning",
+    label: "📚 Learning",
+  },
+  {
+    value: "health",
+    label: "💪 Health",
+  },
+  {
+    value: "deen",
+    label: "🕌 Deen",
+  },
+  {
+    value: "family",
+    label: "👨‍👩‍👧 Family",
+  },
+  {
+    value: "finance",
+    label: "💰 Finance",
+  },
+  {
+    value: "personal",
+    label: "🎯 Personal",
+  },
+];
+
+const priorities: {
+  value: TaskPriority;
+  label: string;
+}[] = [
+  {
+    value: "low",
+    label: "🟢 Low",
+  },
+  {
+    value: "medium",
+    label: "🟡 Medium",
+  },
+  {
+    value: "high",
+    label: "🔴 High",
+  },
+];
 
 export default function TaskList() {
   const user = useAuthStore(
@@ -26,77 +84,78 @@ export default function TaskList() {
     (state) => state.loading
   );
 
-  const [tasks, setTasks] = useState<Task[]>(
-    []
-  );
+  const [tasks, setTasks] = useState<Task[]>([]);
 
   const [loading, setLoading] =
     useState(true);
 
   const [error, setError] = useState("");
 
+  const [editingTask, setEditingTask] =
+    useState<Task | null>(null);
+
+  const [editTitle, setEditTitle] =
+    useState("");
+
+  const [editDescription, setEditDescription] =
+    useState("");
+
+  const [editLifeArea, setEditLifeArea] =
+    useState<LifeArea>("personal");
+
+  const [editPriority, setEditPriority] =
+    useState<TaskPriority>("medium");
+
+  const [savingEdit, setSavingEdit] =
+    useState(false);
+
+  const [deletingTaskId, setDeletingTaskId] =
+    useState<string | null>(null);
+
   /**
    * Load Daily Tasks
-   *
-   * Firebase / Offline storage থেকে
-   * task load করবে।
    */
-  const loadTasks = useCallback(
-    async () => {
-      if (!user) {
-        return;
-      }
+  const loadTasks = useCallback(async () => {
+    if (!user) {
+      setLoading(false);
+      return;
+    }
 
-      try {
-        setError("");
+    try {
+      setError("");
 
-        const allTasks = await getTasks();
+      const allTasks = await getTasks();
 
-        /**
-         * শুধু Daily Tasks
-         */
-        const dailyTasks =
-          allTasks.filter(
-            (task) =>
-              task.status === "daily"
-          );
+      const dailyTasks = allTasks.filter(
+        (task) => task.status === "daily"
+      );
 
-        setTasks(dailyTasks);
-      } catch (error) {
-        console.error(
-          "Load daily tasks error:",
-          error
-        );
+      setTasks(dailyTasks);
+    } catch (error) {
+      console.error(
+        "Load daily tasks error:",
+        error
+      );
 
-        setError(
-          "Failed to load daily tasks."
-        );
-      } finally {
-        setLoading(false);
-      }
-    },
-    [user]
-  );
+      setError(
+        "Failed to load daily tasks."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
 
   /**
    * Initial Task Load
-   *
-   * সরাসরি effect-এর মধ্যে
-   * loadTasks() call করা হচ্ছে না।
-   *
-   * Browser task queue-তে defer করা হচ্ছে।
    */
   useEffect(() => {
     if (authLoading || !user) {
       return;
     }
 
-    const timer = window.setTimeout(
-      () => {
-        void loadTasks();
-      },
-      0
-    );
+    const timer = window.setTimeout(() => {
+      void loadTasks();
+    }, 0);
 
     return () => {
       window.clearTimeout(timer);
@@ -108,70 +167,96 @@ export default function TaskList() {
   ]);
 
   /**
-   * Online / Offline listener
-   *
-   * Internet চলে গেলে:
-   * Local data ব্যবহার করবে।
-   *
-   * Internet ফিরে এলে:
-   * Pending tasks Firebase-এ sync করবে।
+   * Listen for newly created task
    */
   useEffect(() => {
     if (!user) {
       return;
     }
 
-    const handleOnline = () => {
-      const syncTimer =
-        window.setTimeout(
-          async () => {
-            try {
-              await syncPendingTasks();
-            } catch (error) {
-              console.error(
-                "Offline task sync error:",
-                error
-              );
-            }
+    const handleTaskAdded = () => {
+      const timer = window.setTimeout(() => {
+        void loadTasks();
+      }, 0);
 
-            await loadTasks();
-          },
-          0
-        );
-
-      return syncTimer;
+      return timer;
     };
 
-    const handleOffline = () => {
-      const loadTimer =
-        window.setTimeout(() => {
-          void loadTasks();
-        }, 0);
+    const listener = () => {
+      handleTaskAdded();
+    };
+
+    window.addEventListener(
+      "life-os-task-added",
+      listener
+    );
+
+    return () => {
+      window.removeEventListener(
+        "life-os-task-added",
+        listener
+      );
+    };
+  }, [user, loadTasks]);
+
+  /**
+   * Online / Offline listener
+   */
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    const onlineHandler = () => {
+      const timer = window.setTimeout(() => {
+        void (async () => {
+          try {
+            await syncPendingTasks();
+          } catch (error) {
+            console.error(
+              "Offline task sync error:",
+              error
+            );
+          }
+
+          await loadTasks();
+        })();
+      }, 0);
 
       window.setTimeout(() => {
-        window.clearTimeout(loadTimer);
+        window.clearTimeout(timer);
+      }, 0);
+    };
+
+    const offlineHandler = () => {
+      const timer = window.setTimeout(() => {
+        void loadTasks();
+      }, 0);
+
+      window.setTimeout(() => {
+        window.clearTimeout(timer);
       }, 0);
     };
 
     window.addEventListener(
       "online",
-      handleOnline
+      onlineHandler
     );
 
     window.addEventListener(
       "offline",
-      handleOffline
+      offlineHandler
     );
 
     return () => {
       window.removeEventListener(
         "online",
-        handleOnline
+        onlineHandler
       );
 
       window.removeEventListener(
         "offline",
-        handleOffline
+        offlineHandler
       );
     };
   }, [user, loadTasks]);
@@ -187,16 +272,10 @@ export default function TaskList() {
 
       await completeTask(taskId);
 
-      /**
-       * Complete করার সাথে সাথে
-       * Daily list থেকে remove হবে।
-       */
-      setTasks(
-        (currentTasks) =>
-          currentTasks.filter(
-            (task) =>
-              task.id !== taskId
-          )
+      setTasks((currentTasks) =>
+        currentTasks.filter(
+          (task) => task.id !== taskId
+        )
       );
     } catch (error) {
       console.error(
@@ -211,7 +290,195 @@ export default function TaskList() {
   };
 
   /**
-   * Authentication checking
+   * Open Edit Form
+   */
+  const handleEditStart = (
+    task: Task
+  ) => {
+    setEditingTask(task);
+
+    setEditTitle(task.title);
+
+    setEditDescription(
+      task.description
+    );
+
+    setEditLifeArea(
+      task.lifeArea
+    );
+
+    setEditPriority(
+      task.priority
+    );
+
+    setError("");
+  };
+
+  /**
+   * Cancel Edit
+   */
+  const handleEditCancel = () => {
+    setEditingTask(null);
+    setEditTitle("");
+    setEditDescription("");
+    setEditLifeArea("personal");
+    setEditPriority("medium");
+  };
+
+  /**
+   * Save Edited Task
+   */
+  const handleEditSave = async () => {
+    if (!editingTask) {
+      return;
+    }
+
+    const trimmedTitle =
+      editTitle.trim();
+
+    if (!trimmedTitle) {
+      setError(
+        "Task title is required."
+      );
+      return;
+    }
+
+    try {
+      setSavingEdit(true);
+      setError("");
+
+      await updateTask(
+        editingTask.id,
+        {
+          title: trimmedTitle,
+          description:
+            editDescription.trim(),
+          lifeArea: editLifeArea,
+          priority: editPriority,
+        }
+      );
+
+      setTasks((currentTasks) =>
+        currentTasks.map((task) =>
+          task.id === editingTask.id
+            ? {
+                ...task,
+                title: trimmedTitle,
+                description:
+                  editDescription.trim(),
+                lifeArea: editLifeArea,
+                priority: editPriority,
+              }
+            : task
+        )
+      );
+
+      handleEditCancel();
+    } catch (error) {
+      console.error(
+        "Update task error:",
+        error
+      );
+
+      setError(
+        "Failed to update task."
+      );
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  /**
+   * Delete Task
+   */
+  const handleDelete = async (
+    taskId: string
+  ) => {
+    const confirmed =
+      window.confirm(
+        "Are you sure you want to delete this task?"
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setDeletingTaskId(taskId);
+      setError("");
+
+      await deleteTask(taskId);
+
+      setTasks((currentTasks) =>
+        currentTasks.filter(
+          (task) => task.id !== taskId
+        )
+      );
+
+      if (
+        editingTask?.id === taskId
+      ) {
+        handleEditCancel();
+      }
+    } catch (error) {
+      console.error(
+        "Delete task error:",
+        error
+      );
+
+      setError(
+        "Failed to delete task."
+      );
+    } finally {
+      setDeletingTaskId(null);
+    }
+  };
+
+  /**
+   * Toggle Repeat Daily
+   */
+  const handleRepeatToggle = async (
+    task: Task
+  ) => {
+    try {
+      setError("");
+
+      const newRepeatValue =
+        !task.repeatDaily;
+
+      await updateTask(
+        task.id,
+        {
+          repeatDaily:
+            newRepeatValue,
+        }
+      );
+
+      setTasks((currentTasks) =>
+        currentTasks.map((currentTask) =>
+          currentTask.id === task.id
+            ? {
+                ...currentTask,
+                repeatDaily:
+                  newRepeatValue,
+              }
+            : currentTask
+        )
+      );
+    } catch (error) {
+      console.error(
+        "Repeat task update error:",
+        error
+      );
+
+      setError(
+        "Failed to update repeat setting."
+      );
+    }
+  };
+
+  /**
+   * Authentication loading
    */
   if (authLoading) {
     return (
@@ -261,12 +528,31 @@ export default function TaskList() {
   /**
    * Error
    */
-  if (error) {
+  if (error && tasks.length === 0) {
     return (
       <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-center">
         <p className="text-sm font-medium text-red-600">
           {error}
         </p>
+
+        <button
+          type="button"
+          onClick={() => {
+            setLoading(true);
+
+            const timer =
+              window.setTimeout(() => {
+                void loadTasks();
+              }, 0);
+
+            window.setTimeout(() => {
+              window.clearTimeout(timer);
+            }, 0);
+          }}
+          className="mt-3 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-700"
+        >
+          Try Again
+        </button>
       </div>
     );
   }
@@ -296,15 +582,230 @@ export default function TaskList() {
    * Daily Tasks
    */
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
+      {error && (
+        <div className="rounded-xl bg-red-50 p-3 text-sm text-red-600">
+          {error}
+        </div>
+      )}
+
       {tasks.map((task) => (
-        <TaskCard
+        <div
           key={task.id}
-          task={task}
-          onComplete={
-            handleComplete
-          }
-        />
+          className="rounded-2xl"
+        >
+          <TaskCard
+            task={task}
+            onComplete={handleComplete}
+          />
+
+          {/* Task Actions */}
+          <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-3">
+            {/* Repeat Daily */}
+            <button
+              type="button"
+              onClick={() =>
+                void handleRepeatToggle(
+                  task
+                )
+              }
+              className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${
+                task.repeatDaily
+                  ? "bg-green-100 text-green-700 hover:bg-green-200"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}
+            >
+              {task.repeatDaily
+                ? "✓ Repeat Daily"
+                : "↻ Repeat Daily"}
+            </button>
+
+            {/* Edit */}
+            <button
+              type="button"
+              onClick={() =>
+                handleEditStart(task)
+              }
+              className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+            >
+              ✏️ Edit
+            </button>
+
+            {/* Delete */}
+            <button
+              type="button"
+              onClick={() =>
+                void handleDelete(
+                  task.id
+                )
+              }
+              disabled={
+                deletingTaskId ===
+                task.id
+              }
+              className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {deletingTaskId ===
+              task.id
+                ? "Deleting..."
+                : "🗑️ Delete"}
+            </button>
+          </div>
+
+          {/* Edit Form */}
+          {editingTask?.id === task.id && (
+            <div className="mt-3 rounded-2xl border border-blue-200 bg-blue-50 p-5">
+              <div className="mb-4">
+                <h3 className="font-semibold text-slate-900">
+                  Edit Task
+                </h3>
+
+                <p className="mt-1 text-xs text-slate-500">
+                  Update your task information.
+                </p>
+              </div>
+
+              {/* Title */}
+              <div className="mb-4">
+                <label
+                  htmlFor={`edit-title-${task.id}`}
+                  className="mb-2 block text-sm font-semibold text-slate-700"
+                >
+                  Title
+                </label>
+
+                <input
+                  id={`edit-title-${task.id}`}
+                  type="text"
+                  value={editTitle}
+                  onChange={(event) =>
+                    setEditTitle(
+                      event.target.value
+                    )
+                  }
+                  disabled={savingEdit}
+                  className="w-full rounded-xl border border-slate-200 bg-white p-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                />
+              </div>
+
+              {/* Description */}
+              <div className="mb-4">
+                <label
+                  htmlFor={`edit-description-${task.id}`}
+                  className="mb-2 block text-sm font-semibold text-slate-700"
+                >
+                  Description
+                </label>
+
+                <textarea
+                  id={`edit-description-${task.id}`}
+                  value={editDescription}
+                  onChange={(event) =>
+                    setEditDescription(
+                      event.target.value
+                    )
+                  }
+                  rows={3}
+                  disabled={savingEdit}
+                  className="w-full resize-none rounded-xl border border-slate-200 bg-white p-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                />
+              </div>
+
+              {/* Life Area */}
+              <div className="mb-4">
+                <label
+                  htmlFor={`edit-life-area-${task.id}`}
+                  className="mb-2 block text-sm font-semibold text-slate-700"
+                >
+                  Life Area
+                </label>
+
+                <select
+                  id={`edit-life-area-${task.id}`}
+                  value={editLifeArea}
+                  onChange={(event) =>
+                    setEditLifeArea(
+                      event.target.value as LifeArea
+                    )
+                  }
+                  disabled={savingEdit}
+                  className="w-full rounded-xl border border-slate-200 bg-white p-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                >
+                  {lifeAreas.map(
+                    (area) => (
+                      <option
+                        key={area.value}
+                        value={area.value}
+                      >
+                        {area.label}
+                      </option>
+                    )
+                  )}
+                </select>
+              </div>
+
+              {/* Priority */}
+              <div className="mb-5">
+                <label
+                  htmlFor={`edit-priority-${task.id}`}
+                  className="mb-2 block text-sm font-semibold text-slate-700"
+                >
+                  Priority
+                </label>
+
+                <select
+                  id={`edit-priority-${task.id}`}
+                  value={editPriority}
+                  onChange={(event) =>
+                    setEditPriority(
+                      event.target.value as TaskPriority
+                    )
+                  }
+                  disabled={savingEdit}
+                  className="w-full rounded-xl border border-slate-200 bg-white p-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                >
+                  {priorities.map(
+                    (item) => (
+                      <option
+                        key={item.value}
+                        value={item.value}
+                      >
+                        {item.label}
+                      </option>
+                    )
+                  )}
+                </select>
+              </div>
+
+              {/* Edit Actions */}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    void handleEditSave()
+                  }
+                  disabled={savingEdit}
+                  className="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {savingEdit
+                    ? "Saving..."
+                    : "Save Changes"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={
+                    handleEditCancel
+                  }
+                  disabled={savingEdit}
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-100"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       ))}
     </div>
   );

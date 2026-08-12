@@ -1,11 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
 
 import {
-  getTasks,
-  deleteTask,
   completeTask,
+  deleteTask,
+  getTasks,
+  syncPendingTasks,
 } from "../services/task.service";
 
 import { Task } from "../types/task.types";
@@ -22,55 +27,150 @@ export default function PendingTaskList() {
 
   /**
    * Load Pending Tasks
+   *
+   * Firebase অথবা IndexedDB থেকে
+   * pending tasks load করবে।
    */
-  useEffect(() => {
-    // Firebase authentication এখনো check করছে
-    if (authLoading) {
-      return;
-    }
-
-    // User login করা নেই
+  const loadTasks = useCallback(async () => {
     if (!user) {
       return;
     }
 
-    const loadTasks = async () => {
-      try {
-        setLoading(true);
-        setError("");
+    try {
+      setError("");
 
-        const allTasks = await getTasks();
+      const allTasks = await getTasks();
 
-        // শুধু Pending task দেখাবে
-        const pendingTasks = allTasks.filter(
-          (task) => task.status === "pending"
-        );
+      const pendingTasks = allTasks.filter(
+        (task) => task.status === "pending"
+      );
 
-        setTasks(pendingTasks);
-      } catch (error) {
-        console.error("Load pending tasks error:", error);
+      setTasks(pendingTasks);
+    } catch (error) {
+      console.error(
+        "Load pending tasks error:",
+        error
+      );
 
-        setError("Failed to load pending tasks.");
-      } finally {
-        setLoading(false);
-      }
+      setError("Failed to load pending tasks.");
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
+
+  /**
+   * Initial Load
+   *
+   * Effect-এর body থেকে সরাসরি
+   * state update না করে browser queue-তে
+   * loadTasks defer করা হচ্ছে।
+   */
+  useEffect(() => {
+    if (authLoading || !user) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      void loadTasks();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [authLoading, user, loadTasks]);
+
+  /**
+   * Online / Offline listener
+   *
+   * Offline:
+   * IndexedDB থেকে data ব্যবহার করবে।
+   *
+   * Online:
+   * Pending offline tasks Firebase-এ sync করবে।
+   */
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    const onlineHandler = () => {
+      const timer = window.setTimeout(() => {
+        void (async () => {
+          try {
+            await syncPendingTasks();
+          } catch (error) {
+            console.error(
+              "Offline task sync error:",
+              error
+            );
+          }
+
+          await loadTasks();
+        })();
+      }, 0);
+
+      window.setTimeout(() => {
+        window.clearTimeout(timer);
+      }, 0);
     };
 
-    loadTasks();
-  }, [user, authLoading]);
+    const offlineHandler = () => {
+      const timer = window.setTimeout(() => {
+        void loadTasks();
+      }, 0);
+
+      window.setTimeout(() => {
+        window.clearTimeout(timer);
+      }, 0);
+    };
+
+    window.addEventListener(
+      "online",
+      onlineHandler
+    );
+
+    window.addEventListener(
+      "offline",
+      offlineHandler
+    );
+
+    return () => {
+      window.removeEventListener(
+        "online",
+        onlineHandler
+      );
+
+      window.removeEventListener(
+        "offline",
+        offlineHandler
+      );
+    };
+  }, [user, loadTasks]);
 
   /**
    * Complete Pending Task
+   *
+   * Online বা Offline দুই অবস্থাতেই
+   * task complete করার চেষ্টা করবে।
    */
-  const handleComplete = async (taskId: string) => {
+  const handleComplete = async (
+    taskId: string
+  ) => {
     try {
+      setError("");
+
       await completeTask(taskId);
 
       setTasks((currentTasks) =>
-        currentTasks.filter((task) => task.id !== taskId)
+        currentTasks.filter(
+          (task) => task.id !== taskId
+        )
       );
     } catch (error) {
-      console.error("Complete pending task error:", error);
+      console.error(
+        "Complete pending task error:",
+        error
+      );
 
       setError("Failed to complete task.");
     }
@@ -79,15 +179,24 @@ export default function PendingTaskList() {
   /**
    * Delete Pending Task
    */
-  const handleDelete = async (taskId: string) => {
+  const handleDelete = async (
+    taskId: string
+  ) => {
     try {
+      setError("");
+
       await deleteTask(taskId);
 
       setTasks((currentTasks) =>
-        currentTasks.filter((task) => task.id !== taskId)
+        currentTasks.filter(
+          (task) => task.id !== taskId
+        )
       );
     } catch (error) {
-      console.error("Delete pending task error:", error);
+      console.error(
+        "Delete pending task error:",
+        error
+      );
 
       setError("Failed to delete task.");
     }
@@ -125,7 +234,8 @@ export default function PendingTaskList() {
         </h3>
 
         <p className="mt-2 text-sm text-gray-500">
-          You need to be logged in to see your pending tasks.
+          You need to be logged in to see your
+          pending tasks.
         </p>
       </div>
     );
@@ -168,7 +278,10 @@ export default function PendingTaskList() {
 
         <button
           type="button"
-          onClick={() => window.location.reload()}
+          onClick={() => {
+            setLoading(true);
+            void loadTasks();
+          }}
           className="mt-4 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-700"
         >
           Try Again
@@ -192,8 +305,9 @@ export default function PendingTaskList() {
         </h3>
 
         <p className="mx-auto mt-2 max-w-md text-sm text-gray-500">
-          You don&apos;t have any upcoming tasks. Create a pending
-          task and set an active date.
+          You don&apos;t have any upcoming tasks.
+          Create a pending task and set an active
+          date.
         </p>
       </div>
     );
@@ -210,17 +324,20 @@ export default function PendingTaskList() {
           className="group rounded-2xl border border-indigo-100 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
         >
           <div className="flex items-start gap-4">
-            {/* Task checkbox */}
+            {/* Complete */}
             <button
               type="button"
-              onClick={() => handleComplete(task.id)}
-              className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-indigo-400 transition hover:bg-indigo-500 hover:text-white"
-              aria-label="Complete task"
+              onClick={() =>
+                void handleComplete(task.id)
+              }
+              className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-indigo-400 text-sm transition hover:bg-indigo-500 hover:text-white"
+              aria-label={`Complete ${task.title}`}
+              title="Complete task"
             >
               ✓
             </button>
 
-            {/* Task information */}
+            {/* Task Information */}
             <div className="min-w-0 flex-1">
               <h3 className="font-semibold text-gray-900">
                 {task.title}
@@ -239,36 +356,37 @@ export default function PendingTaskList() {
                     📅{" "}
                     {new Date(
                       `${task.activeDate}T00:00:00`
-                    ).toLocaleDateString("en-US", {
-                      day: "numeric",
-                      month: "short",
-                      year: "numeric",
-                    })}
+                    ).toLocaleDateString(
+                      "en-US",
+                      {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                      }
+                    )}
                   </span>
                 )}
 
                 {/* Priority */}
-                {task.priority && (
-                  <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium capitalize text-gray-600">
-                    {task.priority}
-                  </span>
-                )}
+                <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium capitalize text-gray-600">
+                  {task.priority}
+                </span>
 
                 {/* Life Area */}
-                {task.lifeArea && (
-                  <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium capitalize text-gray-600">
-                    {task.lifeArea}
-                  </span>
-                )}
+                <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium capitalize text-gray-600">
+                  {task.lifeArea}
+                </span>
               </div>
             </div>
 
             {/* Delete */}
             <button
               type="button"
-              onClick={() => handleDelete(task.id)}
+              onClick={() =>
+                void handleDelete(task.id)
+              }
               className="shrink-0 rounded-lg p-2 text-gray-400 transition hover:bg-red-50 hover:text-red-500"
-              aria-label="Delete task"
+              aria-label={`Delete ${task.title}`}
               title="Delete task"
             >
               🗑️

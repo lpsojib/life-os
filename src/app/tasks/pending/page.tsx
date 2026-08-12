@@ -8,12 +8,16 @@ import TaskNavigation from "@/features/tasks/components/TaskNavigation";
 
 export default function PendingTasksPage() {
   const [showForm, setShowForm] = useState(false);
-  const [refresh, setRefresh] = useState(0);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const handleTaskAdded = () => {
+    setShowForm(false);
+    setRefreshKey((current) => current + 1);
+  };
 
   return (
     <main className="min-h-screen bg-slate-50">
       <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
-
         {/* Task Navigation */}
         <TaskNavigation />
 
@@ -35,6 +39,7 @@ export default function PendingTasksPage() {
             </div>
           </div>
 
+          {/* Information Card */}
           <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
             <p className="text-sm text-slate-500">
               Plan ahead
@@ -45,7 +50,8 @@ export default function PendingTasksPage() {
             </p>
 
             <p className="mt-1 text-sm text-slate-500">
-              When the active date arrives, the task will automatically move to Daily Tasks.
+              When the active date arrives, the task will
+              automatically move to Daily Tasks.
             </p>
           </div>
         </header>
@@ -54,7 +60,9 @@ export default function PendingTasksPage() {
         <div className="mb-8">
           <button
             type="button"
-            onClick={() => setShowForm((current) => !current)}
+            onClick={() =>
+              setShowForm((current) => !current)
+            }
             className="flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-4 font-semibold text-white shadow-sm transition hover:bg-blue-700 active:scale-[0.99]"
           >
             <span className="text-xl">
@@ -78,17 +86,14 @@ export default function PendingTasksPage() {
               </h2>
 
               <p className="mt-1 text-sm text-slate-500">
-                Choose the date when this task should become a Daily Task.
+                Choose the date when this task should become
+                a Daily Task.
               </p>
             </div>
 
             <div className="p-5">
               <AddPendingTaskForm
-                key={refresh}
-                onTaskAdded={() => {
-                  setShowForm(false);
-                  setRefresh((value) => value + 1);
-                }}
+                onTaskAdded={handleTaskAdded}
               />
             </div>
           </section>
@@ -106,9 +111,8 @@ export default function PendingTasksPage() {
             </p>
           </div>
 
-          <PendingTaskList key={refresh} />
+          <PendingTaskList key={refreshKey} />
         </section>
-
       </div>
     </main>
   );
