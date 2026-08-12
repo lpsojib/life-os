@@ -24,28 +24,20 @@ export default function DashboardLayout({
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* =========================
-          Sidebar / Mobile Menu
-          ========================= */}
+      {/* Sidebar / Mobile Menu */}
       <Sidebar
         isOpen={menuOpen}
         onClose={closeMenu}
       />
 
-      {/* =========================
-          Main Area
-          ========================= */}
+      {/* Main Area */}
       <div className="md:ml-64">
-        {/* =========================
-            Fixed Header
-            ========================= */}
+        {/* Fixed Header */}
         <Header onMenuClick={openMenu} />
 
-        {/* =========================
-            Page Content
-            ========================= */}
+        {/* Page Content */}
         <main className="pt-16">
-          <div className="p-4 sm:p-6 lg:p-8">
+          <div className="px-3 py-4 sm:px-4 sm:py-5 lg:px-5 lg:py-6">
             {children}
           </div>
         </main>
