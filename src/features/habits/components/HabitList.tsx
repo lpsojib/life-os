@@ -12,8 +12,10 @@ import { auth } from "@/lib/firebase";
 
 import {
   completeHabit,
+  deleteHabit,
   getHabitCompletions,
   getHabits,
+  syncPendingHabits,
   toggleHabitCompletion,
 } from "../services/habit.service";
 
@@ -74,7 +76,14 @@ export default function HabitList({
     useState("");
 
   /**
-   * Load habits from Firebase
+   * Load Habits
+   *
+   * Online:
+   * Firebase
+   *
+   * Offline:
+   * habit.service.ts-এর
+   * IndexedDB fallback
    */
   const loadHabits = useCallback(
     async () => {
@@ -105,8 +114,7 @@ export default function HabitList({
           );
 
         /**
-         * Automatically complete habits
-         * whose End Date has passed.
+         * Active habits
          */
         const activeItems: HabitWithCompletions[] =
           [];
@@ -117,12 +125,19 @@ export default function HabitList({
           );
 
           /**
-           * End Date reached/passed
+           * End date reached/passed
            */
           if (today >= endDate) {
-            await completeHabit(
-              item.habit.id
-            );
+            try {
+              await completeHabit(
+                item.habit.id
+              );
+            } catch (error) {
+              console.error(
+                "Auto complete habit error:",
+                error
+              );
+            }
           } else {
             activeItems.push(item);
           }
@@ -134,7 +149,7 @@ export default function HabitList({
         setItems(activeItems);
 
         /**
-         * Check notification immediately
+         * Notifications
          */
         activeItems.forEach((item) => {
           notifyHabitIfNeeded(
@@ -158,8 +173,39 @@ export default function HabitList({
   );
 
   /**
-   * Wait for Firebase Authentication
-   * before loading habits.
+   * Offline → Online Sync
+   */
+  useEffect(() => {
+    const handleOnline = () => {
+      void (async () => {
+        try {
+          await syncPendingHabits();
+
+          await loadHabits();
+        } catch (error) {
+          console.error(
+            "Habit online sync error:",
+            error
+          );
+        }
+      })();
+    };
+
+    window.addEventListener(
+      "online",
+      handleOnline
+    );
+
+    return () => {
+      window.removeEventListener(
+        "online",
+        handleOnline
+      );
+    };
+  }, [loadHabits]);
+
+  /**
+   * Authentication
    */
   useEffect(() => {
     const unsubscribe =
@@ -187,8 +233,9 @@ export default function HabitList({
   }, [loadHabits, refreshKey]);
 
   /**
-   * Check Habit notification
-   * every 30 seconds.
+   * Habit Notification
+   *
+   * Every 30 seconds
    */
   useEffect(() => {
     if (items.length === 0) {
@@ -203,14 +250,8 @@ export default function HabitList({
       });
     };
 
-    /**
-     * Check immediately
-     */
     checkNotifications();
 
-    /**
-     * Then check every 30 seconds
-     */
     const interval = window.setInterval(
       checkNotifications,
       30 * 1000
@@ -222,7 +263,7 @@ export default function HabitList({
   }, [items]);
 
   /**
-   * Toggle habit completion
+   * Toggle Habit Completion
    */
   const handleToggle = async (
     habitId: string,
@@ -233,7 +274,7 @@ export default function HabitList({
       setError("");
 
       /**
-       * Save completion to Firebase
+       * Online/offline service
        */
       await toggleHabitCompletion(
         habitId,
@@ -293,16 +334,11 @@ export default function HabitList({
 
               completions: [
                 ...item.completions,
-
                 {
                   id: `${habitId}-${date}`,
-
                   habitId,
-
                   date,
-
                   completed,
-
                   createdAt:
                     new Date().toISOString(),
                 },
@@ -328,7 +364,7 @@ export default function HabitList({
       }
 
       /**
-       * Count completed days
+       * Completed days
        */
       const completedCount =
         updatedHabit.completions.filter(
@@ -337,9 +373,9 @@ export default function HabitList({
         ).length;
 
       /**
-       * If target days are completed,
-       * automatically move habit
-       * to History.
+       * Target reached
+       *
+       * Move to History
        */
       if (
         updatedHabit.habit
@@ -353,9 +389,7 @@ export default function HabitList({
         );
 
         /**
-         * Remove from active list.
-         *
-         * It will appear in History.
+         * Remove from active list
          */
         setItems(
           (currentItems) =>
@@ -379,7 +413,56 @@ export default function HabitList({
   };
 
   /**
-   * Loading state
+   * Delete Habit
+   *
+   * Online:
+   * Firebase থেকে delete
+   *
+   * Offline:
+   * habit.service.ts
+   * IndexedDB queue handle করবে
+   */
+  const handleDelete = async (
+    habitId: string
+  ) => {
+    try {
+      setError("");
+
+      /**
+       * Delete from service
+       */
+      await deleteHabit(
+        habitId
+      );
+
+      /**
+       * Immediately remove
+       * from UI
+       */
+      setItems(
+        (currentItems) =>
+          currentItems.filter(
+            (item) =>
+              item.habit.id !==
+              habitId
+          )
+      );
+    } catch (error) {
+      console.error(
+        "Delete habit error:",
+        error
+      );
+
+      setError(
+        "অভ্যাসটি delete করা যায়নি।"
+      );
+
+      throw error;
+    }
+  };
+
+  /**
+   * Loading State
    */
   if (loading) {
     return (
@@ -390,7 +473,7 @@ export default function HabitList({
   }
 
   /**
-   * Error state
+   * Error State
    */
   if (error) {
     return (
@@ -401,7 +484,7 @@ export default function HabitList({
   }
 
   /**
-   * No habits
+   * No Habits
    */
   if (items.length === 0) {
     return (
@@ -418,7 +501,7 @@ export default function HabitList({
   }
 
   /**
-   * Habit list
+   * Habit List
    */
   return (
     <div className="space-y-4">
@@ -438,6 +521,9 @@ export default function HabitList({
               date,
               completed
             )
+          }
+          onDelete={
+            handleDelete
           }
         />
       ))}

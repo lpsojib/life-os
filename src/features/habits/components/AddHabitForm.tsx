@@ -13,63 +13,97 @@ export default function AddHabitForm({
 }: AddHabitFormProps) {
   const [name, setName] = useState("");
   const [targetDays, setTargetDays] = useState("21");
-  const [startDate, setStartDate] = useState(() => {
-    return new Date().toISOString().split("T")[0];
-  });
-  const [time, setTime] = useState("07:00");
+  const [startDate, setStartDate] = useState("");
+  const [time, setTime] = useState("");
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
+  /**
+   * Submit Habit
+   */
   const handleSubmit = async (
-    event: React.FormEvent
+    event: React.FormEvent<HTMLFormElement>
   ) => {
     event.preventDefault();
 
     setError("");
+    setSuccess("");
 
+    const trimmedName = name.trim();
     const days = Number(targetDays);
 
-    if (!name.trim()) {
-      setError("অভ্যাসের নাম লিখুন।");
+    /**
+     * Validation
+     */
+    if (!trimmedName) {
+      setError("Habit name is required.");
       return;
     }
 
-    if (!days || days < 1) {
-      setError("সঠিক দিনের সংখ্যা দিন।");
+    if (!Number.isInteger(days) || days <= 0) {
+      setError("Target days must be greater than 0.");
       return;
     }
 
     if (!startDate) {
-      setError("শুরুর তারিখ নির্বাচন করুন।");
+      setError("Start date is required.");
       return;
     }
 
     if (!time) {
-      setError("অভ্যাস করার সময় নির্বাচন করুন।");
+      setError("Habit time is required.");
       return;
     }
 
     try {
       setLoading(true);
 
+      /**
+       * Habit service:
+       *
+       * Online:
+       * Firebase-এ save হবে।
+       *
+       * Offline:
+       * Local storage / IndexedDB-তে save হবে।
+       */
       await addHabit(
-        name,
+        trimmedName,
         days,
         startDate,
         time
-);
-
-      setName("");
-      setTargetDays("21");
-
-      setStartDate(
-        new Date().toISOString().split("T")[0]
       );
 
-      setTime("07:00");
+      /**
+       * Reset form
+       */
+      setName("");
+      setTargetDays("21");
+      setStartDate("");
+      setTime("");
 
+      /**
+       * Success message
+       */
+      setSuccess(
+        navigator.onLine
+          ? "Habit added successfully."
+          : "Habit saved offline. It will sync when you're online."
+      );
+
+      /**
+       * Parent refresh
+       */
       onHabitAdded?.();
+
+      /**
+       * Other components-কে notify
+       */
+      window.dispatchEvent(
+        new CustomEvent("life-os-habit-added")
+      );
     } catch (error) {
       console.error(
         "Add habit error:",
@@ -77,7 +111,7 @@ export default function AddHabitForm({
       );
 
       setError(
-        "অভ্যাস যোগ করা যায়নি। আবার চেষ্টা করুন।"
+        "Failed to add habit. Please try again."
       );
     } finally {
       setLoading(false);
@@ -87,114 +121,146 @@ export default function AddHabitForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="rounded-2xl border bg-white p-5 shadow-sm"
+      className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
     >
-      <h2 className="mb-5 text-xl font-semibold text-gray-900">
-        নতুন অভ্যাস
-      </h2>
+      {/* Header */}
+      <div>
+        <h2 className="text-lg font-semibold text-slate-900">
+          Add New Habit
+        </h2>
 
-      <div className="space-y-4">
-        {/* Habit Name */}
-        <div>
-          <label
-            htmlFor="habit-name"
-            className="mb-2 block text-sm font-medium text-gray-700"
-          >
-            অভ্যাসের নাম
-          </label>
-
-          <input
-            id="habit-name"
-            type="text"
-            value={name}
-            onChange={(event) =>
-              setName(event.target.value)
-            }
-            placeholder="যেমন: প্রতিদিন হাঁটা"
-            className="w-full rounded-xl border px-4 py-3 outline-none transition focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-
-        {/* Target Days */}
-        <div>
-          <label
-            htmlFor="target-days"
-            className="mb-2 block text-sm font-medium text-gray-700"
-          >
-            কত দিন
-          </label>
-
-          <input
-            id="target-days"
-            type="number"
-            min="1"
-            value={targetDays}
-            onChange={(event) =>
-              setTargetDays(event.target.value)
-            }
-            placeholder="যেমন ২১"
-            className="w-full rounded-xl border px-4 py-3 outline-none transition focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-
-        {/* Start Date */}
-        <div>
-          <label
-            htmlFor="habit-start-date"
-            className="mb-2 block text-sm font-medium text-gray-700"
-          >
-            কবে থেকে শুরু করবেন
-          </label>
-
-          <input
-            id="habit-start-date"
-            type="date"
-            value={startDate}
-            onChange={(event) =>
-              setStartDate(event.target.value)
-            }
-            className="w-full rounded-xl border px-4 py-3 outline-none transition focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-
-        {/* Time */}
-        <div>
-          <label
-            htmlFor="habit-time"
-            className="mb-2 block text-sm font-medium text-gray-700"
-          >
-            কোন সময় করবেন
-          </label>
-
-          <input
-            id="habit-time"
-            type="time"
-            value={time}
-            onChange={(event) =>
-              setTime(event.target.value)
-            }
-            className="w-full rounded-xl border px-4 py-3 outline-none transition focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-
-        {/* Error */}
-        {error && (
-          <p className="rounded-lg bg-red-50 p-3 text-sm text-red-600">
-            {error}
-          </p>
-        )}
-
-        {/* Submit */}
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {loading
-            ? "যোগ হচ্ছে..."
-            : "যোগ করুন"}
-        </button>
+        <p className="mt-1 text-sm text-slate-500">
+          Create a habit and track it every day.
+        </p>
       </div>
+
+      {/* Offline Status */}
+      {!navigator.onLine && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+          📴 You are offline. This habit will be
+          saved locally and synced later.
+        </div>
+      )}
+
+      {/* Habit Name */}
+      <div>
+        <label
+          htmlFor="habit-name"
+          className="mb-2 block text-sm font-semibold text-slate-700"
+        >
+          Habit Name
+        </label>
+
+        <input
+          id="habit-name"
+          type="text"
+          value={name}
+          onChange={(event) =>
+            setName(event.target.value)
+          }
+          placeholder="e.g. Read Quran"
+          disabled={loading}
+          required
+          className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100"
+        />
+      </div>
+
+      {/* Target Days */}
+      <div>
+        <label
+          htmlFor="habit-target-days"
+          className="mb-2 block text-sm font-semibold text-slate-700"
+        >
+          Target Days
+        </label>
+
+        <input
+          id="habit-target-days"
+          type="number"
+          min="1"
+          value={targetDays}
+          onChange={(event) =>
+            setTargetDays(event.target.value)
+          }
+          placeholder="21"
+          disabled={loading}
+          required
+          className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100"
+        />
+
+        <p className="mt-1 text-xs text-slate-400">
+          Example: 21 days, 30 days, 90 days
+        </p>
+      </div>
+
+      {/* Start Date */}
+      <div>
+        <label
+          htmlFor="habit-start-date"
+          className="mb-2 block text-sm font-semibold text-slate-700"
+        >
+          Start Date
+        </label>
+
+        <input
+          id="habit-start-date"
+          type="date"
+          value={startDate}
+          onChange={(event) =>
+            setStartDate(event.target.value)
+          }
+          disabled={loading}
+          required
+          className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100"
+        />
+      </div>
+
+      {/* Time */}
+      <div>
+        <label
+          htmlFor="habit-time"
+          className="mb-2 block text-sm font-semibold text-slate-700"
+        >
+          Habit Time
+        </label>
+
+        <input
+          id="habit-time"
+          type="time"
+          value={time}
+          onChange={(event) =>
+            setTime(event.target.value)
+          }
+          disabled={loading}
+          required
+          className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100"
+        />
+      </div>
+
+      {/* Error */}
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
+          {error}
+        </div>
+      )}
+
+      {/* Success */}
+      {success && (
+        <div className="rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
+          ✓ {success}
+        </div>
+      )}
+
+      {/* Submit */}
+      <button
+        type="submit"
+        disabled={loading}
+        className="w-full rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white shadow-sm transition hover:bg-blue-700 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {loading
+          ? "Creating Habit..."
+          : "Create Habit"}
+      </button>
     </form>
   );
 }
