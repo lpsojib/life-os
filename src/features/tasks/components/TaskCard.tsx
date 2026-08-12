@@ -94,12 +94,7 @@ export default function TaskCard({
               ⚡ {formattedPriority}
             </span>
 
-            {/* Repeat Daily */}
-            {task.repeatDaily && (
-              <span className="rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
-                🔁 Every day
-              </span>
-            )}
+           
           </div>
         </div>
       </div>
