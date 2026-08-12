@@ -4,9 +4,9 @@ import { Task } from "../types/task.types";
 
 interface TaskCardProps {
   task: Task;
-  onComplete: (taskId: string) => void;
-  onEdit: (taskId: string) => void;
-  onDelete: (taskId: string) => void;
+  onComplete: (taskId: string) => void | Promise<void>;
+  onEdit: (task: Task) => void;
+  onDelete: (taskId: string) => void | Promise<void>;
 }
 
 export default function TaskCard({
@@ -31,85 +31,119 @@ export default function TaskCard({
     personal: "🎯 Personal",
   };
 
+  const formattedLifeArea =
+    lifeAreaLabels[task.lifeArea];
+
   const formattedPriority =
     task.priority.charAt(0).toUpperCase() +
     task.priority.slice(1);
 
+  const handleComplete = () => {
+    void onComplete(task.id);
+  };
+
+  const handleEdit = () => {
+    onEdit(task);
+  };
+
   const handleDelete = () => {
-    const confirmed = window.confirm(
-      `Delete "${task.title}"?`
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    onDelete(task.id);
+    void onDelete(task.id);
   };
 
   return (
-    <article className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm transition hover:border-slate-300 hover:shadow-md">
-      <div className="flex items-center gap-3">
-        {/* Complete Circle */}
+    <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md sm:p-5">
+      {/* Main Row */}
+      <div className="flex items-start gap-3">
+        {/* Complete Checkbox */}
         <button
           type="button"
-          onClick={() => onComplete(task.id)}
+          onClick={handleComplete}
           aria-label={`Complete task: ${task.title}`}
-          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-slate-300 bg-white text-transparent transition hover:border-green-500 hover:bg-green-50 hover:text-green-600"
+          className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 border-slate-300 bg-white text-transparent transition hover:border-green-500 hover:bg-green-50 hover:text-green-600"
         >
           ✓
         </button>
 
         {/* Task Content */}
         <div className="min-w-0 flex-1">
-          {/* Task Name */}
-          <h3 className="truncate text-sm font-semibold text-slate-800 sm:text-base">
+          {/* Task Title */}
+          <h3 className="break-words text-base font-semibold text-slate-900 sm:text-lg">
             {task.title}
           </h3>
 
-          {/* Life Area + Priority */}
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-600">
-              {lifeAreaLabels[task.lifeArea]}
+          {/* Description */}
+          {task.description && (
+            <p className="mt-1.5 line-clamp-2 whitespace-pre-wrap break-words text-sm leading-5 text-slate-500">
+              {task.description}
+            </p>
+          )}
+
+          {/* Badges */}
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {/* Life Area */}
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600">
+              {formattedLifeArea}
             </span>
 
+            {/* Priority */}
             <span
-              className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${priorityStyles[task.priority]}`}
+              className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                priorityStyles[task.priority]
+              }`}
             >
               ⚡ {formattedPriority}
             </span>
+
+            {/* Repeat Daily */}
+            {task.repeatDaily && (
+              <span className="rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                🔁 Every day
+              </span>
+            )}
           </div>
         </div>
+      </div>
 
-        {/* Edit + Delete */}
-        <div className="flex shrink-0 items-center gap-1">
+      {/* Bottom Actions */}
+      <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
+        {/* Repeat Status */}
+        <div className="text-xs text-slate-400">
+          {task.repeatDaily
+            ? "Repeats daily"
+            : "One-time task"}
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2">
+          {/* Edit */}
           <button
             type="button"
-            onClick={() => onEdit(task.id)}
+            onClick={handleEdit}
             aria-label={`Edit task: ${task.title}`}
-            className="rounded-lg px-2.5 py-2 text-xs font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
           >
-            ✏️
+            ✏️ Edit
           </button>
 
+          {/* Delete */}
           <button
             type="button"
             onClick={handleDelete}
             aria-label={`Delete task: ${task.title}`}
-            className="rounded-lg px-2.5 py-2 text-xs font-medium text-slate-400 transition hover:bg-red-50 hover:text-red-600"
+            className="rounded-lg border border-red-100 bg-white px-3 py-2 text-xs font-semibold text-red-500 transition hover:bg-red-50 hover:text-red-600"
           >
-            🗑️
+            🗑️ Delete
+          </button>
+
+          {/* Complete */}
+          <button
+            type="button"
+            onClick={handleComplete}
+            className="rounded-lg bg-green-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-green-700 active:scale-[0.98]"
+          >
+            ✓ Done
           </button>
         </div>
-
-        {/* Complete */}
-        <button
-          type="button"
-          onClick={() => onComplete(task.id)}
-          className="shrink-0 rounded-lg bg-green-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-green-700 active:scale-95 sm:px-4 sm:text-sm"
-        >
-          ✓ Complete
-        </button>
       </div>
     </article>
   );
