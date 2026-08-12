@@ -117,6 +117,7 @@ export default function TaskList() {
    */
   const loadTasks = useCallback(async () => {
     if (!user) {
+      setTasks([]);
       setLoading(false);
       return;
     }
@@ -179,7 +180,9 @@ export default function TaskList() {
         void loadTasks();
       }, 0);
 
-      return timer;
+      return () => {
+        window.clearTimeout(timer);
+      };
     };
 
     const listener = () => {
@@ -290,7 +293,7 @@ export default function TaskList() {
   };
 
   /**
-   * Open Edit Form
+   * Start Editing Task
    */
   const handleEditStart = (
     task: Task
@@ -319,9 +322,13 @@ export default function TaskList() {
    */
   const handleEditCancel = () => {
     setEditingTask(null);
+
     setEditTitle("");
+
     setEditDescription("");
+
     setEditLifeArea("personal");
+
     setEditPriority("medium");
   };
 
@@ -340,19 +347,24 @@ export default function TaskList() {
       setError(
         "Task title is required."
       );
+
       return;
     }
 
     try {
       setSavingEdit(true);
+
       setError("");
+
+      const updatedDescription =
+        editDescription.trim();
 
       await updateTask(
         editingTask.id,
         {
           title: trimmedTitle,
           description:
-            editDescription.trim(),
+            updatedDescription,
           lifeArea: editLifeArea,
           priority: editPriority,
         }
@@ -365,7 +377,7 @@ export default function TaskList() {
                 ...task,
                 title: trimmedTitle,
                 description:
-                  editDescription.trim(),
+                  updatedDescription,
                 lifeArea: editLifeArea,
                 priority: editPriority,
               }
@@ -405,6 +417,7 @@ export default function TaskList() {
 
     try {
       setDeletingTaskId(taskId);
+
       setError("");
 
       await deleteTask(taskId);
@@ -435,7 +448,7 @@ export default function TaskList() {
   };
 
   /**
-   * Toggle Repeat Daily
+   * Repeat Daily Toggle
    */
   const handleRepeatToggle = async (
     task: Task
@@ -455,14 +468,15 @@ export default function TaskList() {
       );
 
       setTasks((currentTasks) =>
-        currentTasks.map((currentTask) =>
-          currentTask.id === task.id
-            ? {
-                ...currentTask,
-                repeatDaily:
-                  newRepeatValue,
-              }
-            : currentTask
+        currentTasks.map(
+          (currentTask) =>
+            currentTask.id === task.id
+              ? {
+                  ...currentTask,
+                  repeatDaily:
+                    newRepeatValue,
+                }
+              : currentTask
         )
       );
     } catch (error) {
@@ -478,7 +492,7 @@ export default function TaskList() {
   };
 
   /**
-   * Authentication loading
+   * Authentication Loading
    */
   if (authLoading) {
     return (
@@ -491,7 +505,7 @@ export default function TaskList() {
   }
 
   /**
-   * User not logged in
+   * User Not Logged In
    */
   if (!user) {
     return (
@@ -528,7 +542,10 @@ export default function TaskList() {
   /**
    * Error
    */
-  if (error && tasks.length === 0) {
+  if (
+    error &&
+    tasks.length === 0
+  ) {
     return (
       <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-center">
         <p className="text-sm font-medium text-red-600">
@@ -540,14 +557,7 @@ export default function TaskList() {
           onClick={() => {
             setLoading(true);
 
-            const timer =
-              window.setTimeout(() => {
-                void loadTasks();
-              }, 0);
-
-            window.setTimeout(() => {
-              window.clearTimeout(timer);
-            }, 0);
+            void loadTasks();
           }}
           className="mt-3 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-700"
         >
@@ -592,16 +602,18 @@ export default function TaskList() {
       {tasks.map((task) => (
         <div
           key={task.id}
-          className="rounded-2xl"
+          className="space-y-2"
         >
+          {/* Task Card */}
           <TaskCard
             task={task}
             onComplete={handleComplete}
+            onEdit={handleEditStart}
+            onDelete={handleDelete}
           />
 
-          {/* Task Actions */}
-          <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-3">
-            {/* Repeat Daily */}
+          {/* Repeat Daily */}
+          <div className="flex justify-end">
             <button
               type="button"
               onClick={() =>
@@ -609,52 +621,21 @@ export default function TaskList() {
                   task
                 )
               }
-              className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                 task.repeatDaily
-                  ? "bg-green-100 text-green-700 hover:bg-green-200"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  ? "bg-green-50 text-green-700 hover:bg-green-100"
+                  : "bg-slate-50 text-slate-500 hover:bg-slate-100"
               }`}
             >
               {task.repeatDaily
-                ? "✓ Repeat Daily"
+                ? "✓ Repeats Daily"
                 : "↻ Repeat Daily"}
-            </button>
-
-            {/* Edit */}
-            <button
-              type="button"
-              onClick={() =>
-                handleEditStart(task)
-              }
-              className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
-            >
-              ✏️ Edit
-            </button>
-
-            {/* Delete */}
-            <button
-              type="button"
-              onClick={() =>
-                void handleDelete(
-                  task.id
-                )
-              }
-              disabled={
-                deletingTaskId ===
-                task.id
-              }
-              className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {deletingTaskId ===
-              task.id
-                ? "Deleting..."
-                : "🗑️ Delete"}
             </button>
           </div>
 
           {/* Edit Form */}
           {editingTask?.id === task.id && (
-            <div className="mt-3 rounded-2xl border border-blue-200 bg-blue-50 p-5">
+            <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5">
               <div className="mb-4">
                 <h3 className="font-semibold text-slate-900">
                   Edit Task
