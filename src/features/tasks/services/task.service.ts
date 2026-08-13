@@ -76,11 +76,6 @@ const isOnline = (): boolean => {
   return navigator.onLine;
 };
 
-/**
- * Today's local date.
- *
- * YYYY-MM-DD
- */
 const getTodayString = (): string => {
   const today = new Date();
 
@@ -91,11 +86,6 @@ const getTodayString = (): string => {
   ].join("-");
 };
 
-/**
- * Get tomorrow's date.
- *
- * YYYY-MM-DD
- */
 const getTomorrowString = (): string => {
   const tomorrow = new Date();
 
@@ -110,9 +100,6 @@ const getTomorrowString = (): string => {
   ].join("-");
 };
 
-/**
- * Generate task ID.
- */
 const generateTaskId = (): string => {
   if (
     typeof crypto !== "undefined" &&
@@ -181,11 +168,6 @@ const firestoreTaskToTask = (
         ? data.activeDate
         : null,
 
-    /**
-     * Old tasks may not have repeatDaily.
-     *
-     * তাই undefined হলে false.
-     */
     repeatDaily:
       data.repeatDaily === true,
 
@@ -208,17 +190,11 @@ const taskToFirestoreData = (
     description: task.description,
     lifeArea: task.lifeArea,
     priority: task.priority,
-
     goalId: task.goalId,
-
     status: task.status,
-
     dueDate: task.dueDate,
-
     activeDate: task.activeDate,
-
     repeatDaily: task.repeatDaily,
-
     order: task.order,
 
     createdAt: Timestamp.fromDate(
@@ -234,7 +210,7 @@ const taskToFirestoreData = (
 };
 
 /* =========================================================
-   OFFLINE TASK
+   LOCAL STORAGE
    ========================================================= */
 
 const saveLocalTask = async (
@@ -265,47 +241,6 @@ const saveLocalTask = async (
   });
 };
 
-const cacheRemoteTask = async (
-  task: Task
-): Promise<void> => {
-  const user = getCurrentUser();
-
-  const recordId =
-    `task:${user.uid}:${task.id}`;
-
-  const existing =
-    await getOfflineData(recordId);
-
-  /**
-   * Pending local changes should
-   * never be overwritten.
-   */
-  if (
-    existing &&
-    existing.syncStatus === "pending"
-  ) {
-    return;
-  }
-
-  const data: OfflineTaskData = {
-    operation: "update",
-    task,
-  };
-
-  await saveOfflineData({
-    id: recordId,
-
-    collection:
-      `tasks:${user.uid}`,
-
-    data,
-
-    updatedAt: Date.now(),
-
-    syncStatus: "synced",
-  });
-};
-
 const getLocalTask = async (
   taskId: string
 ): Promise<Task | null> => {
@@ -330,32 +265,6 @@ const getLocalTask = async (
   }
 
   return data.task;
-};
-
-const getRemoteTask = async (
-  taskId: string
-): Promise<Task | null> => {
-  const user = getCurrentUser();
-
-  const taskRef = doc(
-    db,
-    "users",
-    user.uid,
-    "tasks",
-    taskId
-  );
-
-  const snapshot =
-    await getDoc(taskRef);
-
-  if (!snapshot.exists()) {
-    return null;
-  }
-
-  return firestoreTaskToTask(
-    snapshot.id,
-    snapshot.data()
-  );
 };
 
 const getLocalTasks = async (): Promise<Task[]> => {
@@ -398,7 +307,7 @@ const getLocalTasks = async (): Promise<Task[]> => {
 };
 
 /* =========================================================
-   ACTIVATE PENDING TASKS
+   LOCAL PENDING ACTIVATION
    ========================================================= */
 
 const activateDueLocalTasks =
@@ -408,7 +317,7 @@ const activateDueLocalTasks =
     const today =
       getTodayString();
 
-    const updatedTasks: Task[] = [];
+    const activated: Task[] = [];
 
     for (const task of tasks) {
       if (
@@ -418,30 +327,41 @@ const activateDueLocalTasks =
       ) {
         const updatedTask: Task = {
           ...task,
-
           status: "daily",
-
           activeDate: null,
         };
 
-        await saveLocalTask(
+        activated.push(updatedTask);
+
+        /*
+         * Important:
+         * Do not block the returned task list.
+         */
+        void saveLocalTask(
           updatedTask,
           "update"
-        );
-
-        updatedTasks.push(
-          updatedTask
-        );
+        ).catch((error) => {
+          console.error(
+            "Failed to activate local task:",
+            error
+          );
+        });
       } else {
-        updatedTasks.push(task);
+        activated.push(task);
       }
     }
 
-    return updatedTasks;
+    return activated;
   };
 
 /* =========================================================
-   SYNC
+   SYNC LOCK
+   ========================================================= */
+
+let syncPromise: Promise<void> | null = null;
+
+/* =========================================================
+   BACKGROUND SYNC
    ========================================================= */
 
 export const syncPendingTasks =
@@ -450,113 +370,128 @@ export const syncPendingTasks =
       return;
     }
 
-    const user =
-      auth.currentUser;
-
-    if (!user) {
-      return;
+    if (syncPromise) {
+      return syncPromise;
     }
 
-    try {
-      const pendingRecords =
-        await getPendingOfflineData();
+    syncPromise = (async () => {
+      const user = auth.currentUser;
 
-      const userCollection =
-        `tasks:${user.uid}`;
-
-      const userRecords =
-        pendingRecords.filter(
-          (record) =>
-            record.collection ===
-            userCollection
-        );
-
-      for (
-        const record of userRecords
-      ) {
-        try {
-          const offlineData =
-            record.data as OfflineTaskData;
-
-          const task =
-            offlineData.task;
-
-          const taskRef = doc(
-            db,
-            "users",
-            user.uid,
-            "tasks",
-            task.id
-          );
-
-          /* =========================
-             CREATE
-             ========================= */
-
-          if (
-            offlineData.operation ===
-            "create"
-          ) {
-            await setDoc(
-              taskRef,
-              taskToFirestoreData(task)
-            );
-
-            await markOfflineDataSynced(
-              record.id
-            );
-          }
-
-          /* =========================
-             UPDATE
-             ========================= */
-
-          else if (
-            offlineData.operation ===
-            "update"
-          ) {
-            await setDoc(
-              taskRef,
-              taskToFirestoreData(task),
-              {
-                merge: true,
-              }
-            );
-
-            await markOfflineDataSynced(
-              record.id
-            );
-          }
-
-          /* =========================
-             DELETE
-             ========================= */
-
-          else if (
-            offlineData.operation ===
-            "delete"
-          ) {
-            await deleteDoc(
-              taskRef
-            );
-
-            await deleteOfflineData(
-              record.id
-            );
-          }
-        } catch (error) {
-          console.error(
-            "Failed to sync task:",
-            record.id,
-            error
-          );
-        }
+      if (!user) {
+        return;
       }
-    } catch (error) {
-      console.error(
-        "Task sync error:",
-        error
-      );
+
+      try {
+        const pendingRecords =
+          await getPendingOfflineData();
+
+        const userCollection =
+          `tasks:${user.uid}`;
+
+        const userRecords =
+          pendingRecords.filter(
+            (record) =>
+              record.collection ===
+              userCollection
+          );
+
+        if (
+          userRecords.length === 0
+        ) {
+          return;
+        }
+
+        /*
+         * Sync tasks in parallel instead
+         * of waiting one-by-one.
+         */
+        await Promise.all(
+          userRecords.map(
+            async (record) => {
+              try {
+                const offlineData =
+                  record.data as OfflineTaskData;
+
+                const task =
+                  offlineData.task;
+
+                const taskRef = doc(
+                  db,
+                  "users",
+                  user.uid,
+                  "tasks",
+                  task.id
+                );
+
+                if (
+                  offlineData.operation ===
+                  "create"
+                ) {
+                  await setDoc(
+                    taskRef,
+                    taskToFirestoreData(task)
+                  );
+
+                  await markOfflineDataSynced(
+                    record.id
+                  );
+
+                  return;
+                }
+
+                if (
+                  offlineData.operation ===
+                  "update"
+                ) {
+                  await setDoc(
+                    taskRef,
+                    taskToFirestoreData(task),
+                    {
+                      merge: true,
+                    }
+                  );
+
+                  await markOfflineDataSynced(
+                    record.id
+                  );
+
+                  return;
+                }
+
+                if (
+                  offlineData.operation ===
+                  "delete"
+                ) {
+                  await deleteDoc(
+                    taskRef
+                  );
+
+                  await deleteOfflineData(
+                    record.id
+                  );
+                }
+              } catch (error) {
+                console.error(
+                  "Failed to sync task:",
+                  record.id,
+                  error
+                );
+              }
+            }
+          )
+        );
+      } catch (error) {
+        console.error(
+          "Task sync error:",
+          error
+        );
+      }
+    })();
+
+    try {
+      await syncPromise;
+    } finally {
+      syncPromise = null;
     }
   };
 
@@ -570,7 +505,13 @@ if (
   window.addEventListener(
     "online",
     () => {
-      void syncPendingTasks();
+      /*
+       * Give the browser a tiny chance
+       * to stabilize the connection.
+       */
+      window.setTimeout(() => {
+        void syncPendingTasks();
+      }, 300);
     }
   );
 }
@@ -579,13 +520,6 @@ if (
    ADD DAILY TASK
    ========================================================= */
 
-/**
- * Add Daily Task.
- *
- * repeatDaily = true হলে
- * task প্রতিদিন automatically
- * আবার তৈরি হবে।
- */
 export const addDailyTask =
   async (
     title: string,
@@ -630,16 +564,17 @@ export const addDailyTask =
       completedAt: null,
     };
 
-    /**
-     * Local first.
+    /*
+     * Local storage is the source
+     * of truth for immediate use.
      */
     await saveLocalTask(
       task,
       "create"
     );
 
-    /**
-     * Firebase background sync.
+    /*
+     * NEVER wait for Firebase.
      */
     if (isOnline()) {
       void syncPendingTasks();
@@ -692,10 +627,6 @@ export const addPendingTask =
 
       activeDate,
 
-      /**
-       * Pending tasks are
-       * one-time tasks by default.
-       */
       repeatDaily: false,
 
       order: Date.now(),
@@ -711,6 +642,9 @@ export const addPendingTask =
       "create"
     );
 
+    /*
+     * Firebase runs separately.
+     */
     if (isOnline()) {
       void syncPendingTasks();
     }
@@ -724,14 +658,11 @@ export const addPendingTask =
 
 export const getTasks =
   async (): Promise<Task[]> => {
-    const user =
-      getCurrentUser();
+    getCurrentUser();
 
-    const todayString =
-      getTodayString();
-
-    /**
-     * Local first.
+    /*
+     * FIRST:
+     * Read local data.
      */
     const localTasks =
       await getLocalTasks();
@@ -741,11 +672,37 @@ export const getTasks =
         localTasks
       );
 
-    /**
-     * Offline.
+    /*
+     * Offline:
+     * return immediately.
      */
     if (!isOnline()) {
       return activatedLocalTasks;
+    }
+
+    /*
+     * IMPORTANT:
+     * Return local tasks first.
+     *
+     * Firebase refresh happens
+     * in the background.
+     */
+    void refreshTasksFromFirebase();
+
+    return activatedLocalTasks;
+  };
+
+/* =========================================================
+   FIREBASE BACKGROUND REFRESH
+   ========================================================= */
+
+const refreshTasksFromFirebase =
+  async (): Promise<void> => {
+    const user =
+      auth.currentUser;
+
+    if (!user || !isOnline()) {
+      return;
     }
 
     try {
@@ -763,128 +720,110 @@ export const getTasks =
           tasksQuery
         );
 
-      const remoteTasks: Task[] =
-        [];
+      const todayString =
+        getTodayString();
 
-      for (
-        const item of snapshot.docs
-      ) {
-        const data =
-          item.data();
-
-        let status =
-          data.status as TaskStatus;
-
-        let activeDate =
-          typeof data.activeDate ===
-          "string"
-            ? data.activeDate
-            : null;
-
-        /**
-         * Pending → Daily
-         */
-        if (
-          status === "pending" &&
-          activeDate &&
-          activeDate <= todayString
-        ) {
-          status = "daily";
-
-          activeDate = null;
-
-          await updateDoc(
-            item.ref,
-            {
-              status: "daily",
-              activeDate: null,
-            }
-          );
-        }
-
-        const task =
-          firestoreTaskToTask(
-            item.id,
-            {
-              ...data,
-              status,
-              activeDate,
-            }
-          );
-
-        remoteTasks.push(
-          task
-        );
-
-        await cacheRemoteTask(
-          task
-        );
-      }
-
-      /* ===================================================
-         MERGE FIREBASE + LOCAL
-         =================================================== */
-
-      const taskMap =
-        new Map<string, Task>();
-
-      /**
-       * Firebase first.
+      /*
+       * Cache Firebase results
+       * in parallel.
        */
-      for (
-        const task of remoteTasks
-      ) {
-        taskMap.set(
-          task.id,
-          task
-        );
-      }
+      await Promise.all(
+        snapshot.docs.map(
+          async (item) => {
+            const data =
+              item.data();
 
-      /**
-       * Latest local data.
-       */
-      const latestLocalTasks =
-        await getLocalTasks();
+            let status =
+              data.status as TaskStatus;
 
-      const activatedTasks =
-        await activateDueLocalTasks(
-          latestLocalTasks
-        );
+            let activeDate =
+              typeof data.activeDate ===
+              "string"
+                ? data.activeDate
+                : null;
 
-      for (
-        const task of activatedTasks
-      ) {
-        const localRecord =
-          await getOfflineData(
-            `task:${user.uid}:${task.id}`
-          );
+            if (
+              status === "pending" &&
+              activeDate &&
+              activeDate <= todayString
+            ) {
+              status = "daily";
+              activeDate = null;
 
-        if (
-          localRecord?.syncStatus ===
-          "pending"
-        ) {
-          taskMap.set(
-            task.id,
-            task
-          );
-        }
-      }
+              /*
+               * Do not block the
+               * complete refresh.
+               */
+              void updateDoc(
+                item.ref,
+                {
+                  status: "daily",
+                  activeDate: null,
+                }
+              ).catch((error) => {
+                console.error(
+                  "Failed to activate Firebase task:",
+                  error
+                );
+              });
+            }
 
-      void syncPendingTasks();
+            const task =
+              firestoreTaskToTask(
+                item.id,
+                {
+                  ...data,
+                  status,
+                  activeDate,
+                }
+              );
 
-      return Array.from(
-        taskMap.values()
-      ).sort(
-        (a, b) =>
-          a.order - b.order
+            /*
+             * Only cache if there is
+             * no pending local change.
+             */
+            const userRecord =
+              await getOfflineData(
+                `task:${user.uid}:${task.id}`
+              );
+
+            if (
+              userRecord?.syncStatus ===
+              "pending"
+            ) {
+              return;
+            }
+
+            await saveOfflineData({
+              id:
+                `task:${user.uid}:${task.id}`,
+
+              collection:
+                `tasks:${user.uid}`,
+
+              data: {
+                operation: "update",
+                task,
+              } satisfies OfflineTaskData,
+
+              updatedAt: Date.now(),
+
+              syncStatus: "synced",
+            });
+          }
+        )
       );
+
+      /*
+       * Sync any local changes created
+       * while Firebase was refreshing.
+       */
+      void syncPendingTasks();
     } catch (error) {
       console.warn(
-        "Firebase unavailable. Using local tasks.",
+        "Firebase refresh failed. Local tasks remain available.",
         error
       );
-
-      return activatedLocalTasks;
     }
   };
 
@@ -892,16 +831,6 @@ export const getTasks =
    COMPLETE TASK
    ========================================================= */
 
-/**
- * Complete task.
- *
- * Normal task:
- * Daily → Completed
- *
- * Repeat Daily task:
- * Current task → Completed
- * Next day's task → Pending
- */
 export const completeTask =
   async (
     taskId: string
@@ -913,13 +842,7 @@ export const completeTask =
         taskId
       );
 
-    if (!task) {
-      if (!isOnline()) {
-        throw new Error(
-          "Task is not available offline."
-        );
-      }
-
+    if (!task && isOnline()) {
       task =
         await getRemoteTask(
           taskId
@@ -932,9 +855,6 @@ export const completeTask =
       );
     }
 
-    /**
-     * Current task completed.
-     */
     const completedTask: Task = {
       ...task,
 
@@ -944,19 +864,15 @@ export const completeTask =
         new Date().toISOString(),
     };
 
-    /**
-     * Save completed task locally.
-     */
     await saveLocalTask(
       completedTask,
       "update"
     );
 
-    /**
-     * If this is a repeating task,
-     * create tomorrow's task.
-     */
     if (task.repeatDaily) {
+      const tomorrow =
+        getTomorrowString();
+
       const tomorrowTask: Task = {
         ...task,
 
@@ -964,11 +880,9 @@ export const completeTask =
 
         status: "pending",
 
-        dueDate:
-          getTomorrowString(),
+        dueDate: tomorrow,
 
-        activeDate:
-          getTomorrowString(),
+        activeDate: tomorrow,
 
         completedAt: null,
 
@@ -987,8 +901,8 @@ export const completeTask =
       );
     }
 
-    /**
-     * Firebase background sync.
+    /*
+     * Background Firebase.
      */
     if (isOnline()) {
       void syncPendingTasks();
@@ -999,9 +913,6 @@ export const completeTask =
    RESTORE TASK
    ========================================================= */
 
-/**
- * Completed → Daily
- */
 export const restoreTask =
   async (
     taskId: string
@@ -1013,13 +924,7 @@ export const restoreTask =
         taskId
       );
 
-    if (!task) {
-      if (!isOnline()) {
-        throw new Error(
-          "Task is not available offline."
-        );
-      }
-
+    if (!task && isOnline()) {
       task =
         await getRemoteTask(
           taskId
@@ -1058,11 +963,6 @@ export const restoreTask =
    DELETE TASK
    ========================================================= */
 
-/**
- * Delete task.
- *
- * Works offline.
- */
 export const deleteTask =
   async (
     taskId: string
@@ -1075,10 +975,6 @@ export const deleteTask =
         taskId
       );
 
-    /**
-     * If local task does not exist,
-     * create minimum data for delete operation.
-     */
     if (!task) {
       task = {
         id: taskId,
@@ -1127,8 +1023,8 @@ export const deleteTask =
       syncStatus: "pending",
     });
 
-    /**
-     * Online হলে background Firebase delete.
+    /*
+     * Background Firebase delete.
      */
     if (isOnline()) {
       void syncPendingTasks();
@@ -1139,20 +1035,6 @@ export const deleteTask =
    UPDATE TASK
    ========================================================= */
 
-/**
- * Edit task.
- *
- * Supports:
- * - title
- * - description
- * - lifeArea
- * - priority
- * - goalId
- * - dueDate
- * - activeDate
- * - status
- * - repeatDaily
- */
 export const updateTask =
   async (
     taskId: string,
@@ -1175,16 +1057,7 @@ export const updateTask =
         taskId
       );
 
-    /**
-     * Local task না থাকলে Firebase থেকে load.
-     */
-    if (!task) {
-      if (!isOnline()) {
-        throw new Error(
-          "Task is not available offline."
-        );
-      }
-
+    if (!task && isOnline()) {
       task =
         await getRemoteTask(
           taskId
@@ -1214,10 +1087,6 @@ export const updateTask =
           ? updates.description.trim()
           : task.description,
 
-      /**
-       * Explicitly preserve existing
-       * repeatDaily value if not updated.
-       */
       repeatDaily:
         updates.repeatDaily !==
         undefined
@@ -1225,18 +1094,46 @@ export const updateTask =
           : task.repeatDaily,
     };
 
-    /**
-     * Local first.
-     */
     await saveLocalTask(
       updatedTask,
       "update"
     );
 
-    /**
-     * Firebase background sync.
+    /*
+     * Background Firebase.
      */
     if (isOnline()) {
       void syncPendingTasks();
     }
   };
+
+/* =========================================================
+   GET REMOTE SINGLE TASK
+   ========================================================= */
+
+const getRemoteTask = async (
+  taskId: string
+): Promise<Task | null> => {
+  const user =
+    getCurrentUser();
+
+  const taskRef = doc(
+    db,
+    "users",
+    user.uid,
+    "tasks",
+    taskId
+  );
+
+  const snapshot =
+    await getDoc(taskRef);
+
+  if (!snapshot.exists()) {
+    return null;
+  }
+
+  return firestoreTaskToTask(
+    snapshot.id,
+    snapshot.data()
+  );
+};

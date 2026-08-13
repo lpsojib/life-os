@@ -504,8 +504,7 @@ export const addHabit = async (
     );
   }
 
-  const trimmedName =
-    name.trim();
+  const trimmedName = name.trim();
 
   if (!trimmedName) {
     throw new Error(
@@ -513,11 +512,10 @@ export const addHabit = async (
     );
   }
 
-  const endDate =
-    calculateEndDate(
-      startDate,
-      targetDays
-    );
+  const endDate = calculateEndDate(
+    startDate,
+    targetDays
+  );
 
   const localId =
     generateLocalId("habit");
@@ -534,15 +532,54 @@ export const addHabit = async (
       new Date().toISOString(),
   };
 
-  /**
-   * Always save locally first.
+  /*
+   * LOCAL-FIRST
+   *
+   * The UI never waits for Firebase.
    */
   await saveHabitLocally(habit);
 
-  /**
-   * If online, try Firebase immediately.
+  if (
+    typeof window !== "undefined" &&
+    navigator.onLine
+  ) {
+    /*
+     * Firebase runs in the background.
+     *
+     * addHabit() returns immediately after
+     * the local IndexedDB save.
+     */
+    void syncSingleHabitInBackground(
+      habit
+    );
+
+    return localId;
+  }
+
+  /*
+   * Offline:
+   * Keep a durable sync queue.
+   *
+   * This is intentionally awaited so an
+   * offline habit is not lost if the page
+   * closes immediately after creation.
    */
-  if (navigator.onLine) {
+  await addToSyncQueue({
+    type: "add-habit",
+    habit,
+  });
+
+  return localId;
+};
+
+/**
+ * Sync one newly-created habit in the
+ * background when the browser is online.
+ */
+const syncSingleHabitInBackground =
+  async (
+    habit: Habit
+  ): Promise<void> => {
     try {
       const habitRef =
         await addDoc(
@@ -566,12 +603,8 @@ export const addHabit = async (
           }
         );
 
-      /**
-       * Replace temporary local ID
-       * with Firebase ID.
-       */
       await deleteLocalHabit(
-        localId
+        habit.id
       );
 
       const firebaseHabit: Habit = {
@@ -583,68 +616,154 @@ export const addHabit = async (
         firebaseHabit
       );
 
-      return habitRef.id;
+      /*
+       * If the user completed/toggled this
+       * local habit before Firebase finished,
+       * move those queued operations to the
+       * real Firebase habit ID.
+       */
+      await replaceQueuedHabitId(
+        habit.id,
+        habitRef.id
+      );
+
+      if (
+        typeof window !== "undefined"
+      ) {
+        window.dispatchEvent(
+          new CustomEvent(
+            "life-os-habit-synced",
+            {
+              detail: {
+                localId: habit.id,
+                firebaseId:
+                  habitRef.id,
+              },
+            }
+          )
+        );
+      }
     } catch (error) {
       console.error(
-        "Firebase habit add failed. Keeping offline copy.",
+        "Background habit sync failed:",
         error
       );
 
-      await addToSyncQueue({
-        type: "add-habit",
-        habit,
-      });
-
-      return localId;
+      /*
+       * Firebase failed. Keep the local copy
+       * and put it into the durable queue.
+       */
+      try {
+        await addToSyncQueue({
+          type: "add-habit",
+          habit,
+        });
+      } catch (queueError) {
+        console.error(
+          "Failed to queue habit sync:",
+          queueError
+        );
+      }
     }
-  }
-
-  /**
-   * Offline.
-   */
-  await addToSyncQueue({
-    type: "add-habit",
-    habit,
-  });
-
-  return localId;
-};
-
-/* =========================================================
-   GET HABITS
-========================================================= */
+  };
 
 /**
- * Get Active Habits
+ * Replace a temporary local habit ID in
+ * queued completion operations.
  */
-export const getHabits =
-  async (): Promise<Habit[]> => {
-    /**
-     * First read local data.
-     */
-    const localHabits =
-      await getLocalHabits();
+const replaceQueuedHabitId =
+  async (
+    localId: string,
+    firebaseId: string
+  ): Promise<void> => {
+    const queue =
+      await getSyncQueue();
 
-    /**
-     * If offline, return local data.
-     */
-    if (!navigator.onLine) {
-      return localHabits
-        .filter(
-          (habit) =>
-            habit.status === "active"
-        )
-        .sort(
-          (a, b) =>
-            b.createdAt.localeCompare(
-              a.createdAt
-            )
-        );
+    const relatedItems =
+      queue.filter(
+        (item) =>
+          item.habitId === localId
+      );
+
+    if (
+      relatedItems.length === 0
+    ) {
+      return;
     }
 
-    /**
-     * Online → Firebase
-     */
+    const database =
+      await openDatabase();
+
+    await new Promise<void>(
+      (resolve, reject) => {
+        const transaction =
+          database.transaction(
+            QUEUE_STORE,
+            "readwrite"
+          );
+
+        const store =
+          transaction.objectStore(
+            QUEUE_STORE
+          );
+
+        for (
+          const item of relatedItems
+        ) {
+          if (
+            typeof item.id !==
+            "number"
+          ) {
+            continue;
+          }
+
+          store.put({
+            ...item,
+            habitId: firebaseId,
+            completion:
+              item.completion
+                ? {
+                    ...item.completion,
+                    habitId:
+                      firebaseId,
+                  }
+                : item.completion,
+          });
+        }
+
+        transaction.oncomplete = () =>
+          resolve();
+
+        transaction.onerror = () =>
+          reject(
+            transaction.error
+          );
+
+        transaction.onabort = () =>
+          reject(
+            transaction.error
+          );
+      }
+    );
+  };
+
+/**
+ * Refresh habits from Firebase in the
+ * background.
+ *
+ * This function is intentionally separate
+ * from getHabits() so reads stay instant.
+ */
+export const refreshHabitsFromFirebase =
+  async (): Promise<void> => {
+    if (
+      typeof window === "undefined" ||
+      !navigator.onLine ||
+      !auth.currentUser
+    ) {
+      return;
+    }
+
     try {
       const habitsQuery =
         query(
@@ -665,9 +784,9 @@ export const getHabits =
           habitsQuery
         );
 
-      const firebaseHabits =
+      await Promise.all(
         snapshot.docs.map(
-          (item) => {
+          async (item) => {
             const data =
               item.data();
 
@@ -691,45 +810,118 @@ export const getHabits =
                 new Date().toISOString(),
             };
 
-            return habit;
+            await saveHabitLocally(
+              habit
+            );
           }
-        );
-
-      /**
-       * Save Firebase data locally.
-       */
-      for (const habit of firebaseHabits) {
-        await saveHabitLocally(
-          habit
-        );
-      }
-
-      /**
-       * Keep local-only habits that
-       * have not synced yet.
-       */
-      const localOnly =
-        localHabits.filter(
-          (localHabit) =>
-            localHabit.id.startsWith(
-              "local-habit-"
-            )
-        );
-
-      return [
-        ...firebaseHabits,
-        ...localOnly,
-      ].filter(
-        (habit) =>
-          habit.status === "active"
+        )
       );
+
     } catch (error) {
       console.error(
-        "Get Firebase habits failed. Using local habits.",
+        "Background habit refresh failed:",
         error
       );
+    }
+  };
 
-      return localHabits
+/**
+ * Refresh one habit's completions from
+ * Firebase in the background.
+ */
+export const refreshHabitCompletionsFromFirebase =
+  async (
+    habitId: string
+  ): Promise<void> => {
+    if (
+      typeof window === "undefined" ||
+      !navigator.onLine ||
+      !auth.currentUser ||
+      habitId.startsWith(
+        "local-habit-"
+      )
+    ) {
+      return;
+    }
+
+    try {
+      const completionsQuery =
+        query(
+          getCompletionsCollection(),
+          where(
+            "habitId",
+            "==",
+            habitId
+          ),
+          orderBy(
+            "date",
+            "asc"
+          )
+        );
+
+      const snapshot =
+        await getDocs(
+          completionsQuery
+        );
+
+      await Promise.all(
+        snapshot.docs.map(
+          async (item) => {
+            const data =
+              item.data();
+
+            const completion:
+              HabitCompletion = {
+              id: item.id,
+              habitId:
+                data.habitId ??
+                habitId,
+              date:
+                data.date ?? "",
+              completed:
+                data.completed ??
+                false,
+              createdAt:
+                data.createdAt
+                  ?.toDate?.()
+                  ?.toISOString() ??
+                new Date().toISOString(),
+            };
+
+            await saveCompletionLocally(
+              completion
+            );
+          }
+        )
+      );
+
+    } catch (error) {
+      console.error(
+        "Background completion refresh failed:",
+        error
+      );
+    }
+  };
+
+/* =========================================================
+   GET HABITS
+========================================================= */
+
+/**
+ * Get Active Habits
+ */
+export const getHabits =
+  async (): Promise<Habit[]> => {
+    /*
+     * LOCAL-FIRST
+     *
+     * Never wait for Firebase here.
+     */
+    const localHabits =
+      await getLocalHabits();
+
+    const activeLocalHabits =
+      localHabits
         .filter(
           (habit) =>
             habit.status === "active"
@@ -740,7 +932,8 @@ export const getHabits =
               a.createdAt
             )
         );
-    }
+
+    return activeLocalHabits;
   };
 
 /* =========================================================
@@ -853,94 +1046,20 @@ export const getHabitCompletions =
   async (
     habitId: string
   ): Promise<HabitCompletion[]> => {
+    /*
+     * LOCAL-FIRST.
+     */
     const localCompletions =
       await getLocalCompletions(
         habitId
       );
 
-    if (!navigator.onLine) {
-      return localCompletions.sort(
-        (a, b) =>
-          a.date.localeCompare(
-            b.date
-          )
-      );
-    }
-
-    try {
-      const completionsQuery =
-        query(
-          getCompletionsCollection(),
-          where(
-            "habitId",
-            "==",
-            habitId
-          ),
-          orderBy(
-            "date",
-            "asc"
-          )
-        );
-
-      const snapshot =
-        await getDocs(
-          completionsQuery
-        );
-
-      const firebaseCompletions =
-        snapshot.docs.map(
-          (item) => {
-            const data =
-              item.data();
-
-            const completion: HabitCompletion =
-              {
-                id: item.id,
-
-                habitId:
-                  data.habitId ??
-                  habitId,
-
-                date:
-                  data.date ?? "",
-
-                completed:
-                  data.completed ??
-                  false,
-
-                createdAt:
-                  data.createdAt
-                    ?.toDate?.()
-                    ?.toISOString() ??
-                  new Date().toISOString(),
-              };
-
-            return completion;
-          }
-        );
-
-      for (
-        const completion of firebaseCompletions
-      ) {
-        await saveCompletionLocally(
-          completion
-        );
-      }
-
-      return firebaseCompletions;
-    } catch (error) {
-      console.error(
-        "Get habit completions failed.",
-        error
-      );
-
-      return localCompletions.sort(
-        (a, b) =>
-          a.date.localeCompare(
-            b.date
-          )
-      );
-    }
+    return localCompletions.sort(
+      (a, b) =>
+        a.date.localeCompare(
+          b.date
+        )
+    );
   };
 
 /* =========================================================
@@ -1418,6 +1537,16 @@ export const syncPendingHabits =
             ...habit,
             id: habitRef.id,
           });
+
+          /*
+           * Any completion operations created
+           * while the habit was offline must now
+           * use the real Firebase habit ID.
+           */
+          await replaceQueuedHabitId(
+            habit.id,
+            habitRef.id
+          );
         }
 
         /**

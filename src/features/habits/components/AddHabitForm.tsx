@@ -1,6 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import {
+  FormEvent,
+  useEffect,
+  useState,
+} from "react";
 
 import { addHabit } from "../services/habit.service";
 
@@ -12,98 +16,163 @@ export default function AddHabitForm({
   onHabitAdded,
 }: AddHabitFormProps) {
   const [name, setName] = useState("");
-  const [targetDays, setTargetDays] = useState("21");
-  const [startDate, setStartDate] = useState("");
+  const [targetDays, setTargetDays] =
+    useState("21");
+  const [startDate, setStartDate] =
+    useState("");
   const [time, setTime] = useState("");
 
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [loading, setLoading] =
+    useState(false);
+  const [error, setError] =
+    useState("");
+  const [success, setSuccess] =
+    useState("");
 
-  /**
-   * Submit Habit
+  const [isOnline, setIsOnline] =
+    useState(
+      typeof navigator !==
+        "undefined"
+        ? navigator.onLine
+        : true
+    );
+
+  /*
+   * Keep the offline indicator in sync.
    */
+  useEffect(() => {
+    const handleOnline = () =>
+      setIsOnline(true);
+
+    const handleOffline = () =>
+      setIsOnline(false);
+
+    window.addEventListener(
+      "online",
+      handleOnline
+    );
+
+    window.addEventListener(
+      "offline",
+      handleOffline
+    );
+
+    return () => {
+      window.removeEventListener(
+        "online",
+        handleOnline
+      );
+
+      window.removeEventListener(
+        "offline",
+        handleOffline
+      );
+    };
+  }, []);
+
   const handleSubmit = async (
-    event: React.FormEvent<HTMLFormElement>
+    event: FormEvent<HTMLFormElement>
   ) => {
     event.preventDefault();
 
     setError("");
     setSuccess("");
 
-    const trimmedName = name.trim();
-    const days = Number(targetDays);
+    const trimmedName =
+      name.trim();
 
-    /**
-     * Validation
-     */
+    const days =
+      Number(targetDays);
+
     if (!trimmedName) {
-      setError("Habit name is required.");
+      setError(
+        "Habit name is required."
+      );
       return;
     }
 
-    if (!Number.isInteger(days) || days <= 0) {
-      setError("Target days must be greater than 0.");
+    if (
+      !Number.isInteger(days) ||
+      days <= 0
+    ) {
+      setError(
+        "Target days must be greater than 0."
+      );
       return;
     }
 
     if (!startDate) {
-      setError("Start date is required.");
+      setError(
+        "Start date is required."
+      );
       return;
     }
 
     if (!time) {
-      setError("Habit time is required.");
+      setError(
+        "Habit time is required."
+      );
       return;
     }
 
     try {
       setLoading(true);
 
-      /**
-       * Habit service:
+      /*
+       * LOCAL-FIRST.
        *
-       * Online:
-       * Firebase-এ save হবে।
-       *
-       * Offline:
-       * Local storage / IndexedDB-তে save হবে।
+       * The service returns after the local
+       * IndexedDB save. Firebase does not block
+       * this form.
        */
-      await addHabit(
-        trimmedName,
-        days,
-        startDate,
-        time
-      );
+      const habitId =
+        await addHabit(
+          trimmedName,
+          days,
+          startDate,
+          time
+        );
 
-      /**
-       * Reset form
+      /*
+       * Reset immediately.
        */
       setName("");
       setTargetDays("21");
       setStartDate("");
       setTime("");
 
-      /**
-       * Success message
-       */
       setSuccess(
-        navigator.onLine
-          ? "Habit added successfully."
+        isOnline
+          ? "Habit added. Firebase sync is running in background."
           : "Habit saved offline. It will sync when you're online."
       );
 
-      /**
-       * Parent refresh
-       */
-      onHabitAdded?.();
-
-      /**
-       * Other components-কে notify
+      /*
+       * Tell HabitList to read the local
+       * IndexedDB data immediately.
+       *
+       * Do NOT force a parent refresh here.
+       * The event-driven HabitList handles it.
        */
       window.dispatchEvent(
-        new CustomEvent("life-os-habit-added")
+        new CustomEvent(
+          "life-os-habit-added",
+          {
+            detail: {
+              habitId,
+            },
+          }
+        )
       );
+
+      /*
+       * Keep the prop for compatibility with
+       * existing parents, but do not call it.
+       *
+       * Calling a refreshKey callback here can
+       * cause the whole HabitList to reload.
+       */
+      void onHabitAdded;
     } catch (error) {
       console.error(
         "Add habit error:",
@@ -123,7 +192,6 @@ export default function AddHabitForm({
       onSubmit={handleSubmit}
       className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
     >
-      {/* Header */}
       <div>
         <h2 className="text-lg font-semibold text-slate-900">
           Add New Habit
@@ -134,15 +202,14 @@ export default function AddHabitForm({
         </p>
       </div>
 
-      {/* Offline Status */}
-      {!navigator.onLine && (
+      {!isOnline && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
-          📴 You are offline. This habit will be
-          saved locally and synced later.
+          📴 You are offline. This habit
+          will be saved locally and synced
+          later.
         </div>
       )}
 
-      {/* Habit Name */}
       <div>
         <label
           htmlFor="habit-name"
@@ -165,7 +232,6 @@ export default function AddHabitForm({
         />
       </div>
 
-      {/* Target Days */}
       <div>
         <label
           htmlFor="habit-target-days"
@@ -180,7 +246,9 @@ export default function AddHabitForm({
           min="1"
           value={targetDays}
           onChange={(event) =>
-            setTargetDays(event.target.value)
+            setTargetDays(
+              event.target.value
+            )
           }
           placeholder="21"
           disabled={loading}
@@ -193,7 +261,6 @@ export default function AddHabitForm({
         </p>
       </div>
 
-      {/* Start Date */}
       <div>
         <label
           htmlFor="habit-start-date"
@@ -207,7 +274,9 @@ export default function AddHabitForm({
           type="date"
           value={startDate}
           onChange={(event) =>
-            setStartDate(event.target.value)
+            setStartDate(
+              event.target.value
+            )
           }
           disabled={loading}
           required
@@ -215,7 +284,6 @@ export default function AddHabitForm({
         />
       </div>
 
-      {/* Time */}
       <div>
         <label
           htmlFor="habit-time"
@@ -229,7 +297,9 @@ export default function AddHabitForm({
           type="time"
           value={time}
           onChange={(event) =>
-            setTime(event.target.value)
+            setTime(
+              event.target.value
+            )
           }
           disabled={loading}
           required
@@ -237,28 +307,25 @@ export default function AddHabitForm({
         />
       </div>
 
-      {/* Error */}
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
           {error}
         </div>
       )}
 
-      {/* Success */}
       {success && (
         <div className="rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
           ✓ {success}
         </div>
       )}
 
-      {/* Submit */}
       <button
         type="submit"
         disabled={loading}
         className="w-full rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white shadow-sm transition hover:bg-blue-700 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
       >
         {loading
-          ? "Creating Habit..."
+          ? "Saving..."
           : "Create Habit"}
       </button>
     </form>

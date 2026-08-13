@@ -6,7 +6,9 @@ import {
   useState,
 } from "react";
 
-import { onAuthStateChanged } from "firebase/auth";
+import {
+  onAuthStateChanged,
+} from "firebase/auth";
 
 import { auth } from "@/lib/firebase";
 
@@ -15,11 +17,15 @@ import {
   deleteHabit,
   getHabitCompletions,
   getHabits,
+  refreshHabitCompletionsFromFirebase,
+  refreshHabitsFromFirebase,
   syncPendingHabits,
   toggleHabitCompletion,
 } from "../services/habit.service";
 
-import { notifyHabitIfNeeded } from "../services/habit.notification";
+import {
+  notifyHabitIfNeeded,
+} from "../services/habit.notification";
 
 import {
   Habit,
@@ -40,9 +46,16 @@ interface HabitListProps {
 /**
  * YYYY-MM-DD → Local Date
  */
-const parseDate = (dateString: string) => {
-  const [year, month, day] =
-    dateString.split("-").map(Number);
+const parseDate = (
+  dateString: string
+) => {
+  const [
+    year,
+    month,
+    day,
+  ] = dateString
+    .split("-")
+    .map(Number);
 
   return new Date(
     year,
@@ -57,7 +70,12 @@ const parseDate = (dateString: string) => {
 const getToday = () => {
   const today = new Date();
 
-  today.setHours(0, 0, 0, 0);
+  today.setHours(
+    0,
+    0,
+    0,
+    0
+  );
 
   return today;
 };
@@ -65,9 +83,10 @@ const getToday = () => {
 export default function HabitList({
   refreshKey = 0,
 }: HabitListProps) {
-  const [items, setItems] = useState<
-    HabitWithCompletions[]
-  >([]);
+  const [items, setItems] =
+    useState<HabitWithCompletions[]>(
+      []
+    );
 
   const [loading, setLoading] =
     useState(true);
@@ -76,86 +95,94 @@ export default function HabitList({
     useState("");
 
   /**
-   * Load Habits
+   * Local-only load.
    *
-   * Online:
-   * Firebase
-   *
-   * Offline:
-   * habit.service.ts-এর
-   * IndexedDB fallback
+   * IMPORTANT:
+   * This never waits for Firebase.
    */
   const loadHabits = useCallback(
-    async () => {
+    async (
+      showLoading = false
+    ) => {
       try {
-        setLoading(true);
+        if (showLoading) {
+          setLoading(true);
+        }
+
         setError("");
 
-        const habits = await getHabits();
+        const habits =
+          await getHabits();
 
-        const today = getToday();
-
-        /**
-         * Load completions
-         */
         const habitsWithCompletions =
           await Promise.all(
-            habits.map(async (habit) => {
-              const completions =
-                await getHabitCompletions(
-                  habit.id
-                );
+            habits.map(
+              async (habit) => {
+                const completions =
+                  await getHabitCompletions(
+                    habit.id
+                  );
 
-              return {
-                habit,
-                completions,
-              };
-            })
+                return {
+                  habit,
+                  completions,
+                };
+              }
+            )
           );
 
-        /**
-         * Active habits
-         */
+        const today =
+          getToday();
+
         const activeItems: HabitWithCompletions[] =
           [];
 
-        for (const item of habitsWithCompletions) {
-          const endDate = parseDate(
-            item.habit.endDate
-          );
+        for (
+          const item of
+            habitsWithCompletions
+        ) {
+          const endDate =
+            parseDate(
+              item.habit.endDate
+            );
 
-          /**
-           * End date reached/passed
-           */
-          if (today >= endDate) {
-            try {
-              await completeHabit(
-                item.habit.id
-              );
-            } catch (error) {
+          if (
+            today >= endDate
+          ) {
+            /*
+             * Do not block list rendering
+             * on Firebase.
+             */
+            void completeHabit(
+              item.habit.id
+            ).catch((error) => {
               console.error(
                 "Auto complete habit error:",
                 error
               );
-            }
-          } else {
-            activeItems.push(item);
+            });
+
+            continue;
           }
+
+          activeItems.push(item);
         }
 
-        /**
-         * Save active habits
+        /*
+         * UI updates immediately from
+         * IndexedDB.
          */
-        setItems(activeItems);
+        setItems(
+          activeItems
+        );
 
-        /**
-         * Notifications
-         */
-        activeItems.forEach((item) => {
-          notifyHabitIfNeeded(
-            item.habit
-          );
-        });
+        activeItems.forEach(
+          (item) => {
+            notifyHabitIfNeeded(
+              item.habit
+            );
+          }
+        );
       } catch (error) {
         console.error(
           "Load habits error:",
@@ -166,11 +193,163 @@ export default function HabitList({
           "অভ্যাসগুলো লোড করা যায়নি।"
         );
       } finally {
-        setLoading(false);
+        if (showLoading) {
+          setLoading(false);
+        }
       }
     },
     []
   );
+
+  /**
+   * Firebase refresh happens in the
+   * background only.
+   */
+  const refreshFromFirebase =
+    useCallback(
+      async () => {
+        if (
+          typeof navigator ===
+            "undefined" ||
+          !navigator.onLine
+        ) {
+          return;
+        }
+
+        try {
+          await refreshHabitsFromFirebase();
+
+          /*
+           * Read the updated local list.
+           */
+          const latestHabits =
+            await getHabits();
+
+          /*
+           * Refresh completions in parallel.
+           */
+          await Promise.all(
+            latestHabits.map(
+              (habit) =>
+                refreshHabitCompletionsFromFirebase(
+                  habit.id
+                )
+            )
+          );
+
+          /*
+           * Finally update the UI from
+           * the refreshed local cache.
+           */
+          await loadHabits(
+            false
+          );
+        } catch (error) {
+          console.error(
+            "Background habit refresh error:",
+            error
+          );
+        }
+      },
+      [loadHabits]
+    );
+
+  /**
+   * Authentication
+   */
+  useEffect(() => {
+    const unsubscribe =
+      onAuthStateChanged(
+        auth,
+        (user) => {
+          if (!user) {
+            setItems([]);
+            setLoading(false);
+
+            setError(
+              "অভ্যাস দেখতে আগে লগইন করুন।"
+            );
+
+            return;
+          }
+
+          /*
+           * FIRST:
+           * Show local data immediately.
+           */
+          void loadHabits(
+            true
+          );
+
+          /*
+           * THEN:
+           * Firebase refresh in background.
+           */
+          void refreshFromFirebase();
+        }
+      );
+
+    return () => {
+      unsubscribe();
+    };
+  }, [
+    loadHabits,
+    refreshFromFirebase,
+    refreshKey,
+  ]);
+
+  /**
+   * New Habit
+   *
+   * Do not reload the whole page/list.
+   * Just read local IndexedDB.
+   */
+  useEffect(() => {
+    const handleHabitAdded =
+      () => {
+        void loadHabits(
+          false
+        );
+      };
+
+    window.addEventListener(
+      "life-os-habit-added",
+      handleHabitAdded
+    );
+
+    return () => {
+      window.removeEventListener(
+        "life-os-habit-added",
+        handleHabitAdded
+      );
+    };
+  }, [loadHabits]);
+
+  /**
+   * Firebase finished background
+   * synchronization of a newly-added
+   * habit.
+   */
+  useEffect(() => {
+    const handleHabitSynced =
+      () => {
+        void loadHabits(
+          false
+        );
+      };
+
+    window.addEventListener(
+      "life-os-habit-synced",
+      handleHabitSynced
+    );
+
+    return () => {
+      window.removeEventListener(
+        "life-os-habit-synced",
+        handleHabitSynced
+      );
+    };
+  }, [loadHabits]);
 
   /**
    * Offline → Online Sync
@@ -179,9 +358,22 @@ export default function HabitList({
     const handleOnline = () => {
       void (async () => {
         try {
+          /*
+           * First push pending queue.
+           */
           await syncPendingHabits();
 
-          await loadHabits();
+          /*
+           * Show local result immediately.
+           */
+          await loadHabits(
+            false
+          );
+
+          /*
+           * Then refresh Firebase data.
+           */
+          await refreshFromFirebase();
         } catch (error) {
           console.error(
             "Habit online sync error:",
@@ -202,35 +394,10 @@ export default function HabitList({
         handleOnline
       );
     };
-  }, [loadHabits]);
-
-  /**
-   * Authentication
-   */
-  useEffect(() => {
-    const unsubscribe =
-      onAuthStateChanged(
-        auth,
-        async (user) => {
-          if (!user) {
-            setItems([]);
-            setLoading(false);
-
-            setError(
-              "অভ্যাস দেখতে আগে লগইন করুন।"
-            );
-
-            return;
-          }
-
-          await loadHabits();
-        }
-      );
-
-    return () => {
-      unsubscribe();
-    };
-  }, [loadHabits, refreshKey]);
+  }, [
+    loadHabits,
+    refreshFromFirebase,
+  ]);
 
   /**
    * Habit Notification
@@ -238,159 +405,190 @@ export default function HabitList({
    * Every 30 seconds
    */
   useEffect(() => {
-    if (items.length === 0) {
+    if (
+      items.length === 0
+    ) {
       return;
     }
 
-    const checkNotifications = () => {
-      items.forEach((item) => {
-        notifyHabitIfNeeded(
-          item.habit
+    const checkNotifications =
+      () => {
+        items.forEach(
+          (item) => {
+            notifyHabitIfNeeded(
+              item.habit
+            );
+          }
         );
-      });
-    };
+      };
 
     checkNotifications();
 
-    const interval = window.setInterval(
-      checkNotifications,
-      30 * 1000
-    );
+    const interval =
+      window.setInterval(
+        checkNotifications,
+        30 * 1000
+      );
 
     return () => {
-      window.clearInterval(interval);
+      window.clearInterval(
+        interval
+      );
     };
   }, [items]);
 
   /**
    * Toggle Habit Completion
    */
-  const handleToggle = async (
-    habitId: string,
-    date: string,
-    completed: boolean
-  ) => {
-    try {
-      setError("");
+  const handleToggle =
+    async (
+      habitId: string,
+      date: string,
+      completed: boolean
+    ) => {
+      try {
+        setError("");
 
-      /**
-       * Online/offline service
-       */
-      await toggleHabitCompletion(
-        habitId,
-        date,
-        completed
-      );
-
-      /**
-       * Update local state
-       */
-      let updatedItems: HabitWithCompletions[] =
-        [];
-
-      setItems((currentItems) => {
-        updatedItems =
-          currentItems.map((item) => {
-            if (
-              item.habit.id !==
-              habitId
-            ) {
-              return item;
-            }
-
-            const existing =
-              item.completions.find(
-                (completion) =>
-                  completion.date ===
-                  date
-              );
-
-            /**
-             * Existing completion
-             */
-            if (existing) {
-              return {
-                ...item,
-
-                completions:
-                  item.completions.map(
-                    (completion) =>
-                      completion.date ===
-                      date
-                        ? {
-                            ...completion,
-                            completed,
-                          }
-                        : completion
-                  ),
-              };
-            }
-
-            /**
-             * New completion
-             */
-            return {
-              ...item,
-
-              completions: [
-                ...item.completions,
-                {
-                  id: `${habitId}-${date}`,
-                  habitId,
-                  date,
-                  completed,
-                  createdAt:
-                    new Date().toISOString(),
-                },
-              ],
-            };
-          });
-
-        return updatedItems;
-      });
-
-      /**
-       * Find updated habit
-       */
-      const updatedHabit =
-        updatedItems.find(
-          (item) =>
-            item.habit.id ===
-            habitId
+        await toggleHabitCompletion(
+          habitId,
+          date,
+          completed
         );
 
-      if (!updatedHabit) {
-        return;
-      }
+        let updatedItems:
+          HabitWithCompletions[] =
+          [];
 
-      /**
-       * Completed days
-       */
-      const completedCount =
-        updatedHabit.completions.filter(
-          (item) =>
-            item.completed
-        ).length;
+        setItems(
+          (currentItems) => {
+            updatedItems =
+              currentItems.map(
+                (item) => {
+                  if (
+                    item.habit.id !==
+                    habitId
+                  ) {
+                    return item;
+                  }
 
-      /**
-       * Target reached
-       *
-       * Move to History
-       */
-      if (
-        updatedHabit.habit
-          .targetDays > 0 &&
-        completedCount >=
+                  const existing =
+                    item.completions.find(
+                      (completion) =>
+                        completion.date ===
+                        date
+                    );
+
+                  if (existing) {
+                    return {
+                      ...item,
+
+                      completions:
+                        item.completions.map(
+                          (completion) =>
+                            completion.date ===
+                            date
+                              ? {
+                                  ...completion,
+                                  completed,
+                                }
+                              : completion
+                        ),
+                    };
+                  }
+
+                  return {
+                    ...item,
+
+                    completions: [
+                      ...item.completions,
+                      {
+                        id: `${habitId}-${date}`,
+                        habitId,
+                        date,
+                        completed,
+                        createdAt:
+                          new Date().toISOString(),
+                      },
+                    ],
+                  };
+                }
+              );
+
+            return updatedItems;
+          }
+        );
+
+        const updatedHabit =
+          updatedItems.find(
+            (item) =>
+              item.habit.id ===
+              habitId
+          );
+
+        if (!updatedHabit) {
+          return;
+        }
+
+        const completedCount =
+          updatedHabit.completions.filter(
+            (item) =>
+              item.completed
+          ).length;
+
+        if (
           updatedHabit.habit
-            .targetDays
-      ) {
-        await completeHabit(
+            .targetDays > 0 &&
+          completedCount >=
+            updatedHabit.habit
+              .targetDays
+        ) {
+          /*
+           * Complete in background.
+           */
+          void completeHabit(
+            habitId
+          ).catch((error) => {
+            console.error(
+              "Complete habit error:",
+              error
+            );
+          });
+
+          setItems(
+            (currentItems) =>
+              currentItems.filter(
+                (item) =>
+                  item.habit.id !==
+                  habitId
+              )
+          );
+        }
+      } catch (error) {
+        console.error(
+          "Toggle habit error:",
+          error
+        );
+
+        setError(
+          "অভ্যাসের অবস্থা পরিবর্তন করা যায়নি।"
+        );
+      }
+    };
+
+  /**
+   * Delete Habit
+   */
+  const handleDelete =
+    async (
+      habitId: string
+    ) => {
+      try {
+        setError("");
+
+        await deleteHabit(
           habitId
         );
 
-        /**
-         * Remove from active list
-         */
         setItems(
           (currentItems) =>
             currentItems.filter(
@@ -399,72 +597,30 @@ export default function HabitList({
                 habitId
             )
         );
+      } catch (error) {
+        console.error(
+          "Delete habit error:",
+          error
+        );
+
+        setError(
+          "অভ্যাসটি delete করা যায়নি।"
+        );
+
+        throw error;
       }
-    } catch (error) {
-      console.error(
-        "Toggle habit error:",
-        error
-      );
-
-      setError(
-        "অভ্যাসের অবস্থা পরিবর্তন করা যায়নি।"
-      );
-    }
-  };
+    };
 
   /**
-   * Delete Habit
+   * Initial loading only.
    *
-   * Online:
-   * Firebase থেকে delete
-   *
-   * Offline:
-   * habit.service.ts
-   * IndexedDB queue handle করবে
+   * If existing items are already visible,
+   * never replace them with a loading screen.
    */
-  const handleDelete = async (
-    habitId: string
-  ) => {
-    try {
-      setError("");
-
-      /**
-       * Delete from service
-       */
-      await deleteHabit(
-        habitId
-      );
-
-      /**
-       * Immediately remove
-       * from UI
-       */
-      setItems(
-        (currentItems) =>
-          currentItems.filter(
-            (item) =>
-              item.habit.id !==
-              habitId
-          )
-      );
-    } catch (error) {
-      console.error(
-        "Delete habit error:",
-        error
-      );
-
-      setError(
-        "অভ্যাসটি delete করা যায়নি।"
-      );
-
-      throw error;
-    }
-  };
-
-  /**
-   * Loading State
-   */
-  if (loading) {
+  if (
+    loading &&
+    items.length === 0
+  ) {
     return (
       <div className="rounded-2xl border bg-white p-6 text-center text-gray-500">
         অভ্যাস লোড হচ্ছে...
@@ -475,7 +631,10 @@ export default function HabitList({
   /**
    * Error State
    */
-  if (error) {
+  if (
+    error &&
+    items.length === 0
+  ) {
     return (
       <div className="rounded-2xl bg-red-50 p-4 text-center text-sm text-red-600">
         {error}
@@ -486,7 +645,9 @@ export default function HabitList({
   /**
    * No Habits
    */
-  if (items.length === 0) {
+  if (
+    items.length === 0
+  ) {
     return (
       <div className="rounded-2xl border bg-white p-8 text-center">
         <p className="font-medium text-gray-700">
