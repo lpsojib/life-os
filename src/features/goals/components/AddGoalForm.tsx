@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import {
+  useState,
+} from "react";
 
 import {
   addGoal,
-  addGoalTask,
 } from "../services/goal.service";
 
 interface AddGoalFormProps {
@@ -16,12 +17,15 @@ export default function AddGoalForm({
   onGoalAdded,
   onCancel,
 }: AddGoalFormProps) {
-  const [title, setTitle] = useState("");
+  const [title, setTitle] =
+    useState("");
+
   const [description, setDescription] =
     useState("");
 
   const [startDate, setStartDate] =
     useState("");
+
   const [endDate, setEndDate] =
     useState("");
 
@@ -34,54 +38,50 @@ export default function AddGoalForm({
   const [error, setError] =
     useState("");
 
-  /**
-   * Add new goal task input
-   */
   const handleAddTask = () => {
-    setTasks((currentTasks) => [
-      ...currentTasks,
-      "",
-    ]);
+    setTasks(
+      (current) => [
+        ...current,
+        "",
+      ]
+    );
   };
 
-  /**
-   * Update goal task input
-   */
   const handleTaskChange = (
     index: number,
     value: string
   ) => {
-    setTasks((currentTasks) =>
-      currentTasks.map(
-        (task, taskIndex) =>
-          taskIndex === index
-            ? value
-            : task
-      )
+    setTasks(
+      (current) =>
+        current.map(
+          (task, taskIndex) =>
+            taskIndex === index
+              ? value
+              : task
+        )
     );
   };
 
-  /**
-   * Remove goal task input
-   */
   const handleRemoveTask = (
     index: number
   ) => {
-    setTasks((currentTasks) => {
-      if (currentTasks.length === 1) {
-        return [""];
-      }
+    setTasks(
+      (current) => {
+        if (
+          current.length ===
+          1
+        ) {
+          return [""];
+        }
 
-      return currentTasks.filter(
-        (_, taskIndex) =>
-          taskIndex !== index
-      );
-    });
+        return current.filter(
+          (_, taskIndex) =>
+            taskIndex !== index
+        );
+      }
+    );
   };
 
-  /**
-   * Create Goal + Goal Tasks
-   */
   const handleSubmit = async (
     event: React.FormEvent
   ) => {
@@ -89,9 +89,6 @@ export default function AddGoalForm({
 
     setError("");
 
-    /**
-     * Validate Goal title
-     */
     if (!title.trim()) {
       setError(
         "লক্ষ্যের নাম লিখুন।"
@@ -99,9 +96,6 @@ export default function AddGoalForm({
       return;
     }
 
-    /**
-     * Validate start date
-     */
     if (!startDate) {
       setError(
         "শুরুর তারিখ নির্বাচন করুন।"
@@ -109,9 +103,6 @@ export default function AddGoalForm({
       return;
     }
 
-    /**
-     * Validate end date
-     */
     if (!endDate) {
       setError(
         "শেষের তারিখ নির্বাচন করুন।"
@@ -119,9 +110,6 @@ export default function AddGoalForm({
       return;
     }
 
-    /**
-     * Validate date range
-     */
     if (endDate < startDate) {
       setError(
         "শেষের তারিখ শুরুর তারিখের আগে হতে পারবে না।"
@@ -129,47 +117,30 @@ export default function AddGoalForm({
       return;
     }
 
-    /**
-     * Remove empty task inputs
-     */
-    const validTasks = tasks
-      .map((task) => task.trim())
-      .filter(
-        (task) => task.length > 0
-      );
+    const validTasks =
+      tasks
+        .map((task) =>
+          task.trim()
+        )
+        .filter(Boolean);
 
     try {
       setLoading(true);
 
-      /**
-       * 1. Create Goal
+      /*
+       * Goal + all tasks
+       * LOCAL FIRST.
        */
-      const goalId = await addGoal(
+      await addGoal(
         title.trim(),
         description.trim(),
         startDate,
-        endDate
+        endDate,
+        validTasks
       );
 
-      /**
-       * 2. Create Goal Tasks
-       *
-       * Goal তৈরি হওয়ার পর
-       * প্রতিটি Task Firebase-এ save হবে।
-       */
-      if (validTasks.length > 0) {
-        await Promise.all(
-          validTasks.map((taskTitle) =>
-            addGoalTask(
-              goalId,
-              taskTitle
-            )
-          )
-        );
-      }
-
-      /**
-       * Reset form
+      /*
+       * Reset.
        */
       setTitle("");
       setDescription("");
@@ -177,10 +148,24 @@ export default function AddGoalForm({
       setEndDate("");
       setTasks([""]);
 
-      /**
-       * Notify parent
+      /*
+       * Parent update.
        */
       onGoalAdded?.();
+
+      /*
+       * GoalList direct update.
+       */
+      if (
+        typeof window !==
+        "undefined"
+      ) {
+        window.dispatchEvent(
+          new CustomEvent(
+            "life-os-goal-added"
+          )
+        );
+      }
     } catch (error) {
       console.error(
         "Add goal error:",
@@ -199,10 +184,8 @@ export default function AddGoalForm({
 
   return (
     <div className="w-full">
-      {/* Top Handle */}
       <div className="mx-auto mb-6 h-1.5 w-12 rounded-full bg-[#dce5d8]" />
 
-      {/* Header */}
       <div className="mb-7">
         <h2 className="text-[30px] font-bold tracking-tight text-[#17261e]">
           নতুন লক্ষ্য তৈরি করো
@@ -217,7 +200,6 @@ export default function AddGoalForm({
         onSubmit={handleSubmit}
         className="space-y-6"
       >
-        {/* Goal Name */}
         <div>
           <label
             htmlFor="goal-title"
@@ -231,99 +213,54 @@ export default function AddGoalForm({
             type="text"
             value={title}
             onChange={(event) =>
-              setTitle(event.target.value)
+              setTitle(
+                event.target.value
+              )
             }
             placeholder="যেমন: ৩ মাসে ওয়েব ডেভেলপার হওয়া"
-            className="
-              w-full
-              rounded-2xl
-              border
-              border-[#dce5d8]
-              bg-white
-              px-5
-              py-4
-              text-base
-              text-[#17261e]
-              outline-none
-              placeholder:text-[#9aa39d]
-              focus:border-[#3f7659]
-              focus:ring-2
-              focus:ring-[#3f7659]/15
-            "
+            disabled={loading}
+            className="w-full rounded-2xl border border-[#dce5d8] bg-white px-5 py-4 text-base text-[#17261e] outline-none placeholder:text-[#9aa39d] focus:border-[#3f7659] focus:ring-2 focus:ring-[#3f7659]/15"
           />
         </div>
 
-        {/* Timeline */}
         <div>
           <label className="mb-2 block text-base font-semibold text-[#748078]">
             টাইমলাইন
           </label>
 
           <div className="grid grid-cols-2 gap-4">
-            {/* Start Date */}
-            <div>
-              <input
-                id="goal-start-date"
-                type="date"
-                value={startDate}
-                onChange={(event) =>
-                  setStartDate(
-                    event.target.value
-                  )
-                }
-                className="
-                  w-full
-                  rounded-2xl
-                  border
-                  border-[#dce5d8]
-                  bg-white
-                  px-4
-                  py-4
-                  text-base
-                  text-[#17261e]
-                  outline-none
-                  focus:border-[#3f7659]
-                  focus:ring-2
-                  focus:ring-[#3f7659]/15
-                "
-              />
-            </div>
+            <input
+              id="goal-start-date"
+              type="date"
+              value={startDate}
+              onChange={(event) =>
+                setStartDate(
+                  event.target.value
+                )
+              }
+              disabled={loading}
+              className="w-full rounded-2xl border border-[#dce5d8] bg-white px-4 py-4 text-base text-[#17261e] outline-none focus:border-[#3f7659] focus:ring-2 focus:ring-[#3f7659]/15"
+            />
 
-            {/* End Date */}
-            <div>
-              <input
-                id="goal-end-date"
-                type="date"
-                min={
-                  startDate || undefined
-                }
-                value={endDate}
-                onChange={(event) =>
-                  setEndDate(
-                    event.target.value
-                  )
-                }
-                className="
-                  w-full
-                  rounded-2xl
-                  border
-                  border-[#dce5d8]
-                  bg-white
-                  px-4
-                  py-4
-                  text-base
-                  text-[#17261e]
-                  outline-none
-                  focus:border-[#3f7659]
-                  focus:ring-2
-                  focus:ring-[#3f7659]/15
-                "
-              />
-            </div>
+            <input
+              id="goal-end-date"
+              type="date"
+              min={
+                startDate ||
+                undefined
+              }
+              value={endDate}
+              onChange={(event) =>
+                setEndDate(
+                  event.target.value
+                )
+              }
+              disabled={loading}
+              className="w-full rounded-2xl border border-[#dce5d8] bg-white px-4 py-4 text-base text-[#17261e] outline-none focus:border-[#3f7659] focus:ring-2 focus:ring-[#3f7659]/15"
+            />
           </div>
         </div>
 
-        {/* Goal Tasks */}
         <div>
           <label className="mb-3 block text-base font-semibold text-[#748078]">
             লক্ষ্য যোগ করো
@@ -339,32 +276,20 @@ export default function AddGoalForm({
                   <input
                     type="text"
                     value={task}
-                    onChange={(event) =>
+                    onChange={(
+                      event
+                    ) =>
                       handleTaskChange(
                         index,
-                        event.target.value
+                        event.target
+                          .value
                       )
                     }
                     placeholder={`টাস্ক ${
                       index + 1
                     }`}
-                    className="
-                      min-w-0
-                      flex-1
-                      rounded-2xl
-                      border
-                      border-[#dce5d8]
-                      bg-white
-                      px-5
-                      py-4
-                      text-base
-                      text-[#17261e]
-                      outline-none
-                      placeholder:text-[#9aa39d]
-                      focus:border-[#3f7659]
-                      focus:ring-2
-                      focus:ring-[#3f7659]/15
-                    "
+                    disabled={loading}
+                    className="min-w-0 flex-1 rounded-2xl border border-[#dce5d8] bg-white px-5 py-4 text-base text-[#17261e] outline-none placeholder:text-[#9aa39d] focus:border-[#3f7659] focus:ring-2 focus:ring-[#3f7659]/15"
                   />
 
                   <button
@@ -374,24 +299,8 @@ export default function AddGoalForm({
                         index
                       )
                     }
-                    aria-label={`টাস্ক ${
-                      index + 1
-                    } মুছে ফেলুন`}
-                    className="
-                      flex
-                      h-12
-                      w-12
-                      shrink-0
-                      items-center
-                      justify-center
-                      rounded-full
-                      bg-[#f6dcd5]
-                      text-xl
-                      font-semibold
-                      text-[#bd624e]
-                      transition
-                      hover:bg-[#f1cfc6]
-                    "
+                    disabled={loading}
+                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#f6dcd5] text-xl font-semibold text-[#bd624e] transition hover:bg-[#f1cfc6]"
                   >
                     ×
                   </button>
@@ -400,35 +309,21 @@ export default function AddGoalForm({
             )}
           </div>
 
-          {/* Add Task */}
           <button
             type="button"
-            onClick={handleAddTask}
-            className="
-              mt-3
-              w-full
-              rounded-2xl
-              border-2
-              border-dashed
-              border-[#dce5d8]
-              px-5
-              py-4
-              text-left
-              font-semibold
-              text-[#3f7659]
-              transition
-              hover:bg-[#eef4ee]
-            "
+            onClick={
+              handleAddTask
+            }
+            disabled={loading}
+            className="mt-3 w-full rounded-2xl border-2 border-dashed border-[#dce5d8] px-5 py-4 text-left font-semibold text-[#3f7659] transition hover:bg-[#eef4ee]"
           >
             <span className="mr-2 text-xl">
               +
             </span>
-
             নতুন টাস্ক যোগ করো
           </button>
         </div>
 
-        {/* Description */}
         <div>
           <label
             htmlFor="goal-description"
@@ -447,74 +342,32 @@ export default function AddGoalForm({
             }
             placeholder="এই লক্ষ্যটি কেন গুরুত্বপূর্ণ..."
             rows={3}
-            className="
-              w-full
-              resize-none
-              rounded-2xl
-              border
-              border-[#dce5d8]
-              bg-white
-              px-5
-              py-4
-              text-base
-              text-[#17261e]
-              outline-none
-              placeholder:text-[#9aa39d]
-              focus:border-[#3f7659]
-              focus:ring-2
-              focus:ring-[#3f7659]/15
-            "
+            disabled={loading}
+            className="w-full resize-none rounded-2xl border border-[#dce5d8] bg-white px-5 py-4 text-base text-[#17261e] outline-none placeholder:text-[#9aa39d] focus:border-[#3f7659] focus:ring-2 focus:ring-[#3f7659]/15"
           />
         </div>
 
-        {/* Error */}
         {error && (
           <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
             {error}
           </div>
         )}
 
-        {/* Create */}
         <button
           type="submit"
           disabled={loading}
-          className="
-            w-full
-            rounded-2xl
-            bg-[#3f7659]
-            px-5
-            py-4
-            text-lg
-            font-bold
-            text-white
-            shadow-sm
-            transition
-            hover:bg-[#35654d]
-            disabled:cursor-not-allowed
-            disabled:opacity-50
-          "
+          className="w-full rounded-2xl bg-[#3f7659] px-5 py-4 text-lg font-bold text-white shadow-sm transition hover:bg-[#35654d] disabled:cursor-not-allowed disabled:opacity-50"
         >
           {loading
-            ? "লক্ষ্য তৈরি হচ্ছে..."
+            ? "সেভ হচ্ছে..."
             : "লক্ষ্য তৈরি করো"}
         </button>
 
-        {/* Cancel */}
         <button
           type="button"
           onClick={onCancel}
           disabled={loading}
-          className="
-            block
-            w-full
-            text-center
-            text-base
-            font-medium
-            text-[#7a877e]
-            transition
-            hover:text-[#17261e]
-            disabled:opacity-50
-          "
+          className="block w-full text-center text-base font-medium text-[#7a877e] transition hover:text-[#17261e]"
         >
           বাতিল করো
         </button>

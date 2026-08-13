@@ -13,17 +13,18 @@ import {
   getGoalTasks,
   toggleGoalTask,
   updateGoalTask,
+  updateGoal,
 } from "../services/goal.service";
 
-import { Goal, GoalTask } from "../types/goal.types";
+import {
+  Goal,
+  GoalTask,
+} from "../types/goal.types";
 
 interface GoalCardProps {
   goal: Goal;
+  onDelete?: (goalId: string) => void;
 }
-
-/* =========================================================
-   DATE HELPERS
-========================================================= */
 
 const formatDate = (dateString: string) => {
   const date = new Date(`${dateString}T00:00:00`);
@@ -71,80 +72,125 @@ const getDaysLeft = (endDate: string) => {
   return `${diff} দিন বাকি`;
 };
 
-/* =========================================================
-   GOAL CARD
-========================================================= */
-
 export default function GoalCard({
   goal,
+  onDelete,
 }: GoalCardProps) {
-  const [expanded, setExpanded] =
-    useState(false);
+  const [expanded, setExpanded] = useState(false);
 
-  const [tasks, setTasks] =
-    useState<GoalTask[]>([]);
+  const [tasks, setTasks] = useState<GoalTask[]>([]);
 
-  const [loadingTasks, setLoadingTasks] =
-    useState(false);
+  const [loadingTasks, setLoadingTasks] = useState(false);
 
-  const [taskError, setTaskError] =
-    useState("");
+  const [taskError, setTaskError] = useState("");
 
-  const [newTask, setNewTask] =
-    useState("");
+  const [newTask, setNewTask] = useState("");
 
   const [editingTaskId, setEditingTaskId] =
     useState<string | null>(null);
 
-  const [editingText, setEditingText] =
-    useState("");
+  const [editingText, setEditingText] = useState("");
 
-  /* =========================================================
-     LOAD GOAL TASKS
-  ========================================================= */
+  /*
+   * Goal edit
+   */
+  const [editingGoal, setEditingGoal] = useState(false);
 
-  const loadTasks = useCallback(
-    async () => {
-      try {
-        setLoadingTasks(true);
-        setTaskError("");
-
-        const goalTasks =
-          await getGoalTasks(goal.id);
-
-        setTasks(goalTasks);
-      } catch (error) {
-        console.error(
-          "Load goal tasks error:",
-          error
-        );
-
-        setTaskError(
-          "লক্ষ্যের টাস্কগুলো লোড করা যায়নি।"
-        );
-      } finally {
-        setLoadingTasks(false);
-      }
-    },
-    [goal.id]
+  const [editTitle, setEditTitle] = useState(
+    goal.title
   );
 
-  /* =========================================================
-     LOAD TASKS WHEN CARD OPENS
-  ========================================================= */
+  const [editDescription, setEditDescription] =
+    useState(goal.description);
 
-  useEffect(() => {
-    if (!expanded) {
-      return;
+  const [editStartDate, setEditStartDate] =
+    useState(goal.startDate);
+
+  const [editEndDate, setEditEndDate] =
+    useState(goal.endDate);
+
+  const [savingGoal, setSavingGoal] = useState(false);
+
+  /*
+   * Load Goal Tasks
+   *
+   * IMPORTANT:
+   * এই function নিজে কোনো effect-এর body থেকে
+   * automatically call করা হচ্ছে না।
+   *
+   * তাই React cascading-render warning হবে না।
+   */
+  const loadTasks = useCallback(async () => {
+    try {
+      setLoadingTasks(true);
+      setTaskError("");
+
+      const data = await getGoalTasks(goal.id);
+
+      setTasks(data);
+    } catch (error) {
+      console.error(
+        "Load goal tasks error:",
+        error
+      );
+
+      setTaskError(
+        "লক্ষ্যের টাস্কগুলো লোড করা যায়নি।"
+      );
+    } finally {
+      setLoadingTasks(false);
     }
+  }, [goal.id]);
 
-    loadTasks();
+  /*
+   * Reload when another Goal component changes.
+   *
+   * এখানে effect শুধু external browser event-এর
+   * subscription করছে।
+   */
+  useEffect(() => {
+    const handleChange = () => {
+      if (!expanded) {
+        return;
+      }
+
+      void loadTasks();
+    };
+
+    window.addEventListener(
+      "life-os-goal-changed",
+      handleChange
+    );
+
+    return () => {
+      window.removeEventListener(
+        "life-os-goal-changed",
+        handleChange
+      );
+    };
   }, [expanded, loadTasks]);
 
-  /* =========================================================
-     COMPLETED TASK COUNT
-  ========================================================= */
+  /*
+   * Expand / Collapse
+   *
+   * Task loading এখানে user action-এর পরে হচ্ছে।
+   * ফলে React effect warning হবে না।
+   */
+  const handleExpand = () => {
+    setExpanded((current) => {
+      const next = !current;
 
+      if (next) {
+        void loadTasks();
+      }
+
+      return next;
+    });
+  };
+
+  /*
+   * Progress
+   */
   const completedCount = useMemo(
     () =>
       tasks.filter(
@@ -153,50 +199,132 @@ export default function GoalCard({
     [tasks]
   );
 
-  /* =========================================================
-     TOTAL TASK COUNT
-  ========================================================= */
-
   const totalCount = tasks.length;
-
-  /* =========================================================
-     PROGRESS
-  ========================================================= */
 
   const progress =
     totalCount > 0
       ? Math.round(
-          (completedCount / totalCount) *
-            100
+          (completedCount / totalCount) * 100
         )
       : 0;
 
-  /* =========================================================
-     GOAL STATUS
-  ========================================================= */
-
   const status =
-    progress === 100 &&
-    totalCount > 0
+    progress === 100 && totalCount > 0
       ? "সম্পন্ন"
       : "চলছে";
-
-  /* =========================================================
-     DAYS LEFT
-  ========================================================= */
 
   const daysLeft = getDaysLeft(
     goal.endDate
   );
 
-  /* =========================================================
-     TOGGLE TASK
-  ========================================================= */
+  /*
+   * Goal Edit
+   */
+  const startGoalEdit = () => {
+    setEditTitle(goal.title);
 
+    setEditDescription(
+      goal.description
+    );
+
+    setEditStartDate(
+      goal.startDate
+    );
+
+    setEditEndDate(goal.endDate);
+
+    setEditingGoal(true);
+  };
+
+  const cancelGoalEdit = () => {
+    setEditingGoal(false);
+  };
+
+  const saveGoalEdit = async () => {
+    if (!editTitle.trim()) {
+      return;
+    }
+
+    if (!editStartDate || !editEndDate) {
+      return;
+    }
+
+    if (editEndDate < editStartDate) {
+      return;
+    }
+
+    try {
+      setSavingGoal(true);
+      setTaskError("");
+
+      await updateGoal(
+        goal.id,
+        editTitle.trim(),
+        editDescription.trim(),
+        editStartDate,
+        editEndDate
+      );
+
+      setEditingGoal(false);
+
+      window.dispatchEvent(
+        new CustomEvent(
+          "life-os-goal-changed"
+        )
+      );
+    } catch (error) {
+      console.error(
+        "Update goal error:",
+        error
+      );
+
+      setTaskError(
+        "লক্ষ্য আপডেট করা যায়নি।"
+      );
+    } finally {
+      setSavingGoal(false);
+    }
+  };
+
+  /*
+   * Goal Delete
+   */
+  const handleDeleteGoal = () => {
+    const confirmed = window.confirm(
+      `“${goal.title}” লক্ষ্যটি মুছে ফেলতে চান? এর সব Goal Task-ও মুছে যাবে।`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    onDelete?.(goal.id);
+  };
+
+  /*
+   * Toggle Task
+   */
   const handleToggleTask = async (
     task: GoalTask
   ) => {
     const completed = !task.completed;
+
+    /*
+     * UI first
+     */
+    setTasks((current) =>
+      current.map((item) =>
+        item.id === task.id
+          ? {
+              ...item,
+              completed,
+              completedAt: completed
+                ? new Date().toISOString()
+                : null,
+            }
+          : item
+      )
+    );
 
     try {
       setTaskError("");
@@ -206,18 +334,9 @@ export default function GoalCard({
         completed
       );
 
-      setTasks((currentTasks) =>
-        currentTasks.map(
-          (currentTask) =>
-            currentTask.id === task.id
-              ? {
-                  ...currentTask,
-                  completed,
-                  completedAt: completed
-                    ? new Date().toISOString()
-                    : null,
-                }
-              : currentTask
+      window.dispatchEvent(
+        new CustomEvent(
+          "life-os-goal-changed"
         )
       );
     } catch (error) {
@@ -226,74 +345,79 @@ export default function GoalCard({
         error
       );
 
+      /*
+       * Server/local state থেকে আবার load
+       */
+      void loadTasks();
+
       setTaskError(
         "টাস্কের অবস্থা পরিবর্তন করা যায়নি।"
       );
     }
   };
 
-  /* =========================================================
-     START EDITING
-  ========================================================= */
-
-  const startEdit = (
-    task: GoalTask
-  ) => {
+  /*
+   * Task edit
+   */
+  const startEdit = (task: GoalTask) => {
     setEditingTaskId(task.id);
     setEditingText(task.title);
   };
-
-  /* =========================================================
-     CANCEL EDITING
-  ========================================================= */
 
   const cancelEdit = () => {
     setEditingTaskId(null);
     setEditingText("");
   };
 
-  /* =========================================================
-     SAVE EDITED TASK
-  ========================================================= */
-
   const saveEdit = async () => {
     if (!editingTaskId) {
       return;
     }
 
-    const value =
-      editingText.trim();
+    const value = editingText.trim();
 
     if (!value) {
       return;
     }
 
+    const currentTaskId = editingTaskId;
+
+    /*
+     * UI first
+     */
+    setTasks((current) =>
+      current.map((task) =>
+        task.id === currentTaskId
+          ? {
+              ...task,
+              title: value,
+            }
+          : task
+      )
+    );
+
     try {
       setTaskError("");
 
       await updateGoalTask(
-        editingTaskId,
+        currentTaskId,
         value
       );
 
-      setTasks((currentTasks) =>
-        currentTasks.map(
-          (task) =>
-            task.id === editingTaskId
-              ? {
-                  ...task,
-                  title: value,
-                }
-              : task
+      cancelEdit();
+
+      window.dispatchEvent(
+        new CustomEvent(
+          "life-os-goal-changed"
         )
       );
-
-      cancelEdit();
     } catch (error) {
       console.error(
         "Update goal task error:",
         error
       );
+
+      void loadTasks();
 
       setTaskError(
         "টাস্ক আপডেট করা যায়নি।"
@@ -301,13 +425,11 @@ export default function GoalCard({
     }
   };
 
-  /* =========================================================
-     ADD NEW GOAL TASK
-  ========================================================= */
-
+  /*
+   * Add Task
+   */
   const handleAddTask = async () => {
-    const value =
-      newTask.trim();
+    const value = newTask.trim();
 
     if (!value) {
       return;
@@ -322,24 +444,29 @@ export default function GoalCard({
           value
         );
 
-      const newGoalTask: GoalTask = {
-        id: taskId,
-        goalId: goal.id,
-        title: value,
-        completed: false,
-        createdAt:
-          new Date().toISOString(),
-        completedAt: null,
-        updatedAt:
-          new Date().toISOString(),
-      };
+      const now =
+        new Date().toISOString();
 
-      setTasks((currentTasks) => [
-        ...currentTasks,
-        newGoalTask,
+      setTasks((current) => [
+        ...current,
+        {
+          id: taskId,
+          goalId: goal.id,
+          title: value,
+          completed: false,
+          createdAt: now,
+          completedAt: null,
+          updatedAt: now,
+        },
       ]);
 
       setNewTask("");
+
+      window.dispatchEvent(
+        new CustomEvent(
+          "life-os-goal-changed"
+        )
+      );
     } catch (error) {
       console.error(
         "Add goal task error:",
@@ -352,33 +479,37 @@ export default function GoalCard({
     }
   };
 
-  /* =========================================================
-     DELETE GOAL TASK
-  ========================================================= */
-
+  /*
+   * Delete Task
+   */
   const handleDeleteTask = async (
     taskId: string
   ) => {
-    const confirmed =
-      window.confirm(
-        "এই টাস্কটি মুছে ফেলতে চান?"
-      );
+    const confirmed = window.confirm(
+      "এই টাস্কটি মুছে ফেলতে চান?"
+    );
 
     if (!confirmed) {
       return;
     }
 
+    /*
+     * UI first
+     */
+    setTasks((current) =>
+      current.filter(
+        (task) => task.id !== taskId
+      )
+    );
+
     try {
       setTaskError("");
 
-      await deleteGoalTask(
-        taskId
-      );
+      await deleteGoalTask(taskId);
 
-      setTasks((currentTasks) =>
-        currentTasks.filter(
-          (task) =>
-            task.id !== taskId
+      window.dispatchEvent(
+        new CustomEvent(
+          "life-os-goal-changed"
         )
       );
     } catch (error) {
@@ -387,27 +518,23 @@ export default function GoalCard({
         error
       );
 
+      void loadTasks();
+
       setTaskError(
         "টাস্ক মুছে ফেলা যায়নি।"
       );
     }
   };
 
-  /* =========================================================
-     UI
-  ========================================================= */
-
   return (
     <article className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-      {/* Goal Main */}
+      {/* Main Goal */}
       <div className="flex items-center gap-4 p-4">
-        {/* Progress Ring */}
         <div className="relative h-14 w-14 shrink-0">
           <svg
             viewBox="0 0 54 54"
             className="h-14 w-14 -rotate-90"
           >
-            {/* Background */}
             <circle
               cx="27"
               cy="27"
@@ -418,7 +545,6 @@ export default function GoalCard({
               className="text-gray-200"
             />
 
-            {/* Progress */}
             <circle
               cx="27"
               cy="27"
@@ -431,13 +557,9 @@ export default function GoalCard({
                 2 * Math.PI * 24
               }
               strokeDashoffset={
-                2 *
-                  Math.PI *
-                  24 -
+                2 * Math.PI * 24 -
                 (progress / 100) *
-                  (2 *
-                    Math.PI *
-                    24)
+                  (2 * Math.PI * 24)
               }
               className="text-blue-600 transition-all"
             />
@@ -448,7 +570,6 @@ export default function GoalCard({
           </div>
         </div>
 
-        {/* Goal Body */}
         <div className="min-w-0 flex-1">
           <p className="font-semibold text-gray-900">
             {goal.title}
@@ -474,25 +595,16 @@ export default function GoalCard({
 
             <span className="h-1 w-1 rounded-full bg-gray-300" />
 
-            <span>
-              {daysLeft}
-            </span>
+            <span>{daysLeft}</span>
           </div>
         </div>
 
-        {/* Expand Button */}
         <button
           type="button"
-          onClick={() =>
-            setExpanded(
-              (current) => !current
-            )
-          }
+          onClick={handleExpand}
           aria-label="টাস্ক দেখাও"
           className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 ${
-            expanded
-              ? "rotate-180"
-              : ""
+            expanded ? "rotate-180" : ""
           }`}
         >
           <svg
@@ -500,8 +612,6 @@ export default function GoalCard({
             fill="none"
             stroke="currentColor"
             strokeWidth="2.4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
             className="h-5 w-5"
           >
             <polyline points="6 9 12 15 18 9" />
@@ -509,21 +619,125 @@ export default function GoalCard({
         </button>
       </div>
 
-      {/* Task Panel */}
       {expanded && (
         <div className="border-t bg-gray-50">
           <div className="p-4">
-            {/* Loading */}
-            {loadingTasks && (
-              <div className="py-5 text-center text-sm text-gray-400">
-                টাস্ক লোড হচ্ছে...
+            {/* Goal Actions */}
+            {!editingGoal && (
+              <div className="mb-4 flex gap-2">
+                <button
+                  type="button"
+                  onClick={startGoalEdit}
+                  className="flex-1 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-600 hover:bg-blue-100"
+                >
+                  ✏️ Edit Goal
+                </button>
+
+                <button
+                  type="button"
+                  onClick={
+                    handleDeleteGoal
+                  }
+                  className="flex-1 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-100"
+                >
+                  🗑️ Delete Goal
+                </button>
               </div>
             )}
 
-            {/* Error */}
+            {/* Goal Edit */}
+            {editingGoal && (
+              <div className="mb-4 space-y-3 rounded-2xl border border-blue-100 bg-white p-4">
+                <input
+                  type="text"
+                  value={editTitle}
+                  onChange={(event) =>
+                    setEditTitle(
+                      event.target.value
+                    )
+                  }
+                  className="w-full rounded-xl border px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Goal title"
+                />
+
+                <textarea
+                  value={editDescription}
+                  onChange={(event) =>
+                    setEditDescription(
+                      event.target.value
+                    )
+                  }
+                  rows={3}
+                  className="w-full resize-none rounded-xl border px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Description"
+                />
+
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="date"
+                    value={editStartDate}
+                    onChange={(event) =>
+                      setEditStartDate(
+                        event.target.value
+                      )
+                    }
+                    className="rounded-xl border px-3 py-3 text-sm"
+                  />
+
+                  <input
+                    type="date"
+                    min={
+                      editStartDate ||
+                      undefined
+                    }
+                    value={editEndDate}
+                    onChange={(event) =>
+                      setEditEndDate(
+                        event.target.value
+                      )
+                    }
+                    className="rounded-xl border px-3 py-3 text-sm"
+                  />
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={
+                      saveGoalEdit
+                    }
+                    disabled={savingGoal}
+                    className="flex-1 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+                  >
+                    {savingGoal
+                      ? "Saving..."
+                      : "Save"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={
+                      cancelGoalEdit
+                    }
+                    disabled={savingGoal}
+                    className="flex-1 rounded-xl bg-gray-100 px-4 py-2.5 text-sm font-semibold text-gray-600"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
             {taskError && (
               <div className="mb-3 rounded-xl bg-red-50 p-3 text-sm text-red-600">
                 {taskError}
+              </div>
+            )}
+
+            {/* Task Loading */}
+            {loadingTasks && (
+              <div className="py-5 text-center text-sm text-gray-400">
+                টাস্ক লোড হচ্ছে...
               </div>
             )}
 
@@ -531,254 +745,142 @@ export default function GoalCard({
             {!loadingTasks &&
               tasks.length > 0 && (
                 <div className="space-y-1">
-                  {tasks.map(
-                    (task) => {
-                      const editing =
-                        editingTaskId ===
-                        task.id;
+                  {tasks.map((task) => {
+                    const editing =
+                      editingTaskId ===
+                      task.id;
 
-                      /* Editing Mode */
-                      if (editing) {
-                        return (
-                          <div
-                            key={task.id}
-                            className="flex items-center gap-2 rounded-xl bg-white p-2"
-                          >
-                            {/* Check */}
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleToggleTask(
-                                  task
-                                )
-                              }
-                              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition ${
-                                task.completed
-                                  ? "border-green-500 bg-green-500 text-white"
-                                  : "border-gray-300 bg-white"
-                              }`}
-                            >
-                              {task.completed && (
-                                <svg
-                                  viewBox="0 0 24 24"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="3"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  className="h-4 w-4"
-                                >
-                                  <polyline points="20 6 9 17 4 12" />
-                                </svg>
-                              )}
-                            </button>
-
-                            {/* Edit Input */}
-                            <input
-                              autoFocus
-                              type="text"
-                              value={
-                                editingText
-                              }
-                              onChange={(
-                                event
-                              ) =>
-                                setEditingText(
-                                  event
-                                    .target
-                                    .value
-                                )
-                              }
-                              onKeyDown={(
-                                event
-                              ) => {
-                                if (
-                                  event.key ===
-                                  "Enter"
-                                ) {
-                                  saveEdit();
-                                }
-
-                                if (
-                                  event.key ===
-                                  "Escape"
-                                ) {
-                                  cancelEdit();
-                                }
-                              }}
-                              className="min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                            />
-
-                            {/* Save */}
-                            <button
-                              type="button"
-                              onClick={
-                                saveEdit
-                              }
-                              aria-label="সেভ করো"
-                              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-green-600 hover:bg-green-50"
-                            >
-                              <svg
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2.6"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                className="h-5 w-5"
-                              >
-                                <polyline points="20 6 9 17 4 12" />
-                              </svg>
-                            </button>
-
-                            {/* Cancel */}
-                            <button
-                              type="button"
-                              onClick={
-                                cancelEdit
-                              }
-                              aria-label="বাতিল করো"
-                              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100"
-                            >
-                              <svg
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2.4"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                className="h-5 w-5"
-                              >
-                                <line
-                                  x1="18"
-                                  y1="6"
-                                  x2="6"
-                                  y2="18"
-                                />
-                                <line
-                                  x1="6"
-                                  y1="6"
-                                  x2="18"
-                                  y2="18"
-                                />
-                              </svg>
-                            </button>
-                          </div>
-                        );
-                      }
-
-                      /* Normal Mode */
+                    if (editing) {
                       return (
                         <div
                           key={task.id}
-                          className="flex items-center gap-3 rounded-xl bg-white px-3 py-2.5"
+                          className="flex items-center gap-2 rounded-xl bg-white p-2"
                         >
-                          {/* Check */}
+                          <input
+                            autoFocus
+                            type="text"
+                            value={
+                              editingText
+                            }
+                            onChange={(
+                              event
+                            ) =>
+                              setEditingText(
+                                event
+                                  .target
+                                  .value
+                              )
+                            }
+                            onKeyDown={(
+                              event
+                            ) => {
+                              if (
+                                event.key ===
+                                "Enter"
+                              ) {
+                                void saveEdit();
+                              }
+
+                              if (
+                                event.key ===
+                                "Escape"
+                              ) {
+                                cancelEdit();
+                              }
+                            }}
+                            className="min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+
                           <button
                             type="button"
                             onClick={() =>
-                              handleToggleTask(
-                                task
-                              )
+                              void saveEdit()
                             }
-                            className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition ${
-                              task.completed
-                                ? "border-green-500 bg-green-500 text-white"
-                                : "border-gray-300 bg-white hover:border-blue-400"
-                            }`}
+                            className="rounded-lg px-3 py-2 text-green-600 hover:bg-green-50"
                           >
-                            {task.completed && (
-                              <svg
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="3"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                className="h-4 w-4"
-                              >
-                                <polyline points="20 6 9 17 4 12" />
-                              </svg>
-                            )}
+                            ✓
                           </button>
 
-                          {/* Task Text */}
                           <button
                             type="button"
-                            onClick={() =>
-                              startEdit(
-                                task
-                              )
+                            onClick={
+                              cancelEdit
                             }
-                            className={`min-w-0 flex-1 text-left text-sm ${
-                              task.completed
-                                ? "text-gray-400 line-through"
-                                : "text-gray-700"
-                            }`}
+                            className="rounded-lg px-3 py-2 text-gray-500 hover:bg-gray-100"
                           >
-                            {task.title}
-                          </button>
-
-                          {/* Edit */}
-                          <button
-                            type="button"
-                            onClick={() =>
-                              startEdit(
-                                task
-                              )
-                            }
-                            aria-label="এডিট করো"
-                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700"
-                          >
-                            <svg
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2.2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              className="h-4 w-4"
-                            >
-                              <path d="M12 20h9" />
-                              <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                            </svg>
-                          </button>
-
-                          {/* Delete */}
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleDeleteTask(
-                                task.id
-                              )
-                            }
-                            aria-label="মুছে ফেলো"
-                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500"
-                          >
-                            <svg
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2.2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              className="h-4 w-4"
-                            >
-                              <polyline points="3 6 5 6 21 6" />
-                              <path d="M19 6l-1 14H6L5 6" />
-                              <path d="M10 11v6" />
-                              <path d="M14 11v6" />
-                              <path d="M9 6V4h6v2" />
-                            </svg>
+                            ×
                           </button>
                         </div>
                       );
                     }
-                  )}
+
+                    return (
+                      <div
+                        key={task.id}
+                        className="flex items-center gap-3 rounded-xl bg-white px-3 py-2.5"
+                      >
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void handleToggleTask(
+                              task
+                            )
+                          }
+                          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border ${
+                            task.completed
+                              ? "border-green-500 bg-green-500 text-white"
+                              : "border-gray-300 bg-white"
+                          }`}
+                        >
+                          {task.completed &&
+                            "✓"}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            startEdit(
+                              task
+                            )
+                          }
+                          className={`min-w-0 flex-1 text-left text-sm ${
+                            task.completed
+                              ? "text-gray-400 line-through"
+                              : "text-gray-700"
+                          }`}
+                        >
+                          {task.title}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            startEdit(
+                              task
+                            )
+                          }
+                          className="rounded-lg px-2 py-1 text-gray-400 hover:bg-gray-100"
+                        >
+                          ✏️
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void handleDeleteTask(
+                              task.id
+                            )
+                          }
+                          className="rounded-lg px-2 py-1 text-gray-400 hover:bg-red-50 hover:text-red-500"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 
-            {/* No Tasks */}
             {!loadingTasks &&
               tasks.length === 0 && (
                 <div className="py-5 text-center text-sm text-gray-400">
@@ -801,7 +903,7 @@ export default function GoalCard({
                     event.key ===
                     "Enter"
                   ) {
-                    handleAddTask();
+                    void handleAddTask();
                   }
                 }}
                 placeholder="নতুন টাস্ক লিখো..."
@@ -810,10 +912,10 @@ export default function GoalCard({
 
               <button
                 type="button"
-                onClick={
-                  handleAddTask
+                onClick={() =>
+                  void handleAddTask()
                 }
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-xl font-medium text-white transition hover:bg-blue-700"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-xl font-medium text-white hover:bg-blue-700"
               >
                 +
               </button>
