@@ -1,7 +1,13 @@
 "use client";
 
 import { create } from "zustand";
-import { User } from "firebase/auth";
+import {
+  onAuthStateChanged,
+  User,
+  signOut,
+} from "firebase/auth";
+
+import { auth } from "@/lib/firebase";
 
 interface AuthState {
   user: User | null;
@@ -9,48 +15,45 @@ interface AuthState {
 
   setUser: (user: User | null) => void;
   setLoading: (loading: boolean) => void;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
-  /**
-   * Current logged-in Firebase user
-   */
-  user: null,
-
-  /**
-   * Firebase authentication state
-   * প্রথমে true থাকবে।
-   * AuthProvider Firebase থেকে session check করার
-   * পর false করবে।
-   */
-  loading: true,
-
-  /**
-   * Set current user
-   */
-  setUser: (user) =>
+export const useAuthStore = create<AuthState>((set) => {
+  // 🔐 Firebase saved authentication session check
+  onAuthStateChanged(auth, (user) => {
     set({
       user,
-    }),
-
-  /**
-   * Set authentication loading state
-   */
-  setLoading: (loading) =>
-    set({
-      loading,
-    }),
-
-  /**
-   * Clear user from Zustand store
-   *
-   * Actual Firebase logout হবে:
-   * logoutUser()
-   */
-  logout: () =>
-    set({
-      user: null,
       loading: false,
-    }),
-}));
+    });
+  });
+
+  return {
+    user: null,
+
+    // প্রথমে Firebase session check করবে
+    loading: true,
+
+    setUser: (user) =>
+      set({
+        user,
+      }),
+
+    setLoading: (loading) =>
+      set({
+        loading,
+      }),
+
+    logout: async () => {
+      try {
+        await signOut(auth);
+
+        set({
+          user: null,
+          loading: false,
+        });
+      } catch (error) {
+        console.error("Logout error:", error);
+      }
+    },
+  };
+});
