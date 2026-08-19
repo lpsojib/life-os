@@ -11,7 +11,7 @@ import QuickSummary from "./QuickSummary";
 
 export default function Dashboard() {
   return (
-    <div className="min-h-full px-2 py-3">
+    <div className="min-h-full px-1 py-2">
       <div
         className="mx-auto"
         style={{
