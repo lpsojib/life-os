@@ -15,7 +15,7 @@ export default function Dashboard() {
       <div
         className="mx-auto"
         style={{
-          maxWidth: "710px",
+          maxWidth: "750px",
         }}
       >
         {/* Header */}
