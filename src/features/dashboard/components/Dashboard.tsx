@@ -11,11 +11,11 @@ import QuickSummary from "./QuickSummary";
 
 export default function Dashboard() {
   return (
-    <div className="min-h-full px-4 py-6">
+    <div className="min-h-full px-2 py-3">
       <div
         className="mx-auto"
         style={{
-          maxWidth: "640px",
+          maxWidth: "700px",
         }}
       >
         {/* Header */}
