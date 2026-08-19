@@ -7,6 +7,7 @@ import ReminderSection from "./ReminderSection";
 import TodayTasks from "./TodayTasks";
 import TodayHabits from "./TodayHabits";
 import DashboardGoals from "./DashboardGoals";
+import QuickSummary from "./QuickSummary";
 
 export default function Dashboard() {
   return (
@@ -37,7 +38,10 @@ export default function Dashboard() {
           <TodayHabits />
 
           {/* Goals */}
-          <DashboardGoals/>
+          <DashboardGoals />
+
+          {/* Quick Summary */}
+          <QuickSummary />
         </div>
       </div>
     </div>
