@@ -7,14 +7,15 @@ import ReminderSection from "./ReminderSection";
 import TodayTasks from "./TodayTasks";
 import TodayHabits from "./TodayHabits";
 import DashboardGoals from "./DashboardGoals";
+import QuickSummary from "./QuickSummary";
 
 export default function Dashboard() {
   return (
-    <div className="min-h-full px-4 pt-2 pb-6">
+    <div className="min-h-full px-1 py-2">
       <div
         className="mx-auto"
         style={{
-          maxWidth: "640px",
+          maxWidth: "750px",
         }}
       >
         {/* Header */}
@@ -38,6 +39,9 @@ export default function Dashboard() {
 
           {/* Goals */}
           <DashboardGoals />
+
+          {/* Quick Summary */}
+          <QuickSummary />
         </div>
       </div>
     </div>
