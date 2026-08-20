@@ -8,10 +8,21 @@ import {
   getGoalTasks,
 } from "@/features/goals/services/goal.service";
 
+/* =========================================================
+   TYPES
+========================================================= */
+
+export interface SummaryItem {
+  total: number;
+  completed: number;
+  remaining: number;
+  progress: number;
+}
+
 export interface QuickSummaryData {
-  taskCompletion: number;
-  habitCompletion: number;
-  goalProgress: number;
+  tasks: SummaryItem;
+  habits: SummaryItem;
+  goals: SummaryItem;
 }
 
 /* =========================================================
@@ -31,13 +42,47 @@ const clampPercentage = (
   );
 };
 
+const createSummaryItem = (
+  total: number,
+  completed: number
+): SummaryItem => {
+  const safeTotal = Math.max(0, total);
+  const safeCompleted = Math.min(
+    safeTotal,
+    Math.max(0, completed)
+  );
+
+  const remaining =
+    safeTotal - safeCompleted;
+
+  const progress =
+    safeTotal > 0
+      ? (safeCompleted / safeTotal) * 100
+      : 0;
+
+  return {
+    total: safeTotal,
+    completed: safeCompleted,
+    remaining,
+    progress: clampPercentage(
+      progress
+    ),
+  };
+};
+
 const getTodayString = (): string => {
   const today = new Date();
 
   return [
     today.getFullYear(),
-    String(today.getMonth() + 1).padStart(2, "0"),
-    String(today.getDate()).padStart(2, "0"),
+    String(today.getMonth() + 1).padStart(
+      2,
+      "0"
+    ),
+    String(today.getDate()).padStart(
+      2,
+      "0"
+    ),
   ].join("-");
 };
 
@@ -50,14 +95,17 @@ export const getQuickSummary =
     const today = getTodayString();
 
     /* =====================================================
-       TASK
-       শুধু আজকের Task count হবে।
-       Pending/Future Task এখানে count হবে না।
+       TASKS
+
+       শুধু আজকের dueDate-এর task count হবে।
+
+       Future / Pending task:
+       ❌ count হবে না
     ===================================================== */
 
-    const tasks = await getTasks();
+    const allTasks = await getTasks();
 
-    const todayTasks = tasks.filter(
+    const todayTasks = allTasks.filter(
       (task) => {
         if (!task.dueDate) {
           return false;
@@ -70,32 +118,31 @@ export const getQuickSummary =
       }
     );
 
-    const totalTodayTasks =
-      todayTasks.length;
-
-    const completedTodayTasks =
+    const completedTasks =
       todayTasks.filter(
         (task) =>
           task.status === "completed"
       ).length;
 
-    const taskCompletion =
-      totalTodayTasks > 0
-        ? (completedTodayTasks /
-            totalTodayTasks) *
-          100
-        : 0;
+    const taskSummary =
+      createSummaryItem(
+        todayTasks.length,
+        completedTasks
+      );
 
     /* =====================================================
-       HABIT
-       আজকের active habit-এর মধ্যে
-       কতগুলো আজ complete হয়েছে।
+       HABITS
+
+       আজ active থাকা habit count হবে।
+
+       আজ complete হয়েছে → completed
+       আজ complete হয়নি → remaining
     ===================================================== */
 
-    const habits = await getHabits();
+    const allHabits = await getHabits();
 
     const activeHabits =
-      habits.filter(
+      allHabits.filter(
         (habit) =>
           habit.status === "active"
       );
@@ -126,101 +173,72 @@ export const getQuickSummary =
       )
     );
 
-    const habitCompletion =
-      activeHabits.length > 0
-        ? (completedHabits /
-            activeHabits.length) *
-          100
-        : 0;
-
-    /* =====================================================
-       GOAL
-       Active Goal-এর progress-এর average।
-    ===================================================== */
-
-    const goals = await getGoals();
-
-    const activeGoals =
-      goals.filter(
-        (goal) =>
-          goal.status === "active"
+    const habitSummary =
+      createSummaryItem(
+        activeHabits.length,
+        completedHabits
       );
 
-    let goalProgress = 0;
+    /* =====================================================
+       GOALS
 
-    if (activeGoals.length > 0) {
-      const progressValues =
-        await Promise.all(
-          activeGoals.map(
-            async (goal) => {
-              /* -----------------------------------------
-                 Goal-এর নিজের progress থাকলে
-                 সেটাই ব্যবহার করবে।
-              ----------------------------------------- */
+       শুধু আজকের মধ্যে active থাকা Goal count হবে।
 
-              if (
-                typeof goal.progress ===
-                "number"
-              ) {
-                return goal.progress;
-              }
+       startDate <= today <= endDate
 
-              /* -----------------------------------------
-                 না থাকলে Goal Tasks থেকে calculate করবে।
-              ----------------------------------------- */
+       Future Goal:
+       ❌ count হবে না
 
-              const goalTasks =
-                await getGoalTasks(
-                  goal.id
-                );
+       Expired Goal:
+       ❌ count হবে না
+    ===================================================== */
 
-              if (
-                goalTasks.length === 0
-              ) {
-                return 0;
-              }
+    const allGoals = await getGoals();
 
-              const completed =
-                goalTasks.filter(
-                  (task) =>
-                    task.completed
-                ).length;
+    const todayGoals =
+      allGoals.filter(
+        (goal) =>
+          goal.status === "active" &&
+          goal.startDate <= today &&
+          goal.endDate >= today
+      );
 
-              return (
-                (completed /
-                  goalTasks.length) *
-                100
-              );
-            }
-          )
-        );
+    let totalGoalTasks = 0;
+    let completedGoalTasks = 0;
 
-      goalProgress =
-        progressValues.reduce(
-          (sum, value) =>
-            sum + value,
-          0
-        ) / activeGoals.length;
-    }
+    await Promise.all(
+      todayGoals.map(
+        async (goal) => {
+          const goalTasks =
+            await getGoalTasks(
+              goal.id
+            );
+
+          totalGoalTasks +=
+            goalTasks.length;
+
+          completedGoalTasks +=
+            goalTasks.filter(
+              (task) =>
+                task.completed
+            ).length;
+        }
+      )
+    );
+
+    const goalSummary =
+      createSummaryItem(
+        totalGoalTasks,
+        completedGoalTasks
+      );
 
     /* =====================================================
        RETURN
     ===================================================== */
 
     return {
-      taskCompletion:
-        clampPercentage(
-          taskCompletion
-        ),
-
-      habitCompletion:
-        clampPercentage(
-          habitCompletion
-        ),
-
-      goalProgress:
-        clampPercentage(
-          goalProgress
-        ),
+      tasks: taskSummary,
+      habits: habitSummary,
+      goals: goalSummary,
     };
   };
