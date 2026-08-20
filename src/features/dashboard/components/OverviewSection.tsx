@@ -88,17 +88,11 @@ const COLORS = {
 const getTodayString = (): string => {
   const today = new Date();
 
-  const year = today.getFullYear();
-
-  const month = String(
+  return `${today.getFullYear()}-${String(
     today.getMonth() + 1
-  ).padStart(2, "0");
-
-  const day = String(
+  ).padStart(2, "0")}-${String(
     today.getDate()
-  ).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
+  ).padStart(2, "0")}`;
 };
 
 const clampPercentage = (
@@ -110,10 +104,7 @@ const clampPercentage = (
 
   return Math.min(
     100,
-    Math.max(
-      0,
-      Math.round(value)
-    )
+    Math.max(0, Math.round(value))
   );
 };
 
@@ -145,8 +136,6 @@ function OverviewCard({
         background,
       }}
     >
-      {/* Icon */}
-
       <div
         className="w-8 h-8 rounded-lg flex items-center justify-center"
         style={{
@@ -159,8 +148,6 @@ function OverviewCard({
           strokeWidth={2.2}
         />
       </div>
-
-      {/* Content */}
 
       <div>
         <div
@@ -249,17 +236,51 @@ export default function OverviewSection() {
           await getTasks();
 
         /*
-         * শুধুমাত্র আজকের task।
+         * আজকের Task:
          *
-         * Future/pending task এখানে আসবে না।
+         * 1. dueDate আজকের হলে
+         * 2. status daily হলে
+         * 3. আজ complete করা হলে
          *
-         * dueDate অবশ্যই আজকের date হতে হবে।
+         * Future/pending Task এখানে আসবে না।
          */
 
         const todayTasks =
           allTasks.filter(
-            (task) =>
-              task.dueDate === today
+            (task) => {
+              if (
+                task.dueDate ===
+                today
+              ) {
+                return true;
+              }
+
+              if (
+                task.status ===
+                "daily"
+              ) {
+                return true;
+              }
+
+              if (
+                task.status ===
+                  "completed" &&
+                task.completedAt
+              ) {
+                const completedDate =
+                  task.completedAt.slice(
+                    0,
+                    10
+                  );
+
+                return (
+                  completedDate ===
+                  today
+                );
+              }
+
+              return false;
+            }
           );
 
         const totalTasks =
@@ -286,14 +307,6 @@ export default function OverviewSection() {
         const allHabits =
           await getHabits();
 
-        /*
-         * আজকের জন্য active habits।
-         *
-         * Habit-এর আলাদা dueDate নেই,
-         * তাই active habit-গুলো আজকের habit
-         * হিসেবে গণনা করা হচ্ছে।
-         */
-
         const activeHabits =
           allHabits.filter(
             (habit) =>
@@ -305,11 +318,6 @@ export default function OverviewSection() {
           activeHabits.length;
 
         let completedHabits = 0;
-
-        /*
-         * প্রতিটি habit আজ complete হয়েছে
-         * কিনা check করছি।
-         */
 
         await Promise.all(
           activeHabits.map(
@@ -332,7 +340,8 @@ export default function OverviewSection() {
                 if (
                   completedToday
                 ) {
-                  completedHabits += 1;
+                  completedHabits +=
+                    1;
                 }
               } catch (error) {
                 console.error(
@@ -359,10 +368,8 @@ export default function OverviewSection() {
           await getGoals();
 
         /*
-         * শুধুমাত্র যে Goal-এর date range-এর
-         * মধ্যে আজকের date আছে সেগুলো।
-         *
-         * Future goal এখানে গণনা হবে না।
+         * শুধু আজকের date range-এর
+         * ভিতরে থাকা Goal।
          */
 
         const todayGoals =
@@ -378,13 +385,7 @@ export default function OverviewSection() {
           todayGoals.length;
 
         let completedGoals = 0;
-
         let totalGoalProgress = 0;
-
-        /*
-         * প্রতিটি আজকের goal-এর progress
-         * calculate করছি।
-         */
 
         for (const goal of todayGoals) {
           let progress =
@@ -392,11 +393,6 @@ export default function OverviewSection() {
             "number"
               ? goal.progress
               : 0;
-
-          /*
-           * Goal-এর progress যদি 0 হয়,
-           * Goal Tasks থেকে আবার calculate করি।
-           */
 
           const goalTasks =
             await getGoalTasks(
@@ -451,7 +447,7 @@ export default function OverviewSection() {
             : 0;
 
         /* =================================================
-           SET SUMMARY
+           UPDATE SUMMARY
         ================================================= */
 
         setSummary({
@@ -495,32 +491,17 @@ export default function OverviewSection() {
     }, []);
 
   /* =======================================================
-     LOAD + REALTIME UPDATE
+     INITIAL LOAD + UPDATE EVENTS
   ======================================================= */
 
   useEffect(() => {
-    let cancelled = false;
+    queueMicrotask(() => {
+      void loadSummary();
+    });
 
-    const initialLoad =
-      async () => {
-        if (cancelled) {
-          return;
-        }
-
-        await loadSummary();
-      };
-
-    void initialLoad();
-
-    /*
-     * Task / Habit / Goal change হলে
-     * Overview আবার load হবে।
-     */
-
-    const handleUpdate =
-      () => {
-        void loadSummary();
-      };
+    const handleUpdate = () => {
+      void loadSummary();
+    };
 
     window.addEventListener(
       "life-os-task-changed",
@@ -547,19 +528,12 @@ export default function OverviewSection() {
       handleUpdate
     );
 
-    /*
-     * Online হলে Firebase data থেকে
-     * আবার calculate হবে।
-     */
-
     window.addEventListener(
       "online",
       handleUpdate
     );
 
     return () => {
-      cancelled = true;
-
       window.removeEventListener(
         "life-os-task-changed",
         handleUpdate
@@ -593,28 +567,24 @@ export default function OverviewSection() {
   }, [loadSummary]);
 
   /* =======================================================
-     VALUES
+     DISPLAY VALUES
   ======================================================= */
 
-  const taskValue =
-    loading
-      ? "—"
-      : `${summary.tasks.completed}/${summary.tasks.total}`;
+  const taskValue = loading
+    ? "—"
+    : `${summary.tasks.completed}/${summary.tasks.total}`;
 
-  const habitValue =
-    loading
-      ? "—"
-      : `${summary.habits.completed}/${summary.habits.total}`;
+  const habitValue = loading
+    ? "—"
+    : `${summary.habits.completed}/${summary.habits.total}`;
 
-  const goalValue =
-    loading
-      ? "—"
-      : `${summary.goals.completed}/${summary.goals.total}`;
+  const goalValue = loading
+    ? "—"
+    : `${summary.goals.completed}/${summary.goals.total}`;
 
-  const progressValue =
-    loading
-      ? "—"
-      : `${summary.goals.progress}%`;
+  const progressValue = loading
+    ? "—"
+    : `${summary.goals.progress}%`;
 
   /* =======================================================
      UI
@@ -627,10 +597,6 @@ export default function OverviewSection() {
       />
 
       <div className="grid grid-cols-2 gap-3">
-        {/* ================================================
-            TODAY TASKS
-        ================================================= */}
-
         <OverviewCard
           icon={CheckSquare}
           title="আজকের টাস্ক"
@@ -647,10 +613,6 @@ export default function OverviewSection() {
             COLORS.task.background
           }
         />
-
-        {/* ================================================
-            TODAY HABITS
-        ================================================= */}
 
         <OverviewCard
           icon={Flame}
@@ -669,10 +631,6 @@ export default function OverviewSection() {
           }
         />
 
-        {/* ================================================
-            TODAY GOALS
-        ================================================= */}
-
         <OverviewCard
           icon={Target}
           title="সক্রিয় লক্ষ্য"
@@ -689,10 +647,6 @@ export default function OverviewSection() {
             COLORS.goal.background
           }
         />
-
-        {/* ================================================
-            GOAL PROGRESS
-        ================================================= */}
 
         <OverviewCard
           icon={TrendingUp}
