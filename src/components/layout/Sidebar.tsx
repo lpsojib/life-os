@@ -42,13 +42,13 @@ const menuItems = [
     href: "/goals",
     icon: Target,
   },
+{
+  title: "Notebook",
+  href: "/notebook",
+  icon: BookOpen,
+},
   {
-    title: "Journal",
-    href: "/journal",
-    icon: BookOpen,
-  },
-  {
-    title: "Focus",
+    title: "Focus&Timer",
     href: "/focus",
     icon: Timer,
   },
