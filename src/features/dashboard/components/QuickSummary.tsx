@@ -1,509 +1,399 @@
-"use client";
-
+import { getTasks } from "@/features/tasks/services/task.service";
 import {
-  CheckSquare,
-  Flame,
-  Target,
-} from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
-
-import DashboardCard from "./DashboardCard";
-import DashboardSectionTitle from "./DashboardSectionTitle";
-
+  getHabits,
+  getHabitCompletions,
+} from "@/features/habits/services/habit.service";
 import {
-  getQuickSummary,
-  QuickSummaryData,
-} from "../services/summary.service";
+  getGoals,
+  getGoalTasks,
+} from "@/features/goals/services/goal.service";
+
+export interface QuickSummaryData {
+  taskTotal: number;
+  taskCompleted: number;
+  taskPending: number;
+
+  habitTotal: number;
+  habitCompleted: number;
+  habitPending: number;
+
+  goalTotal: number;
+  goalCompleted: number;
+  goalPending: number;
+
+  taskCompletion: number;
+  habitCompletion: number;
+  goalProgress: number;
+}
 
 /* =========================================================
-   COLORS
+   HELPERS
 ========================================================= */
 
-const COLORS = {
-  ink: "#2A2318",
-  muted: "#8F8677",
+const clampPercentage = (
+  value: number
+): number => {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
 
-  task: "#2A6459",
-  taskBg: "#E3EFEA",
+  return Math.min(
+    100,
+    Math.max(0, Math.round(value))
+  );
+};
 
-  habit: "#B4842A",
-  habitBg: "#F5EACB",
+const getTodayString = (): string => {
+  const today = new Date();
 
-  goal: "#7C4F6E",
-  goalBg: "#F0E3EC",
+  return [
+    today.getFullYear(),
+    String(
+      today.getMonth() + 1
+    ).padStart(2, "0"),
+    String(
+      today.getDate()
+    ).padStart(2, "0"),
+  ].join("-");
 };
 
 /* =========================================================
-   PROGRESS CIRCLE
+   HABIT DATE FILTER
 ========================================================= */
 
-interface ProgressCircleProps {
-  progress: number;
-  foreground: string;
-  background: string;
-}
+const isHabitAvailableToday = (
+  habit: {
+    startDate?: string;
+    endDate?: string;
+  },
+  today: string
+): boolean => {
+  /*
+   * Future habit এখনো শুরু হয়নি
+   */
+  if (
+    habit.startDate &&
+    habit.startDate > today
+  ) {
+    return false;
+  }
 
-function ProgressCircle({
-  progress,
-  foreground,
-  background,
-}: ProgressCircleProps) {
-  const size = 54;
-  const stroke = 5;
-  const radius =
-    (size - stroke) / 2;
+  /*
+   * Habit শেষ হয়ে গেছে
+   */
+  if (
+    habit.endDate &&
+    habit.endDate < today
+  ) {
+    return false;
+  }
 
-  const circumference =
-    2 * Math.PI * radius;
+  return true;
+};
 
-  const offset =
-    circumference -
-    (progress / 100) *
-      circumference;
+/* =========================================================
+   MAIN SUMMARY
+========================================================= */
 
-  return (
-    <div
-      className="relative flex items-center justify-center shrink-0"
-      style={{
-        width: size,
-        height: size,
-      }}
-    >
-      <svg
-        width={size}
-        height={size}
-        viewBox={`0 0 ${size} ${size}`}
-        className="-rotate-90"
-      >
-        {/* Background */}
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="none"
-          stroke={background}
-          strokeWidth={stroke}
-        />
+export const getQuickSummary =
+  async (): Promise<QuickSummaryData> => {
 
-        {/* Progress */}
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="none"
-          stroke={foreground}
-          strokeWidth={stroke}
-          strokeLinecap="round"
-          strokeDasharray={
-            circumference
+    const today =
+      getTodayString();
+
+    /* =====================================================
+       TASKS
+
+       শুধু আজকের task count হবে।
+       Future / pending task count হবে না।
+    ===================================================== */
+
+    const allTasks =
+      await getTasks();
+
+    const todayTasks =
+      allTasks.filter(
+        (task) => {
+
+          /*
+           * completed task-এর dueDate
+           * আজকের হলে count হবে।
+           */
+          if (
+            task.dueDate === today
+          ) {
+            return true;
           }
-          strokeDashoffset={offset}
-        />
-      </svg>
 
-      <div
-        className="absolute inset-0 flex items-center justify-center"
-        style={{
-          fontFamily:
-            "'IBM Plex Mono', monospace",
-          fontSize: "11px",
-          fontWeight: 700,
-          color: foreground,
-        }}
-      >
-        {progress}%
-      </div>
-    </div>
-  );
-}
+          /*
+           * কিছু task-এর dueDate null হতে পারে।
+           * status daily হলে আজকের task হিসেবে ধরা হবে।
+           */
+          if (
+            !task.dueDate &&
+            task.status === "daily"
+          ) {
+            return true;
+          }
 
-/* =========================================================
-   OVERVIEW ITEM
-========================================================= */
+          return false;
+        }
+      );
 
-interface OverviewItemProps {
-  icon: typeof CheckSquare;
-  title: string;
-  data: QuickSummaryData["tasks"];
-  foreground: string;
-  background: string;
-}
+    const taskTotal =
+      todayTasks.length;
 
-function OverviewItem({
-  icon: Icon,
-  title,
-  data,
-  foreground,
-  background,
-}: OverviewItemProps) {
-  return (
-    <div
-      className="rounded-2xl p-3.5"
-      style={{
-        background,
-      }}
-    >
-      <div className="flex items-start justify-between gap-3">
-        {/* Left */}
-        <div className="min-w-0">
-          {/* Icon */}
-          <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center mb-2.5"
-            style={{
-              background:
-                "#FFFFFF",
-            }}
-          >
-            <Icon
-              size={15}
-              color={foreground}
-              strokeWidth={2.2}
-            />
-          </div>
+    const taskCompleted =
+      todayTasks.filter(
+        (task) =>
+          task.status ===
+          "completed"
+      ).length;
 
-          {/* Title */}
-          <div
-            className="text-xs"
-            style={{
-              color: COLORS.ink,
-              fontWeight: 600,
-            }}
-          >
-            {title}
-          </div>
+    const taskPending =
+      Math.max(
+        0,
+        taskTotal -
+          taskCompleted
+      );
 
-          {/* Number */}
-          <div
-            className="mt-1 flex items-baseline gap-1"
-            style={{
-              fontFamily:
-                "'IBM Plex Mono', monospace",
-            }}
-          >
-            <span
-              style={{
-                fontSize: "18px",
-                fontWeight: 700,
-                color: foreground,
-              }}
-            >
-              {data.completed}
-            </span>
+    const taskCompletion =
+      taskTotal > 0
+        ? (taskCompleted /
+            taskTotal) *
+          100
+        : 0;
 
-            <span
-              style={{
-                fontSize: "13px",
-                color: COLORS.muted,
-              }}
-            >
-              / {data.total}
-            </span>
-          </div>
+    /* =====================================================
+       HABITS
 
-          {/* Completed / Remaining */}
-          <div
-            className="mt-1 text-[10px] leading-4"
-            style={{
-              color: COLORS.muted,
-            }}
-          >
-            {data.completed}টি সম্পন্ন
-            {" · "}
-            {data.remaining}টি বাকি
-          </div>
-        </div>
+       শুধু আজকে active হওয়া habit count হবে।
+       Future start date-এর habit count হবে না।
+    ===================================================== */
 
-        {/* Circle */}
-        <ProgressCircle
-          progress={data.progress}
-          foreground={foreground}
-          background="#FFFFFF"
-        />
-      </div>
-    </div>
-  );
-}
+    const allHabits =
+      await getHabits();
 
-/* =========================================================
-   OVERVIEW SECTION
-========================================================= */
+    const todayHabits =
+      allHabits.filter(
+        (habit) =>
+          isHabitAvailableToday(
+            habit,
+            today
+          )
+      );
 
-export default function OverviewSection() {
-  const [summary, setSummary] =
-    useState<QuickSummaryData | null>(
-      null
+    const habitTotal =
+      todayHabits.length;
+
+    let habitCompleted = 0;
+
+    await Promise.all(
+      todayHabits.map(
+        async (habit) => {
+          const completions =
+            await getHabitCompletions(
+              habit.id
+            );
+
+          const completedToday =
+            completions.some(
+              (completion) =>
+                completion.date ===
+                  today &&
+                completion.completed ===
+                  true
+            );
+
+          if (
+            completedToday
+          ) {
+            habitCompleted += 1;
+          }
+        }
+      )
     );
 
-  const [loading, setLoading] =
-    useState(true);
+    const habitPending =
+      Math.max(
+        0,
+        habitTotal -
+          habitCompleted
+      );
 
-  /* =======================================================
-     LOAD SUMMARY
-  ======================================================= */
+    const habitCompletion =
+      habitTotal > 0
+        ? (habitCompleted /
+            habitTotal) *
+          100
+        : 0;
 
-  const loadSummary =
-    useCallback(async () => {
-      try {
-        const data =
-          await getQuickSummary();
+    /* =====================================================
+       GOALS
 
-        setSummary(data);
-      } catch (error) {
-        console.error(
-          "Failed to load dashboard summary:",
-          error
-        );
-      } finally {
-        setLoading(false);
-      }
-    }, []);
+       শুধু আজকের active goal count হবে।
 
-  /* =======================================================
-     INITIAL LOAD + UPDATE LISTENER
-  ======================================================= */
+       Goal-এর startDate যদি future হয়,
+       তাহলে এখনো active নয়।
 
-  useEffect(() => {
-    let cancelled = false;
+       Goal-এর endDate আজকের আগে হলে
+       expired হিসেবে বাদ যাবে।
+    ===================================================== */
 
-    const load = async () => {
-      try {
-        const data =
-          await getQuickSummary();
+    const allGoals =
+      await getGoals();
 
-        if (!cancelled) {
-          setSummary(data);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          console.error(
-            "Failed to load dashboard summary:",
-            error
+    const todayGoals =
+      allGoals.filter(
+        (goal) => {
+
+          if (
+            goal.startDate &&
+            goal.startDate > today
+          ) {
+            return false;
+          }
+
+          if (
+            goal.endDate &&
+            goal.endDate < today
+          ) {
+            return false;
+          }
+
+          return (
+            goal.status !==
+            "completed"
           );
         }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
+      );
+
+    const goalTotal =
+      todayGoals.length;
+
+    let goalCompleted = 0;
+
+    const goalProgressValues =
+      await Promise.all(
+        todayGoals.map(
+          async (goal) => {
+
+            /*
+             * Goal already completed
+             */
+            if (
+              goal.status ===
+              "completed"
+            ) {
+              goalCompleted += 1;
+
+              return 100;
+            }
+
+            /*
+             * Goal-এর নিজের progress থাকলে
+             * সেটাই ব্যবহার করবো।
+             */
+            if (
+              typeof goal.progress ===
+              "number"
+            ) {
+              if (
+                goal.progress >=
+                100
+              ) {
+                goalCompleted += 1;
+              }
+
+              return goal.progress;
+            }
+
+            /*
+             * Otherwise Goal Tasks থেকে
+             * progress calculate হবে।
+             */
+            const goalTasks =
+              await getGoalTasks(
+                goal.id
+              );
+
+            if (
+              goalTasks.length ===
+              0
+            ) {
+              return 0;
+            }
+
+            const completed =
+              goalTasks.filter(
+                (task) =>
+                  task.completed
+              ).length;
+
+            if (
+              completed ===
+              goalTasks.length
+            ) {
+              goalCompleted += 1;
+            }
+
+            return (
+              (completed /
+                goalTasks.length) *
+              100
+            );
+          }
+        )
+      );
+
+    const goalPending =
+      Math.max(
+        0,
+        goalTotal -
+          goalCompleted
+      );
+
+    const goalProgress =
+      goalProgressValues.length >
+      0
+        ? goalProgressValues.reduce(
+            (sum, value) =>
+              sum + value,
+            0
+          ) /
+          goalProgressValues.length
+        : 0;
+
+    /* =====================================================
+       RETURN
+    ===================================================== */
+
+    return {
+      taskTotal,
+      taskCompleted,
+      taskPending,
+
+      habitTotal,
+      habitCompleted,
+      habitPending,
+
+      goalTotal,
+      goalCompleted,
+      goalPending,
+
+      taskCompletion:
+        clampPercentage(
+          taskCompletion
+        ),
+
+      habitCompletion:
+        clampPercentage(
+          habitCompletion
+        ),
+
+      goalProgress:
+        clampPercentage(
+          goalProgress
+        ),
     };
-
-    void load();
-
-    const handleUpdate = () => {
-      void load();
-    };
-
-    window.addEventListener(
-      "life-os-task-changed",
-      handleUpdate
-    );
-
-    window.addEventListener(
-      "life-os-habit-changed",
-      handleUpdate
-    );
-
-    window.addEventListener(
-      "life-os-goal-changed",
-      handleUpdate
-    );
-
-    window.addEventListener(
-      "life-os-task-synced",
-      handleUpdate
-    );
-
-    window.addEventListener(
-      "life-os-habit-synced",
-      handleUpdate
-    );
-
-    window.addEventListener(
-      "life-os-goal-synced",
-      handleUpdate
-    );
-
-    return () => {
-      cancelled = true;
-
-      window.removeEventListener(
-        "life-os-task-changed",
-        handleUpdate
-      );
-
-      window.removeEventListener(
-        "life-os-habit-changed",
-        handleUpdate
-      );
-
-      window.removeEventListener(
-        "life-os-goal-changed",
-        handleUpdate
-      );
-
-      window.removeEventListener(
-        "life-os-task-synced",
-        handleUpdate
-      );
-
-      window.removeEventListener(
-        "life-os-habit-synced",
-        handleUpdate
-      );
-
-      window.removeEventListener(
-        "life-os-goal-synced",
-        handleUpdate
-      );
-    };
-  }, [loadSummary]);
-
-  /* =======================================================
-     LOADING DATA
-  ======================================================= */
-
-  const data: QuickSummaryData = summary ?? {
-    tasks: {
-      total: 0,
-      completed: 0,
-      remaining: 0,
-      progress: 0,
-    },
-
-    habits: {
-      total: 0,
-      completed: 0,
-      remaining: 0,
-      progress: 0,
-    },
-
-    goals: {
-      total: 0,
-      completed: 0,
-      remaining: 0,
-      progress: 0,
-    },
   };
-
-  /* =======================================================
-     UI
-  ======================================================= */
-
-  return (
-    <DashboardCard>
-      <DashboardSectionTitle
-        title="ওভারভিউ"
-      />
-
-      <div className="grid grid-cols-2 gap-3">
-        {/* Tasks */}
-        <OverviewItem
-          icon={CheckSquare}
-          title="আজকের টাস্ক"
-          data={data.tasks}
-          foreground={
-            COLORS.task
-          }
-          background={
-            COLORS.taskBg
-          }
-        />
-
-        {/* Habits */}
-        <OverviewItem
-          icon={Flame}
-          title="আজকের অভ্যাস"
-          data={data.habits}
-          foreground={
-            COLORS.habit
-          }
-          background={
-            COLORS.habitBg
-          }
-        />
-
-        {/* Goals */}
-        <OverviewItem
-          icon={Target}
-          title="আজকের লক্ষ্য"
-          data={data.goals}
-          foreground={
-            COLORS.goal
-          }
-          background={
-            COLORS.goalBg
-          }
-        />
-
-        {/* Overall */}
-        <div
-          className="rounded-2xl p-3.5"
-          style={{
-            background:
-              "#F6E4D8",
-          }}
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <div
-                className="w-8 h-8 rounded-lg flex items-center justify-center mb-2.5"
-                style={{
-                  background:
-                    "#FFFFFF",
-                }}
-              >
-                <CheckSquare
-                  size={15}
-                  color="#B15A38"
-                  strokeWidth={2.2}
-                />
-              </div>
-
-              <div
-                className="text-xs"
-                style={{
-                  color: COLORS.ink,
-                  fontWeight: 600,
-                }}
-              >
-                মোট সম্পন্নতা
-              </div>
-
-              <div
-                className="mt-1"
-                style={{
-                  fontFamily:
-                    "'IBM Plex Mono', monospace",
-                  fontSize: "18px",
-                  fontWeight: 700,
-                  color: "#B15A38",
-                }}
-              >
-                {Math.round(
-                  (
-                    data.tasks.progress +
-                    data.habits.progress +
-                    data.goals.progress
-                  ) / 3
-                )}
-                %
-              </div>
-            </div>
-
-            <ProgressCircle
-              progress={Math.round(
-                (
-                  data.tasks.progress +
-                  data.habits.progress +
-                  data.goals.progress
-                ) / 3
-              )}
-              foreground="#B15A38"
-              background="#FFFFFF"
-            />
-          </div>
-        </div>
-      </div>
-    </DashboardCard>
-  );
-}
