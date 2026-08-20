@@ -7,6 +7,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import {
+  useCallback,
   useEffect,
   useState,
 } from "react";
@@ -14,10 +15,42 @@ import {
 import DashboardCard from "./DashboardCard";
 import DashboardSectionTitle from "./DashboardSectionTitle";
 
+import { getTasks } from "@/features/tasks/services/task.service";
+
 import {
-  getQuickSummary,
-  QuickSummaryData,
-} from "../services/summary.service";
+  getHabits,
+  getHabitCompletions,
+} from "@/features/habits/services/habit.service";
+
+import {
+  getGoals,
+  getGoalTasks,
+} from "@/features/goals/services/goal.service";
+
+/* =========================================================
+   TYPES
+========================================================= */
+
+interface Summary {
+  tasks: {
+    total: number;
+    completed: number;
+    pending: number;
+  };
+
+  habits: {
+    total: number;
+    completed: number;
+    pending: number;
+  };
+
+  goals: {
+    total: number;
+    completed: number;
+    pending: number;
+    progress: number;
+  };
+}
 
 /* =========================================================
    COLORS
@@ -25,244 +58,173 @@ import {
 
 const COLORS = {
   ink: "#2A2318",
-  muted: "#8F8677",
+  muted: "#8C8374",
 
-  task: "#2A6459",
-  taskBg: "#E3EFEA",
-
-  habit: "#B4842A",
-  habitBg: "#F5EACB",
-
-  goal: "#7C4F6E",
-  goalBg: "#F0E3EC",
-
-  overall: "#B15A38",
-  overallBg: "#F6E4D8",
-};
-
-/* =========================================================
-   EMPTY SUMMARY
-========================================================= */
-
-const EMPTY_SUMMARY: QuickSummaryData = {
-  tasks: {
-    total: 0,
-    completed: 0,
-    remaining: 0,
-    progress: 0,
+  task: {
+    foreground: "#2A6459",
+    background: "#E3EFEA",
   },
 
-  habits: {
-    total: 0,
-    completed: 0,
-    remaining: 0,
-    progress: 0,
+  habit: {
+    foreground: "#B4842A",
+    background: "#F5EACB",
   },
 
-  goals: {
-    total: 0,
-    completed: 0,
-    remaining: 0,
-    progress: 0,
+  goal: {
+    foreground: "#7C4F6E",
+    background: "#F0E3EC",
+  },
+
+  progress: {
+    foreground: "#B15A38",
+    background: "#F6E4D8",
   },
 };
 
 /* =========================================================
-   PROGRESS CIRCLE
+   HELPERS
 ========================================================= */
 
-interface ProgressCircleProps {
-  progress: number;
-  foreground: string;
-  background: string;
-}
+const getTodayString = (): string => {
+  const today = new Date();
 
-function ProgressCircle({
-  progress,
-  foreground,
-  background,
-}: ProgressCircleProps) {
-  const size = 54;
-  const stroke = 5;
+  const year = today.getFullYear();
 
-  const radius =
-    (size - stroke) / 2;
+  const month = String(
+    today.getMonth() + 1
+  ).padStart(2, "0");
 
-  const circumference =
-    2 * Math.PI * radius;
+  const day = String(
+    today.getDate()
+  ).padStart(2, "0");
 
-  const offset =
-    circumference -
-    (progress / 100) *
-      circumference;
+  return `${year}-${month}-${day}`;
+};
 
-  return (
-    <div
-      className="relative flex items-center justify-center shrink-0"
-      style={{
-        width: size,
-        height: size,
-      }}
-    >
-      <svg
-        width={size}
-        height={size}
-        viewBox={`0 0 ${size} ${size}`}
-        className="-rotate-90"
-      >
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="none"
-          stroke={background}
-          strokeWidth={stroke}
-        />
+const clampPercentage = (
+  value: number
+): number => {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
 
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="none"
-          stroke={foreground}
-          strokeWidth={stroke}
-          strokeLinecap="round"
-          strokeDasharray={
-            circumference
-          }
-          strokeDashoffset={offset}
-        />
-      </svg>
-
-      <div
-        className="absolute inset-0 flex items-center justify-center"
-        style={{
-          fontFamily:
-            "'IBM Plex Mono', monospace",
-          fontSize: "11px",
-          fontWeight: 700,
-          color: foreground,
-        }}
-      >
-        {progress}%
-      </div>
-    </div>
+  return Math.min(
+    100,
+    Math.max(
+      0,
+      Math.round(value)
+    )
   );
-}
+};
 
 /* =========================================================
-   OVERVIEW ITEM
+   OVERVIEW CARD
 ========================================================= */
 
-interface OverviewItemProps {
+interface OverviewCardProps {
   icon: typeof CheckSquare;
   title: string;
-  data: QuickSummaryData["tasks"];
+  value: string;
+  subtitle: string;
   foreground: string;
   background: string;
 }
 
-function OverviewItem({
+function OverviewCard({
   icon: Icon,
   title,
-  data,
+  value,
+  subtitle,
   foreground,
   background,
-}: OverviewItemProps) {
+}: OverviewCardProps) {
   return (
     <div
-      className="rounded-2xl p-3.5"
+      className="rounded-2xl p-3.5 flex flex-col gap-2.5"
       style={{
         background,
       }}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          {/* Icon */}
-          <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center mb-2.5"
-            style={{
-              background: "#FFFFFF",
-            }}
-          >
-            <Icon
-              size={15}
-              color={foreground}
-              strokeWidth={2.2}
-            />
-          </div>
+      {/* Icon */}
 
-          {/* Title */}
-          <div
-            className="text-xs"
-            style={{
-              color: COLORS.ink,
-              fontWeight: 600,
-            }}
-          >
-            {title}
-          </div>
+      <div
+        className="w-8 h-8 rounded-lg flex items-center justify-center"
+        style={{
+          background: "#FFFFFF",
+        }}
+      >
+        <Icon
+          size={15}
+          color={foreground}
+          strokeWidth={2.2}
+        />
+      </div>
 
-          {/* Number */}
-          <div
-            className="mt-1 flex items-baseline gap-1"
-            style={{
-              fontFamily:
-                "'IBM Plex Mono', monospace",
-            }}
-          >
-            <span
-              style={{
-                fontSize: "18px",
-                fontWeight: 700,
-                color: foreground,
-              }}
-            >
-              {data.completed}
-            </span>
+      {/* Content */}
 
-            <span
-              style={{
-                fontSize: "13px",
-                color: COLORS.muted,
-              }}
-            >
-              / {data.total}
-            </span>
-          </div>
-
-          {/* Remaining */}
-          <div
-            className="mt-1 text-[10px]"
-            style={{
-              color: COLORS.muted,
-            }}
-          >
-            {data.completed}টি সম্পন্ন ·{" "}
-            {data.remaining}টি বাকি
-          </div>
+      <div>
+        <div
+          style={{
+            fontFamily:
+              "'IBM Plex Mono', monospace",
+            fontSize: "18px",
+            fontWeight: 600,
+            color: foreground,
+          }}
+        >
+          {value}
         </div>
 
-        {/* Progress */}
-        <ProgressCircle
-          progress={data.progress}
-          foreground={foreground}
-          background="#FFFFFF"
-        />
+        <div
+          className="text-xs mt-0.5"
+          style={{
+            color: COLORS.ink,
+            fontWeight: 600,
+            opacity: 0.8,
+          }}
+        >
+          {title}
+        </div>
+
+        <div
+          className="text-[10px] mt-1"
+          style={{
+            color: COLORS.muted,
+          }}
+        >
+          {subtitle}
+        </div>
       </div>
     </div>
   );
 }
 
 /* =========================================================
-   OVERVIEW SECTION
+   COMPONENT
 ========================================================= */
 
 export default function OverviewSection() {
   const [summary, setSummary] =
-    useState<QuickSummaryData>(
-      EMPTY_SUMMARY
-    );
+    useState<Summary>({
+      tasks: {
+        total: 0,
+        completed: 0,
+        pending: 0,
+      },
+
+      habits: {
+        total: 0,
+        completed: 0,
+        pending: 0,
+      },
+
+      goals: {
+        total: 0,
+        completed: 0,
+        pending: 0,
+        progress: 0,
+      },
+    });
 
   const [loading, setLoading] =
     useState(true);
@@ -271,56 +233,294 @@ export default function OverviewSection() {
      LOAD SUMMARY
   ======================================================= */
 
-  const loadSummary = async () => {
-    try {
-      const data =
-        await getQuickSummary();
+  const loadSummary =
+    useCallback(async () => {
+      try {
+        setLoading(true);
 
-      setSummary(data);
-    } catch (error) {
-      console.error(
-        "Failed to load dashboard summary:",
-        error
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
+        const today =
+          getTodayString();
+
+        /* =================================================
+           TASKS
+        ================================================= */
+
+        const allTasks =
+          await getTasks();
+
+        /*
+         * শুধুমাত্র আজকের task।
+         *
+         * Future/pending task এখানে আসবে না।
+         *
+         * dueDate অবশ্যই আজকের date হতে হবে।
+         */
+
+        const todayTasks =
+          allTasks.filter(
+            (task) =>
+              task.dueDate === today
+          );
+
+        const totalTasks =
+          todayTasks.length;
+
+        const completedTasks =
+          todayTasks.filter(
+            (task) =>
+              task.status ===
+              "completed"
+          ).length;
+
+        const pendingTasks =
+          Math.max(
+            0,
+            totalTasks -
+              completedTasks
+          );
+
+        /* =================================================
+           HABITS
+        ================================================= */
+
+        const allHabits =
+          await getHabits();
+
+        /*
+         * আজকের জন্য active habits।
+         *
+         * Habit-এর আলাদা dueDate নেই,
+         * তাই active habit-গুলো আজকের habit
+         * হিসেবে গণনা করা হচ্ছে।
+         */
+
+        const activeHabits =
+          allHabits.filter(
+            (habit) =>
+              habit.status ===
+              "active"
+          );
+
+        const totalHabits =
+          activeHabits.length;
+
+        let completedHabits = 0;
+
+        /*
+         * প্রতিটি habit আজ complete হয়েছে
+         * কিনা check করছি।
+         */
+
+        await Promise.all(
+          activeHabits.map(
+            async (habit) => {
+              try {
+                const completions =
+                  await getHabitCompletions(
+                    habit.id
+                  );
+
+                const completedToday =
+                  completions.some(
+                    (completion) =>
+                      completion.date ===
+                        today &&
+                      completion.completed ===
+                        true
+                  );
+
+                if (
+                  completedToday
+                ) {
+                  completedHabits += 1;
+                }
+              } catch (error) {
+                console.error(
+                  "Habit completion load failed:",
+                  error
+                );
+              }
+            }
+          )
+        );
+
+        const pendingHabits =
+          Math.max(
+            0,
+            totalHabits -
+              completedHabits
+          );
+
+        /* =================================================
+           GOALS
+        ================================================= */
+
+        const allGoals =
+          await getGoals();
+
+        /*
+         * শুধুমাত্র যে Goal-এর date range-এর
+         * মধ্যে আজকের date আছে সেগুলো।
+         *
+         * Future goal এখানে গণনা হবে না।
+         */
+
+        const todayGoals =
+          allGoals.filter(
+            (goal) =>
+              goal.startDate <=
+                today &&
+              goal.endDate >=
+                today
+          );
+
+        const totalGoals =
+          todayGoals.length;
+
+        let completedGoals = 0;
+
+        let totalGoalProgress = 0;
+
+        /*
+         * প্রতিটি আজকের goal-এর progress
+         * calculate করছি।
+         */
+
+        for (const goal of todayGoals) {
+          let progress =
+            typeof goal.progress ===
+            "number"
+              ? goal.progress
+              : 0;
+
+          /*
+           * Goal-এর progress যদি 0 হয়,
+           * Goal Tasks থেকে আবার calculate করি।
+           */
+
+          const goalTasks =
+            await getGoalTasks(
+              goal.id
+            );
+
+          if (
+            goalTasks.length > 0
+          ) {
+            const completed =
+              goalTasks.filter(
+                (task) =>
+                  task.completed
+              ).length;
+
+            progress =
+              (completed /
+                goalTasks.length) *
+              100;
+          }
+
+          progress =
+            clampPercentage(
+              progress
+            );
+
+          totalGoalProgress +=
+            progress;
+
+          if (
+            goal.status ===
+              "completed" ||
+            progress === 100
+          ) {
+            completedGoals += 1;
+          }
+        }
+
+        const pendingGoals =
+          Math.max(
+            0,
+            totalGoals -
+              completedGoals
+          );
+
+        const goalProgress =
+          totalGoals > 0
+            ? clampPercentage(
+                totalGoalProgress /
+                  totalGoals
+              )
+            : 0;
+
+        /* =================================================
+           SET SUMMARY
+        ================================================= */
+
+        setSummary({
+          tasks: {
+            total:
+              totalTasks,
+            completed:
+              completedTasks,
+            pending:
+              pendingTasks,
+          },
+
+          habits: {
+            total:
+              totalHabits,
+            completed:
+              completedHabits,
+            pending:
+              pendingHabits,
+          },
+
+          goals: {
+            total:
+              totalGoals,
+            completed:
+              completedGoals,
+            pending:
+              pendingGoals,
+            progress:
+              goalProgress,
+          },
+        });
+      } catch (error) {
+        console.error(
+          "Overview summary load failed:",
+          error
+        );
+      } finally {
+        setLoading(false);
+      }
+    }, []);
 
   /* =======================================================
-     EFFECT
+     LOAD + REALTIME UPDATE
   ======================================================= */
 
   useEffect(() => {
     let cancelled = false;
 
-    const load = async () => {
-      try {
-        const data =
-          await getQuickSummary();
-
-        if (!cancelled) {
-          setSummary(data);
+    const initialLoad =
+      async () => {
+        if (cancelled) {
+          return;
         }
-      } catch (error) {
-        if (!cancelled) {
-          console.error(
-            "Failed to load dashboard summary:",
-            error
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
 
-    void load();
+        await loadSummary();
+      };
 
-    const handleUpdate = () => {
-      void load();
-    };
+    void initialLoad();
+
+    /*
+     * Task / Habit / Goal change হলে
+     * Overview আবার load হবে।
+     */
+
+    const handleUpdate =
+      () => {
+        void loadSummary();
+      };
 
     window.addEventListener(
       "life-os-task-changed",
@@ -343,12 +543,17 @@ export default function OverviewSection() {
     );
 
     window.addEventListener(
-      "life-os-habit-synced",
+      "life-os-goal-synced",
       handleUpdate
     );
 
+    /*
+     * Online হলে Firebase data থেকে
+     * আবার calculate হবে।
+     */
+
     window.addEventListener(
-      "life-os-goal-synced",
+      "online",
       handleUpdate
     );
 
@@ -376,61 +581,40 @@ export default function OverviewSection() {
       );
 
       window.removeEventListener(
-        "life-os-habit-synced",
+        "life-os-goal-synced",
         handleUpdate
       );
 
       window.removeEventListener(
-        "life-os-goal-synced",
+        "online",
         handleUpdate
       );
     };
-  }, []);
+  }, [loadSummary]);
 
   /* =======================================================
-     OVERALL PROGRESS
+     VALUES
   ======================================================= */
 
-  const overallProgress =
-    Math.round(
-      (
-        summary.tasks.progress +
-        summary.habits.progress +
-        summary.goals.progress
-      ) / 3
-    );
+  const taskValue =
+    loading
+      ? "—"
+      : `${summary.tasks.completed}/${summary.tasks.total}`;
 
-  /* =======================================================
-     LOADING
-  ======================================================= */
+  const habitValue =
+    loading
+      ? "—"
+      : `${summary.habits.completed}/${summary.habits.total}`;
 
-  if (loading) {
-    return (
-      <DashboardCard>
-        <DashboardSectionTitle
-          title="ওভারভিউ"
-        />
+  const goalValue =
+    loading
+      ? "—"
+      : `${summary.goals.completed}/${summary.goals.total}`;
 
-        <div className="grid grid-cols-2 gap-3">
-          {[
-            "task",
-            "habit",
-            "goal",
-            "overall",
-          ].map((item) => (
-            <div
-              key={item}
-              className="h-[150px] rounded-2xl animate-pulse"
-              style={{
-                background:
-                  "#F0EBE1",
-              }}
-            />
-          ))}
-        </div>
-      </DashboardCard>
-    );
-  }
+  const progressValue =
+    loading
+      ? "—"
+      : `${summary.goals.progress}%`;
 
   /* =======================================================
      UI
@@ -443,93 +627,89 @@ export default function OverviewSection() {
       />
 
       <div className="grid grid-cols-2 gap-3">
-        {/* TODAY TASK */}
-        <OverviewItem
+        {/* ================================================
+            TODAY TASKS
+        ================================================= */}
+
+        <OverviewCard
           icon={CheckSquare}
           title="আজকের টাস্ক"
-          data={summary.tasks}
-          foreground={COLORS.task}
-          background={COLORS.taskBg}
+          value={taskValue}
+          subtitle={
+            loading
+              ? "লোড হচ্ছে..."
+              : `${summary.tasks.pending}টি বাকি`
+          }
+          foreground={
+            COLORS.task.foreground
+          }
+          background={
+            COLORS.task.background
+          }
         />
 
-        {/* TODAY HABIT */}
-        <OverviewItem
+        {/* ================================================
+            TODAY HABITS
+        ================================================= */}
+
+        <OverviewCard
           icon={Flame}
           title="আজকের অভ্যাস"
-          data={summary.habits}
-          foreground={COLORS.habit}
-          background={COLORS.habitBg}
+          value={habitValue}
+          subtitle={
+            loading
+              ? "লোড হচ্ছে..."
+              : `${summary.habits.pending}টি বাকি`
+          }
+          foreground={
+            COLORS.habit.foreground
+          }
+          background={
+            COLORS.habit.background
+          }
         />
 
-        {/* TODAY GOAL */}
-        <OverviewItem
+        {/* ================================================
+            TODAY GOALS
+        ================================================= */}
+
+        <OverviewCard
           icon={Target}
-          title="আজকের লক্ষ্য"
-          data={summary.goals}
-          foreground={COLORS.goal}
-          background={COLORS.goalBg}
+          title="সক্রিয় লক্ষ্য"
+          value={goalValue}
+          subtitle={
+            loading
+              ? "লোড হচ্ছে..."
+              : `${summary.goals.pending}টি বাকি`
+          }
+          foreground={
+            COLORS.goal.foreground
+          }
+          background={
+            COLORS.goal.background
+          }
         />
 
-        {/* OVERALL */}
-        <div
-          className="rounded-2xl p-3.5"
-          style={{
-            background:
-              COLORS.overallBg,
-          }}
-        >
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <div
-                className="w-8 h-8 rounded-lg flex items-center justify-center mb-2.5"
-                style={{
-                  background:
-                    "#FFFFFF",
-                }}
-              >
-                <TrendingUp
-                  size={15}
-                  color={COLORS.overall}
-                  strokeWidth={2.2}
-                />
-              </div>
+        {/* ================================================
+            GOAL PROGRESS
+        ================================================= */}
 
-              <div
-                className="text-xs"
-                style={{
-                  color: COLORS.ink,
-                  fontWeight: 600,
-                }}
-              >
-                মোট সম্পন্নতা
-              </div>
-
-              <div
-                className="mt-1"
-                style={{
-                  fontFamily:
-                    "'IBM Plex Mono', monospace",
-                  fontSize: "18px",
-                  fontWeight: 700,
-                  color:
-                    COLORS.overall,
-                }}
-              >
-                {overallProgress}%
-              </div>
-            </div>
-
-            <ProgressCircle
-              progress={
-                overallProgress
-              }
-              foreground={
-                COLORS.overall
-              }
-              background="#FFFFFF"
-            />
-          </div>
-        </div>
+        <OverviewCard
+          icon={TrendingUp}
+          title="লক্ষ্য অগ্রগতি"
+          value={progressValue}
+          subtitle={
+            loading
+              ? "লোড হচ্ছে..."
+              : "আজকের লক্ষ্য"
+          }
+          foreground={
+            COLORS.progress.foreground
+          }
+          background={
+            COLORS.progress.background
+          }
+        />
       </div>
     </DashboardCard>
   );
