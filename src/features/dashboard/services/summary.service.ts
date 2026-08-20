@@ -14,12 +14,21 @@ export interface QuickSummaryData {
   goalProgress: number;
 }
 
-const clampPercentage = (value: number): number => {
+/* =========================================================
+   HELPERS
+========================================================= */
+
+const clampPercentage = (
+  value: number
+): number => {
   if (!Number.isFinite(value)) {
     return 0;
   }
 
-  return Math.min(100, Math.max(0, Math.round(value)));
+  return Math.min(
+    100,
+    Math.max(0, Math.round(value))
+  );
 };
 
 const getTodayString = (): string => {
@@ -32,53 +41,89 @@ const getTodayString = (): string => {
   ].join("-");
 };
 
+/* =========================================================
+   QUICK SUMMARY
+========================================================= */
+
 export const getQuickSummary =
   async (): Promise<QuickSummaryData> => {
-    /*
-     * TASK
-     */
+    const today = getTodayString();
+
+    /* =====================================================
+       TASK
+       শুধু আজকের Task count হবে।
+       Pending/Future Task এখানে count হবে না।
+    ===================================================== */
+
     const tasks = await getTasks();
 
-    const totalTasks = tasks.length;
+    const todayTasks = tasks.filter(
+      (task) => {
+        if (!task.dueDate) {
+          return false;
+        }
 
-    const completedTasks = tasks.filter(
-      (task) => task.status === "completed"
-    ).length;
-
-    const taskCompletion =
-      totalTasks > 0
-        ? (completedTasks / totalTasks) * 100
-        : 0;
-
-    /*
-     * HABIT
-     */
-    const habits = await getHabits();
-
-    const activeHabits = habits.filter(
-      (habit) => habit.status === "active"
+        return (
+          task.dueDate.slice(0, 10) ===
+          today
+        );
+      }
     );
 
-    const today = getTodayString();
+    const totalTodayTasks =
+      todayTasks.length;
+
+    const completedTodayTasks =
+      todayTasks.filter(
+        (task) =>
+          task.status === "completed"
+      ).length;
+
+    const taskCompletion =
+      totalTodayTasks > 0
+        ? (completedTodayTasks /
+            totalTodayTasks) *
+          100
+        : 0;
+
+    /* =====================================================
+       HABIT
+       আজকের active habit-এর মধ্যে
+       কতগুলো আজ complete হয়েছে।
+    ===================================================== */
+
+    const habits = await getHabits();
+
+    const activeHabits =
+      habits.filter(
+        (habit) =>
+          habit.status === "active"
+      );
 
     let completedHabits = 0;
 
     await Promise.all(
-      activeHabits.map(async (habit) => {
-        const completions =
-          await getHabitCompletions(habit.id);
+      activeHabits.map(
+        async (habit) => {
+          const completions =
+            await getHabitCompletions(
+              habit.id
+            );
 
-        const completedToday =
-          completions.some(
-            (completion) =>
-              completion.date === today &&
-              completion.completed === true
-          );
+          const completedToday =
+            completions.some(
+              (completion) =>
+                completion.date ===
+                  today &&
+                completion.completed ===
+                  true
+            );
 
-        if (completedToday) {
-          completedHabits += 1;
+          if (completedToday) {
+            completedHabits += 1;
+          }
         }
-      })
+      )
     );
 
     const habitCompletion =
@@ -88,15 +133,18 @@ export const getQuickSummary =
           100
         : 0;
 
-    /*
-     * GOAL
-     */
+    /* =====================================================
+       GOAL
+       Active Goal-এর progress-এর average।
+    ===================================================== */
+
     const goals = await getGoals();
 
-    const activeGoals = goals.filter(
-      (goal) =>
-        goal.status !== "completed"
-    );
+    const activeGoals =
+      goals.filter(
+        (goal) =>
+          goal.status === "active"
+      );
 
     let goalProgress = 0;
 
@@ -105,10 +153,11 @@ export const getQuickSummary =
         await Promise.all(
           activeGoals.map(
             async (goal) => {
-              /*
-               * If your Goal already has
-               * progress, use it.
-               */
+              /* -----------------------------------------
+                 Goal-এর নিজের progress থাকলে
+                 সেটাই ব্যবহার করবে।
+              ----------------------------------------- */
+
               if (
                 typeof goal.progress ===
                 "number"
@@ -116,10 +165,10 @@ export const getQuickSummary =
                 return goal.progress;
               }
 
-              /*
-               * Otherwise calculate from
-               * Goal Tasks.
-               */
+              /* -----------------------------------------
+                 না থাকলে Goal Tasks থেকে calculate করবে।
+              ----------------------------------------- */
+
               const goalTasks =
                 await getGoalTasks(
                   goal.id
@@ -131,9 +180,10 @@ export const getQuickSummary =
                 return 0;
               }
 
-             const completed =
+              const completed =
                 goalTasks.filter(
-                    (task) => task.completed
+                  (task) =>
+                    task.completed
                 ).length;
 
               return (
@@ -152,6 +202,10 @@ export const getQuickSummary =
           0
         ) / activeGoals.length;
     }
+
+    /* =====================================================
+       RETURN
+    ===================================================== */
 
     return {
       taskCompletion:
