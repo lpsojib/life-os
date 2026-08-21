@@ -1,18 +1,32 @@
 export type NoteType = "text" | "checklist";
 
-export interface ChecklistItem {
+export type NoteBlockType = "text" | "checklist";
+
+export interface NoteBlock {
   id: string;
+  type: NoteBlockType;
   text: string;
-  completed: boolean;
+  completed?: boolean;
 }
 
 export interface Note {
   id: string;
   title: string;
-  type: NoteType;
+
+  // New block system
+  blocks?: NoteBlock[];
+
+  // Old fields kept for compatibility
   content: string;
-  checklist: ChecklistItem[];
+  checklist: {
+    id: string;
+    text: string;
+    completed: boolean;
+  }[];
+
+  type: NoteType;
   pinned: boolean;
+
   createdAt: string;
   updatedAt: string;
 }
