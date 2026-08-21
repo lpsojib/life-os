@@ -13,6 +13,7 @@ import { auth } from "@/lib/firebase";
 
 import {
   getNotes,
+  syncPendingNotes,
 } from "../services/notebook.service";
 
 import {
@@ -40,6 +41,10 @@ let authUnsubscribe:
 
 let started = false;
 
+/* ================================================= */
+/* EMIT */
+/* ================================================= */
+
 function emit() {
   listeners.forEach(
     (listener) => {
@@ -47,6 +52,10 @@ function emit() {
     },
   );
 }
+
+/* ================================================= */
+/* LOAD NOTES */
+/* ================================================= */
 
 async function loadNotes() {
   const user =
@@ -102,6 +111,10 @@ async function loadNotes() {
   }
 }
 
+/* ================================================= */
+/* START STORE */
+/* ================================================= */
+
 function startStore() {
   if (started) {
     return;
@@ -112,11 +125,39 @@ function startStore() {
   authUnsubscribe =
     onAuthStateChanged(
       auth,
-      () => {
+      (user) => {
+        if (!user) {
+          snapshot = {
+            notes: [],
+            loading: false,
+            error: null,
+          };
+
+          emit();
+
+          return;
+        }
+
         void loadNotes();
+
+        /*
+         * Try pending offline
+         * notes when user logs in.
+         */
+        if (
+          typeof navigator !==
+            "undefined" &&
+          navigator.onLine
+        ) {
+          void syncPendingNotes();
+        }
       },
     );
 }
+
+/* ================================================= */
+/* SUBSCRIBE */
+/* ================================================= */
 
 function subscribe(
   listener: () => void,
@@ -144,6 +185,10 @@ function subscribe(
   };
 }
 
+/* ================================================= */
+/* SNAPSHOT */
+/* ================================================= */
+
 function getSnapshot() {
   return snapshot;
 }
@@ -156,13 +201,26 @@ function getServerSnapshot(): NotesSnapshot {
   };
 }
 
-/* -------------------------------- */
+/* ================================================= */
 /* ADD NOTE */
-/* -------------------------------- */
+/* ================================================= */
 
 export function addNoteToStore(
   note: Note,
 ) {
+  /*
+   * Prevent duplicate note.
+   */
+  const exists =
+    snapshot.notes.some(
+      (item) =>
+        item.id === note.id,
+    );
+
+  if (exists) {
+    return;
+  }
+
   snapshot = {
     ...snapshot,
 
@@ -175,13 +233,39 @@ export function addNoteToStore(
   emit();
 }
 
-/* -------------------------------- */
+/* ================================================= */
 /* UPDATE NOTE */
-/* -------------------------------- */
+/* ================================================= */
 
 export function updateNoteInStore(
   updatedNote: Note,
 ) {
+  const exists =
+    snapshot.notes.some(
+      (note) =>
+        note.id ===
+        updatedNote.id,
+    );
+
+  if (!exists) {
+    /*
+     * If the note isn't loaded yet,
+     * add it to the beginning.
+     */
+    snapshot = {
+      ...snapshot,
+
+      notes: [
+        updatedNote,
+        ...snapshot.notes,
+      ],
+    };
+
+    emit();
+
+    return;
+  }
+
   snapshot = {
     ...snapshot,
 
@@ -198,9 +282,9 @@ export function updateNoteInStore(
   emit();
 }
 
-/* -------------------------------- */
+/* ================================================= */
 /* DELETE NOTE */
-/* -------------------------------- */
+/* ================================================= */
 
 export function deleteNoteFromStore(
   noteId: string,
@@ -218,9 +302,9 @@ export function deleteNoteFromStore(
   emit();
 }
 
-/* -------------------------------- */
+/* ================================================= */
 /* PIN NOTE */
-/* -------------------------------- */
+/* ================================================= */
 
 export function updateNotePinInStore(
   noteId: string,
@@ -236,6 +320,8 @@ export function updateNotePinInStore(
             ? {
                 ...note,
                 pinned,
+                updatedAt:
+                  new Date().toISOString(),
               }
             : note,
       ),
@@ -244,9 +330,9 @@ export function updateNotePinInStore(
   emit();
 }
 
-/* -------------------------------- */
+/* ================================================= */
 /* HOOK */
-/* -------------------------------- */
+/* ================================================= */
 
 export function useNotes() {
   return useSyncExternalStore(
@@ -256,10 +342,34 @@ export function useNotes() {
   );
 }
 
-/* -------------------------------- */
+/* ================================================= */
 /* REFRESH */
-/* -------------------------------- */
+/* ================================================= */
 
 export function refreshNotes() {
   void loadNotes();
+}
+
+/* ================================================= */
+/* ONLINE EVENT */
+/* ================================================= */
+
+if (
+  typeof window !==
+  "undefined"
+) {
+  window.addEventListener(
+    "online",
+    () => {
+      void syncPendingNotes();
+
+      /*
+       * Reload after pending
+       * notes have been synced.
+       */
+      window.setTimeout(() => {
+        void loadNotes();
+      }, 500);
+    },
+  );
 }
