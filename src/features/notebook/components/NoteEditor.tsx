@@ -20,13 +20,44 @@ import {
 } from "lucide-react";
 
 import { updateNote } from "../services/notebook.service";
-import { Note } from "../types/notebook.types";
+
+import {
+  Note,
+  NoteBlock as NoteBlockType,
+} from "../types/notebook.types";
 
 interface NoteEditorProps {
   note: Note;
   onChange: (updatedNote: Note) => void;
   onClose: () => void;
 }
+
+/* -------------------------------- */
+/* Create Block */
+/* -------------------------------- */
+
+function createBlock(
+  type: "text" | "checklist",
+): NoteBlockType {
+  if (type === "checklist") {
+    return {
+      id: crypto.randomUUID(),
+      type: "checklist",
+      text: "",
+      completed: false,
+    };
+  }
+
+  return {
+    id: crypto.randomUUID(),
+    type: "text",
+    text: "",
+  };
+}
+
+/* -------------------------------- */
+/* Editor */
+/* -------------------------------- */
 
 export default function NoteEditor({
   note,
@@ -37,9 +68,46 @@ export default function NoteEditor({
     note.title || "",
   );
 
-  const [blocks, setBlocks] = useState(
-    () => note.blocks ?? [],
-  );
+  const [blocks, setBlocks] =
+    useState<NoteBlockType[]>(
+      () => {
+        if (
+          note.blocks &&
+          note.blocks.length > 0
+        ) {
+          return note.blocks;
+        }
+
+        if (note.content?.trim()) {
+          return [
+            {
+              id: crypto.randomUUID(),
+              type: "text",
+              text: note.content,
+            },
+          ];
+        }
+
+        if (
+          note.checklist &&
+          note.checklist.length > 0
+        ) {
+          return note.checklist.map(
+            (item) => ({
+              id: item.id,
+              type: "checklist",
+              text: item.text,
+              completed:
+                Boolean(
+                  item.completed,
+                ),
+            }),
+          );
+        }
+
+        return [createBlock("text")];
+      },
+    );
 
   const [saving, setSaving] =
     useState(false);
@@ -48,56 +116,102 @@ export default function NoteEditor({
     useState(false);
 
   const saveTimer =
-    useRef<ReturnType<typeof setTimeout> | null>(
-      null,
-    );
+    useRef<ReturnType<
+      typeof setTimeout
+    > | null>(null);
 
   const firstRender =
     useRef(true);
 
-  /*
-   * Save note
-   */
+  /* -------------------------------- */
+  /* Auto Save */
+  /* -------------------------------- */
+
   const saveNote = useCallback(
     async (
       currentTitle: string,
-      currentBlocks: typeof blocks,
+      currentBlocks: NoteBlockType[],
     ) => {
       try {
         setSaving(true);
         setSaved(false);
 
-        const cleanBlocks =
+        /*
+         * Remove empty blocks.
+         */
+        const nonEmptyBlocks =
           currentBlocks.filter(
             (block) =>
               block.text.trim() !== "",
           );
 
+        /*
+         * IMPORTANT:
+         * Remove undefined values before
+         * sending anything to Firestore.
+         */
+        const cleanBlocks: NoteBlockType[] =
+          nonEmptyBlocks.map(
+            (block) => {
+              if (
+                block.type ===
+                "checklist"
+              ) {
+                return {
+                  id: block.id,
+                  type: "checklist",
+                  text: block.text,
+                  completed:
+                    Boolean(
+                      block.completed,
+                    ),
+                };
+              }
+
+              return {
+                id: block.id,
+                type: "text",
+                text: block.text,
+              };
+            },
+          );
+
+        /*
+         * Paragraph content
+         */
         const textBlocks =
           cleanBlocks.filter(
             (block) =>
-              block.type === "text",
+              block.type ===
+              "text",
           );
 
-        const checklistBlocks =
-          cleanBlocks.filter(
-            (block) =>
-              block.type === "checklist",
-          );
+        const content =
+          textBlocks
+            .map(
+              (block) =>
+                block.text,
+            )
+            .join("\n\n");
 
-        const content = textBlocks
-          .map((block) => block.text)
-          .join("\n\n");
-
+        /*
+         * Checklist
+         */
         const checklist =
-          checklistBlocks.map(
-            (block) => ({
+          cleanBlocks
+            .filter(
+              (block) =>
+                block.type ===
+                "checklist",
+            )
+            .map((block) => ({
               id: block.id,
               text: block.text,
               completed:
-                Boolean(block.completed),
-            }),
-          );
+                Boolean(
+                  block.completed,
+                ),
+            }));
 
         const updatedNote: Note = {
           ...note,
@@ -116,6 +230,9 @@ export default function NoteEditor({
             new Date().toISOString(),
         };
 
+        /*
+         * Firebase update
+         */
         await updateNote(
           note.id,
           {
@@ -140,14 +257,14 @@ export default function NoteEditor({
         );
 
         /*
-         * Immediately update NotebookPage
-         * so reload is not required.
+         * Immediately update local
+         * Notebook state.
          */
         onChange(updatedNote);
 
         setSaved(true);
 
-        window.setTimeout(() => {
+        setTimeout(() => {
           setSaved(false);
         }, 1200);
       } catch (error) {
@@ -162,24 +279,32 @@ export default function NoteEditor({
     [note, onChange],
   );
 
-  /*
-   * Auto save
-   */
+  /* -------------------------------- */
+  /* Auto Save Effect */
+  /* -------------------------------- */
+
   useEffect(() => {
     /*
-     * Don't save when editor first opens.
+     * Don't save immediately when
+     * editor opens.
      */
     if (firstRender.current) {
       firstRender.current = false;
       return;
     }
 
+    /*
+     * Clear previous timer.
+     */
     if (saveTimer.current) {
       clearTimeout(
         saveTimer.current,
       );
     }
 
+    /*
+     * Wait 700ms after last change.
+     */
     saveTimer.current =
       setTimeout(() => {
         void saveNote(
@@ -201,26 +326,10 @@ export default function NoteEditor({
     saveNote,
   ]);
 
-  /*
-   * Create new block
-   */
-  function createBlock(
-    type: "text" | "checklist",
-  ) {
-    return {
-      id: crypto.randomUUID(),
-      type,
-      text: "",
-      completed:
-        type === "checklist"
-          ? false
-          : undefined,
-    };
-  }
+  /* -------------------------------- */
+  /* Update Block */
+  /* -------------------------------- */
 
-  /*
-   * Update block
-   */
   function updateBlock(
     id: string,
     value: string,
@@ -237,28 +346,39 @@ export default function NoteEditor({
     );
   }
 
-  /*
-   * Toggle checklist
-   */
+  /* -------------------------------- */
+  /* Toggle Checkbox */
+  /* -------------------------------- */
+
   function toggleBlock(
     id: string,
   ) {
     setBlocks((current) =>
-      current.map((block) =>
-        block.id === id
-          ? {
-              ...block,
-              completed:
-                !block.completed,
-            }
-          : block,
-      ),
+      current.map((block) => {
+        if (block.id !== id) {
+          return block;
+        }
+
+        if (
+          block.type !==
+          "checklist"
+        ) {
+          return block;
+        }
+
+        return {
+          ...block,
+          completed:
+            !block.completed,
+        };
+      }),
     );
   }
 
-  /*
-   * Delete block
-   */
+  /* -------------------------------- */
+  /* Delete Block */
+  /* -------------------------------- */
+
   function deleteBlock(
     id: string,
   ) {
@@ -270,18 +390,17 @@ export default function NoteEditor({
         );
 
       if (next.length === 0) {
-        return [
-          createBlock("text"),
-        ];
+        return [createBlock("text")];
       }
 
       return next;
     });
   }
 
-  /*
-   * Add block
-   */
+  /* -------------------------------- */
+  /* Add Block */
+  /* -------------------------------- */
+
   function addBlock(
     type: "text" | "checklist",
   ) {
@@ -291,14 +410,9 @@ export default function NoteEditor({
     ]);
   }
 
-  /*
-   * Title change
-   */
-  function handleTitleChange(
-    value: string,
-  ) {
-    setTitle(value);
-  }
+  /* -------------------------------- */
+  /* Render */
+  /* -------------------------------- */
 
   return (
     <div
@@ -364,7 +478,7 @@ export default function NoteEditor({
               </span>
             </button>
 
-            {/* Save status + close */}
+            {/* Status */}
             <div
               className="
                 flex
@@ -372,44 +486,35 @@ export default function NoteEditor({
                 gap-3
               "
             >
-              <div
-                className="
-                  flex
-                  items-center
-                  gap-1.5
-                  text-xs
-                  text-gray-400
-                "
-              >
-                {saving && (
-                  <>
-                    <span
-                      className="
-                        h-2 w-2
-                        animate-pulse
-                        rounded-full
-                        bg-yellow-500
-                      "
+              {saving && (
+                <span
+                  className="
+                    text-xs
+                    text-gray-400
+                  "
+                >
+                  Saving...
+                </span>
+              )}
+
+              {!saving &&
+                saved && (
+                  <span
+                    className="
+                      inline-flex
+                      items-center
+                      gap-1
+                      text-xs
+                      text-green-600
+                    "
+                  >
+                    <Check
+                      size={14}
                     />
 
-                    Saving...
-                  </>
+                    Saved
+                  </span>
                 )}
-
-                {!saving &&
-                  saved && (
-                    <>
-                      <Check
-                        size={14}
-                        className="text-green-600"
-                      />
-
-                      <span className="text-green-600">
-                        Saved
-                      </span>
-                    </>
-                  )}
-              </div>
 
               <button
                 type="button"
@@ -445,7 +550,7 @@ export default function NoteEditor({
                 sm:py-9
               "
             >
-              {/* Note type */}
+              {/* Type */}
               <div className="mb-4">
                 <span
                   className="
@@ -473,8 +578,9 @@ export default function NoteEditor({
                 type="text"
                 value={title}
                 onChange={(event) =>
-                  handleTitleChange(
-                    event.target.value,
+                  setTitle(
+                    event.target
+                      .value,
                   )
                 }
                 placeholder="Note title"
@@ -577,13 +683,13 @@ export default function NoteEditor({
                           }
                           onChange={(
                             event,
-                          ) =>
+                          ) => {
                             updateBlock(
                               block.id,
                               event.target
                                 .value,
-                            )
-                          }
+                            );
+                          }}
                           placeholder={
                             isChecklist
                               ? "Checklist item..."
@@ -653,7 +759,7 @@ export default function NoteEditor({
                 )}
               </div>
 
-              {/* Add block */}
+              {/* Add */}
               <div
                 className="
                   mt-5
@@ -681,6 +787,7 @@ export default function NoteEditor({
                     Add
                   </span>
 
+                  {/* Paragraph */}
                   <button
                     type="button"
                     onClick={() =>
@@ -707,9 +814,11 @@ export default function NoteEditor({
                     "
                   >
                     <Type size={15} />
+
                     Paragraph
                   </button>
 
+                  {/* Checklist */}
                   <button
                     type="button"
                     onClick={() =>
@@ -738,6 +847,7 @@ export default function NoteEditor({
                     <CheckSquare
                       size={15}
                     />
+
                     Checklist
                   </button>
                 </div>
@@ -756,7 +866,7 @@ export default function NoteEditor({
               >
                 <Plus size={14} />
 
-                Changes are saved
+                Changes save
                 automatically.
               </div>
             </div>
