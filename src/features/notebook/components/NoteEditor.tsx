@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import {
+  useState,
+} from "react";
 
 import {
   ArrowLeft,
-  Check,
   CheckSquare,
   FileText,
   Plus,
@@ -14,7 +15,9 @@ import {
 
 import NoteBlock from "./NoteBlock";
 
-import { useNoteAutoSave } from "../hooks/useNoteAutoSave";
+import {
+  useNoteAutoSave,
+} from "../hooks/useNoteAutoSave";
 
 import {
   Note,
@@ -23,28 +26,40 @@ import {
 
 interface NoteEditorProps {
   note: Note;
-  onSave: (note: Note) => Promise<void>;
   onClose: () => void;
 }
 
+/* -------------------------------- */
+/* Create Block */
+/* -------------------------------- */
+
 function createBlock(
-  type: "text" | "checklist",
+  type:
+    | "text"
+    | "checklist",
 ): NoteBlockType {
   return {
     id: crypto.randomUUID(),
+
     type,
+
     text: "",
+
     completed:
-      type === "checklist"
+      type ===
+      "checklist"
         ? false
         : undefined,
   };
 }
 
+/* -------------------------------- */
+/* Initial Blocks */
+/* -------------------------------- */
+
 function getInitialBlocks(
   note: Note,
 ): NoteBlockType[] {
-  // New notes already have blocks
   if (
     note.blocks &&
     note.blocks.length > 0
@@ -52,204 +67,257 @@ function getInitialBlocks(
     return note.blocks;
   }
 
-  const blocks: NoteBlockType[] = [];
+  const blocks: NoteBlockType[] =
+    [];
 
-  // Convert old paragraph content
-  if (note.content.trim()) {
+  if (
+    note.content.trim()
+  ) {
     blocks.push({
       id: crypto.randomUUID(),
+
       type: "text",
+
       text: note.content,
     });
   }
 
-  // Convert old checklist
-  note.checklist.forEach((item) => {
-    blocks.push({
-      id: item.id,
-      type: "checklist",
-      text: item.text,
-      completed: item.completed,
-    });
-  });
+  note.checklist.forEach(
+    (item) => {
+      blocks.push({
+        id: item.id,
 
-  // Always start with one text block
-  if (blocks.length === 0) {
-    blocks.push(createBlock("text"));
+        type: "checklist",
+
+        text: item.text,
+
+        completed:
+          item.completed,
+      });
+    },
+  );
+
+  if (
+    blocks.length === 0
+  ) {
+    blocks.push(
+      createBlock("text"),
+    );
   }
 
   return blocks;
 }
 
+/* -------------------------------- */
+/* Editor */
+/* -------------------------------- */
+
 export default function NoteEditor({
   note,
-  onSave,
   onClose,
 }: NoteEditorProps) {
-  const [title, setTitle] = useState(
-    note.title,
-  );
+  const [title, setTitle] =
+    useState(
+      note.title,
+    );
 
-  const [blocks, setBlocks] = useState<
-    NoteBlockType[]
-  >(() => getInitialBlocks(note));
+  const [blocks, setBlocks] =
+    useState<
+      NoteBlockType[]
+    >(() =>
+      getInitialBlocks(
+        note,
+      ),
+    );
 
-  const [saving, setSaving] =
-    useState(false);
+  const [
+    savedStatus,
+    setSavedStatus,
+  ] = useState<
+    "saved" | "saving" | "error"
+  >("saved");
 
-  /*
-   * Auto Save
-   *
-   * Title, text blocks and checklist
-   * changes will automatically save
-   * after 1 second.
-   */
+  /* -------------------------------- */
+  /* Auto Save */
+/* -------------------------------- */
+
   useNoteAutoSave({
     note,
+
     title,
+
     blocks,
+
     enabled: true,
+
     delay: 1000,
+
+    onSaved: () => {
+      setSavedStatus(
+        "saved",
+      );
+    },
+
+    onError: () => {
+      setSavedStatus(
+        "error",
+      );
+    },
   });
+
+  /* -------------------------------- */
+  /* Update Block */
+/* -------------------------------- */
 
   function updateBlock(
     id: string,
     value: string,
   ) {
-    setBlocks((current) =>
-      current.map((block) =>
-        block.id === id
-          ? {
-              ...block,
-              text: value,
-            }
-          : block,
-      ),
+    setSavedStatus(
+      "saving",
+    );
+
+    setBlocks(
+      (current) =>
+        current.map(
+          (block) =>
+            block.id === id
+              ? {
+                  ...block,
+                  text: value,
+                }
+              : block,
+        ),
     );
   }
 
-  function toggleBlock(id: string) {
-    setBlocks((current) =>
-      current.map((block) =>
-        block.id === id
-          ? {
-              ...block,
-              completed:
-                !block.completed,
-            }
-          : block,
-      ),
+  /* -------------------------------- */
+  /* Toggle Checkbox */
+/* -------------------------------- */
+
+  function toggleBlock(
+    id: string,
+  ) {
+    setSavedStatus(
+      "saving",
+    );
+
+    setBlocks(
+      (current) =>
+        current.map(
+          (block) =>
+            block.id === id
+              ? {
+                  ...block,
+                  completed:
+                    !block.completed,
+                }
+              : block,
+        ),
     );
   }
 
-  function deleteBlock(id: string) {
-    setBlocks((current) => {
-      const next = current.filter(
-        (block) => block.id !== id,
-      );
+  /* -------------------------------- */
+  /* Delete Block */
+/* -------------------------------- */
 
-      if (next.length === 0) {
-        return [createBlock("text")];
-      }
+  function deleteBlock(
+    id: string,
+  ) {
+    setSavedStatus(
+      "saving",
+    );
 
-      return next;
-    });
+    setBlocks(
+      (current) => {
+        const next =
+          current.filter(
+            (block) =>
+              block.id !== id,
+          );
+
+        if (
+          next.length === 0
+        ) {
+          return [
+            createBlock(
+              "text",
+            ),
+          ];
+        }
+
+        return next;
+      },
+    );
   }
+
+  /* -------------------------------- */
+  /* Add Block */
+/* -------------------------------- */
 
   function addBlock(
-    type: "text" | "checklist",
+    type:
+      | "text"
+      | "checklist",
   ) {
-    setBlocks((current) => [
-      ...current,
-      createBlock(type),
-    ]);
+    setSavedStatus(
+      "saving",
+    );
+
+    setBlocks(
+      (current) => [
+        ...current,
+        createBlock(type),
+      ],
+    );
   }
 
-  async function handleSave() {
-    try {
-      setSaving(true);
+  /* -------------------------------- */
+  /* Title Change */
+/* -------------------------------- */
 
-      const cleanBlocks = blocks.filter(
-        (block) =>
-          block.text.trim() !== "",
-      );
+  function handleTitleChange(
+    value: string,
+  ) {
+    setSavedStatus(
+      "saving",
+    );
 
-      // Convert blocks back to old fields
-      // so existing data remains compatible.
-      const textBlocks =
-        cleanBlocks.filter(
-          (block) =>
-            block.type === "text",
-        );
-
-      const checklistBlocks =
-        cleanBlocks.filter(
-          (block) =>
-            block.type ===
-            "checklist",
-        );
-
-      const content = textBlocks
-        .map((block) => block.text)
-        .join("\n\n");
-
-      const checklist =
-        checklistBlocks.map(
-          (block) => ({
-            id: block.id,
-            text: block.text,
-            completed:
-              Boolean(block.completed),
-          }),
-        );
-
-      await onSave({
-        ...note,
-
-        title:
-          title.trim() ||
-          "Untitled Note",
-
-        blocks: cleanBlocks,
-
-        content,
-
-        checklist,
-
-        updatedAt:
-          new Date().toISOString(),
-      });
-
-      onClose();
-    } catch (error) {
-      console.error(
-        "Failed to save note:",
-        error,
-      );
-    } finally {
-      setSaving(false);
-    }
+    setTitle(value);
   }
+
+  /* -------------------------------- */
+  /* UI */
+/* -------------------------------- */
 
   return (
     <div
       className="
-        fixed inset-0 z-50
+        fixed
+        inset-0
+        z-50
         bg-black/30
         backdrop-blur-sm
       "
     >
       <div
         className="
-          flex h-full w-full
-          items-center justify-center
-          p-0 sm:p-6
+          flex
+          h-full
+          w-full
+          items-center
+          justify-center
+          p-0
+          sm:p-6
         "
       >
         <div
           className="
-            flex h-full w-full
-            flex-col bg-white
+            flex
+            h-full
+            w-full
+            flex-col
+            bg-white
             sm:h-[92vh]
             sm:max-w-4xl
             sm:rounded-3xl
@@ -257,14 +325,17 @@ export default function NoteEditor({
           "
         >
           {/* Header */}
+
           <header
             className="
-              flex shrink-0
+              flex
+              shrink-0
               items-center
               justify-between
               border-b
               border-gray-100
-              px-4 py-4
+              px-4
+              py-3
               sm:px-6
             "
           >
@@ -276,7 +347,8 @@ export default function NoteEditor({
                 items-center
                 gap-2
                 rounded-xl
-                px-3 py-2
+                px-3
+                py-2
                 text-sm
                 font-medium
                 text-gray-600
@@ -284,17 +356,50 @@ export default function NoteEditor({
                 hover:bg-gray-100
               "
             >
-              <ArrowLeft size={18} />
+              <ArrowLeft
+                size={18}
+              />
 
               <span className="hidden sm:inline">
                 Back
               </span>
             </button>
 
-            <div className="flex items-center gap-2">
+            <div
+              className="
+                flex
+                items-center
+                gap-3
+              "
+            >
+              <span
+                className={`
+                  text-xs
+                  ${
+                    savedStatus ===
+                    "saved"
+                      ? "text-green-600"
+                      : savedStatus ===
+                        "error"
+                        ? "text-red-500"
+                        : "text-gray-400"
+                  }
+                `}
+              >
+                {savedStatus ===
+                "saved"
+                  ? "Saved"
+                  : savedStatus ===
+                    "saving"
+                    ? "Saving..."
+                    : "Save failed"}
+              </span>
+
               <button
                 type="button"
-                onClick={onClose}
+                onClick={
+                  onClose
+                }
                 className="
                   rounded-xl
                   p-2
@@ -304,39 +409,15 @@ export default function NoteEditor({
                   hover:text-gray-700
                 "
               >
-                <X size={19} />
-              </button>
-
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={saving}
-                className="
-                  inline-flex
-                  items-center
-                  gap-2
-                  rounded-xl
-                  bg-green-600
-                  px-4 py-2.5
-                  text-sm
-                  font-semibold
-                  text-white
-                  transition
-                  hover:bg-green-700
-                  disabled:cursor-not-allowed
-                  disabled:opacity-60
-                "
-              >
-                <Check size={17} />
-
-                {saving
-                  ? "Saving..."
-                  : "Save"}
+                <X
+                  size={19}
+                />
               </button>
             </div>
           </header>
 
           {/* Editor */}
+
           <main
             className="
               flex-1
@@ -348,12 +429,13 @@ export default function NoteEditor({
                 mx-auto
                 max-w-3xl
                 px-5
-                py-8
+                py-7
                 sm:px-8
-                sm:py-10
+                sm:py-9
               "
             >
-              {/* Note type */}
+              {/* Note Type */}
+
               <div className="mb-5">
                 <span
                   className="
@@ -362,24 +444,32 @@ export default function NoteEditor({
                     gap-2
                     rounded-full
                     bg-green-50
-                    px-3 py-1.5
+                    px-3
+                    py-1.5
                     text-xs
                     font-medium
                     text-green-700
                   "
                 >
-                  <FileText size={14} />
+                  <FileText
+                    size={14}
+                  />
+
                   Note
                 </span>
               </div>
 
               {/* Title */}
+
               <input
                 type="text"
                 value={title}
-                onChange={(event) =>
-                  setTitle(
-                    event.target.value,
+                onChange={(
+                  event,
+                ) =>
+                  handleTitleChange(
+                    event.target
+                      .value,
                   )
                 }
                 placeholder="Note title"
@@ -390,6 +480,7 @@ export default function NoteEditor({
                   bg-transparent
                   text-3xl
                   font-bold
+                  leading-tight
                   text-gray-900
                   outline-none
                   placeholder:text-gray-300
@@ -398,17 +489,22 @@ export default function NoteEditor({
               />
 
               {/* Blocks */}
+
               <div
                 className="
-                  mt-8
-                  space-y-1
+                  mt-6
+                  space-y-0
                 "
               >
                 {blocks.map(
                   (block) => (
                     <NoteBlock
-                      key={block.id}
-                      block={block}
+                      key={
+                        block.id
+                      }
+                      block={
+                        block
+                      }
                       onChange={
                         updateBlock
                       }
@@ -423,13 +519,14 @@ export default function NoteEditor({
                 )}
               </div>
 
-              {/* Add block */}
+              {/* Add Block */}
+
               <div
                 className="
-                  mt-6
+                  mt-5
                   border-t
                   border-gray-100
-                  pt-5
+                  pt-4
                 "
               >
                 <div
@@ -451,11 +548,12 @@ export default function NoteEditor({
                     Add
                   </span>
 
-                  {/* Text */}
                   <button
                     type="button"
                     onClick={() =>
-                      addBlock("text")
+                      addBlock(
+                        "text",
+                      )
                     }
                     className="
                       inline-flex
@@ -465,7 +563,8 @@ export default function NoteEditor({
                       border
                       border-gray-200
                       bg-white
-                      px-3 py-2
+                      px-3
+                      py-2
                       text-xs
                       font-medium
                       text-gray-600
@@ -475,11 +574,13 @@ export default function NoteEditor({
                       hover:text-green-700
                     "
                   >
-                    <Type size={15} />
-                    Text
+                    <Type
+                      size={15}
+                    />
+
+                    Paragraph
                   </button>
 
-                  {/* Checklist */}
                   <button
                     type="button"
                     onClick={() =>
@@ -495,7 +596,8 @@ export default function NoteEditor({
                       border
                       border-gray-200
                       bg-white
-                      px-3 py-2
+                      px-3
+                      py-2
                       text-xs
                       font-medium
                       text-gray-600
@@ -508,15 +610,17 @@ export default function NoteEditor({
                     <CheckSquare
                       size={15}
                     />
-                    Checklist
+
+                    Checkbox
                   </button>
                 </div>
               </div>
 
               {/* Tip */}
+
               <div
                 className="
-                  mt-8
+                  mt-7
                   flex
                   items-start
                   gap-3
@@ -527,7 +631,9 @@ export default function NoteEditor({
               >
                 <div
                   className="
-                    flex h-8 w-8
+                    flex
+                    h-8
+                    w-8
                     shrink-0
                     items-center
                     justify-center
@@ -537,7 +643,9 @@ export default function NoteEditor({
                     shadow-sm
                   "
                 >
-                  <Plus size={16} />
+                  <Plus
+                    size={16}
+                  />
                 </div>
 
                 <div>
@@ -548,7 +656,7 @@ export default function NoteEditor({
                       text-gray-700
                     "
                   >
-                    Build your note
+                    Auto-save enabled
                   </p>
 
                   <p
@@ -559,10 +667,10 @@ export default function NoteEditor({
                       text-gray-400
                     "
                   >
-                    Mix paragraphs and
-                    checklists freely.
-                    Add as many blocks
-                    as you need.
+                    Your note is
+                    automatically
+                    saved while
+                    you write.
                   </p>
                 </div>
               </div>
@@ -570,23 +678,25 @@ export default function NoteEditor({
           </main>
 
           {/* Footer */}
+
           <footer
             className="
               shrink-0
               border-t
               border-gray-100
-              px-5 py-3
+              px-5
+              py-3
               text-xs
               text-gray-400
               sm:px-6
             "
           >
             {blocks.length}{" "}
-            {blocks.length === 1
+            {blocks.length ===
+            1
               ? "block"
               : "blocks"}{" "}
-            · Changes are saved
-            automatically.
+            · Auto-saved
           </footer>
         </div>
       </div>

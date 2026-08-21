@@ -20,7 +20,6 @@ import {
   addNote,
   deleteNote,
   toggleNotePin,
-  updateNote,
 } from "../services/notebook.service";
 
 import {
@@ -51,6 +50,9 @@ type NoteFilter =
 function createEmptyNote(
   id: string,
 ): Note {
+  const now =
+    new Date().toISOString();
+
   return {
     id,
 
@@ -66,16 +68,14 @@ function createEmptyNote(
 
     pinned: false,
 
-    createdAt:
-      new Date().toISOString(),
+    createdAt: now,
 
-    updatedAt:
-      new Date().toISOString(),
+    updatedAt: now,
   };
 }
 
 /* -------------------------------- */
-/* Notebook Page */
+/* Main Notebook Page */
 /* -------------------------------- */
 
 export default function NotebookPage() {
@@ -99,22 +99,17 @@ export default function NotebookPage() {
   ] = useState<Note | null>(null);
 
   const [
-    deletingId,
-    setDeletingId,
-  ] = useState<string | null>(null);
-
-  const [
     creating,
     setCreating,
   ] = useState(false);
 
   const [
-    actionId,
-    setActionId,
+    deletingId,
+    setDeletingId,
   ] = useState<string | null>(null);
 
   /* -------------------------------- */
-  /* Filter + Sort */
+  /* Filter Notes */
   /* -------------------------------- */
 
   const filteredNotes =
@@ -124,33 +119,23 @@ export default function NotebookPage() {
           .trim()
           .toLowerCase();
 
-      const result =
-        notes.filter((note) => {
-          const blocks =
-            note.blocks ?? [];
-
-          const hasParagraph =
-            blocks.some(
-              (block) =>
-                block.type === "text" &&
-                block.text.trim() !== "",
-            ) ||
-            note.content.trim() !== "";
-
-          const hasCheckbox =
-            blocks.some(
-              (block) =>
-                block.type ===
-                  "checklist" &&
-                block.text.trim() !== "",
-            ) ||
-            note.checklist.length > 0;
+      return notes.filter(
+        (note) => {
+          const {
+            hasParagraph,
+            hasCheckbox,
+          } =
+            getNoteContentType(
+              note,
+            );
 
           /* Filter */
+          let matchesFilter =
+            true;
 
-          let matchesFilter = true;
-
-          switch (activeFilter) {
+          switch (
+            activeFilter
+          ) {
             case "paragraph":
               matchesFilter =
                 hasParagraph &&
@@ -176,8 +161,8 @@ export default function NotebookPage() {
 
             case "all":
             default:
-              matchesFilter = true;
-              break;
+              matchesFilter =
+                true;
           }
 
           if (!matchesFilter) {
@@ -185,59 +170,32 @@ export default function NotebookPage() {
           }
 
           /* Search */
-
           if (!query) {
             return true;
           }
 
           const title =
             note.title
-              ?.toLowerCase() ?? "";
+              ?.toLowerCase() ??
+            "";
 
           const content =
             note.content
-              ?.toLowerCase() ?? "";
+              ?.toLowerCase() ??
+            "";
 
           const blockMatch =
-            blocks.some((block) =>
-              block.text
-                ?.toLowerCase()
-                .includes(query),
+            (note.blocks ?? []).some(
+              (block) =>
+                block.text
+                  ?.toLowerCase()
+                  .includes(query),
             );
 
           return (
             title.includes(query) ||
             content.includes(query) ||
             blockMatch
-          );
-        });
-
-      /*
-       * Pinned notes always stay on top.
-       */
-      return [...result].sort(
-        (a, b) => {
-          if (
-            a.pinned &&
-            !b.pinned
-          ) {
-            return -1;
-          }
-
-          if (
-            !a.pinned &&
-            b.pinned
-          ) {
-            return 1;
-          }
-
-          return (
-            new Date(
-              b.updatedAt,
-            ).getTime() -
-            new Date(
-              a.updatedAt,
-            ).getTime()
           );
         },
       );
@@ -272,7 +230,10 @@ export default function NotebookPage() {
         );
 
       /*
-       * Immediately add to UI.
+       * Immediately add the note
+       * to local store.
+       *
+       * No reload required.
        */
       addNoteToStore(
         newNote,
@@ -295,7 +256,7 @@ export default function NotebookPage() {
   }
 
   /* -------------------------------- */
-  /* Delete */
+  /* Delete Note */
   /* -------------------------------- */
 
   async function handleDeleteNote(
@@ -315,29 +276,36 @@ export default function NotebookPage() {
     }
 
     try {
-      setDeletingId(noteId);
+      setDeletingId(
+        noteId,
+      );
 
       /*
-       * Delete Firebase first.
+       * Delete from Firebase.
        */
-      await deleteNote(noteId);
+      await deleteNote(
+        noteId,
+      );
 
       /*
-       * Immediately remove from UI.
+       * Immediately remove
+       * from UI.
        */
       deleteNoteFromStore(
         noteId,
       );
 
       /*
-       * Close editor if this
-       * note was open.
+       * Close editor if
+       * deleted note is open.
        */
       if (
         editingNote?.id ===
         noteId
       ) {
-        setEditingNote(null);
+        setEditingNote(
+          null,
+        );
       }
     } catch (error) {
       console.error(
@@ -345,39 +313,35 @@ export default function NotebookPage() {
         error,
       );
     } finally {
-      setDeletingId(null);
+      setDeletingId(
+        null,
+      );
     }
   }
 
   /* -------------------------------- */
-  /* Pin / Unpin */
+  /* Toggle Pin */
   /* -------------------------------- */
 
   async function handleTogglePin(
     note: Note,
   ) {
-    if (actionId) {
-      return;
-    }
-
     const newPinned =
       !note.pinned;
 
     try {
-      setActionId(note.id);
-
       /*
-       * Firebase update.
+       * Immediately update UI.
        */
-      await toggleNotePin(
+      updateNotePinInStore(
         note.id,
         newPinned,
       );
 
       /*
-       * Immediately update UI.
+       * Save to Firebase.
        */
-      updateNotePinInStore(
+      await toggleNotePin(
         note.id,
         newPinned,
       );
@@ -386,53 +350,21 @@ export default function NotebookPage() {
         "Failed to update pin:",
         error,
       );
-    } finally {
-      setActionId(null);
+
+      /*
+       * Rollback if Firebase
+       * update fails.
+       */
+      updateNotePinInStore(
+        note.id,
+        note.pinned,
+      );
     }
   }
 
   /* -------------------------------- */
-  /* Save Note */
-  /* -------------------------------- */
-
-  async function handleSaveNote(
-    updatedNote: Note,
-  ) {
-    await updateNote(
-      updatedNote.id,
-      {
-        title:
-          updatedNote.title,
-
-        type:
-          updatedNote.type,
-
-        content:
-          updatedNote.content,
-
-        blocks:
-          updatedNote.blocks,
-
-        checklist:
-          updatedNote.checklist,
-
-        pinned:
-          updatedNote.pinned,
-      },
-    );
-
-    /*
-     * Immediately update
-     * Notebook list.
-     */
-    updateNoteInStore(
-      updatedNote,
-    );
-  }
-
-  /* -------------------------------- */
   /* Loading */
-  /* -------------------------------- */
+/* -------------------------------- */
 
   if (loading) {
     return (
@@ -459,7 +391,7 @@ export default function NotebookPage() {
 
   /* -------------------------------- */
   /* Error */
-  /* -------------------------------- */
+/* -------------------------------- */
 
   if (error) {
     return (
@@ -485,7 +417,7 @@ export default function NotebookPage() {
 
   /* -------------------------------- */
   /* UI */
-  /* -------------------------------- */
+/* -------------------------------- */
 
   return (
     <>
@@ -741,7 +673,7 @@ export default function NotebookPage() {
             </div>
           </div>
 
-          {/* Section */}
+          {/* Section Title */}
 
           <div
             className="
@@ -807,9 +739,6 @@ export default function NotebookPage() {
                     deletingId={
                       deletingId
                     }
-                    actionId={
-                      actionId
-                    }
                     onOpen={() =>
                       setEditingNote(
                         note,
@@ -838,11 +767,10 @@ export default function NotebookPage() {
       {editingNote && (
         <NoteEditor
           note={editingNote}
-          onSave={
-            handleSaveNote
-          }
           onClose={() =>
-            setEditingNote(null)
+            setEditingNote(
+              null,
+            )
           }
         />
       )}
@@ -850,9 +778,9 @@ export default function NotebookPage() {
   );
 }
 
-/* -------------------------------- */
+/* ================================= */
 /* Filter Button */
-/* -------------------------------- */
+/* ================================= */
 
 interface FilterButtonProps {
   active: boolean;
@@ -915,14 +843,13 @@ function FilterButton({
   );
 }
 
-/* -------------------------------- */
+/* ================================= */
 /* Note Card */
-/* -------------------------------- */
+/* ================================= */
 
 interface NoteCardProps {
   note: Note;
   deletingId: string | null;
-  actionId: string | null;
   onOpen: () => void;
   onDelete: () => void;
   onTogglePin: () => void;
@@ -931,7 +858,6 @@ interface NoteCardProps {
 function NoteCard({
   note,
   deletingId,
-  actionId,
   onOpen,
   onDelete,
   onTogglePin,
@@ -939,30 +865,25 @@ function NoteCard({
   const blocks =
     note.blocks ?? [];
 
-  const hasParagraph =
-    blocks.some(
+  const {
+    hasParagraph,
+    hasCheckbox,
+  } =
+    getNoteContentType(note);
+
+  const textBlocks =
+    blocks.filter(
       (block) =>
-        block.type === "text" &&
+        block.type ===
+          "text" &&
         block.text.trim() !== "",
-    ) ||
-    note.content.trim() !== "";
+    );
 
   const checklistBlocks =
     blocks.filter(
       (block) =>
         block.type ===
           "checklist" &&
-        block.text.trim() !== "",
-    );
-
-  const hasCheckbox =
-    checklistBlocks.length > 0 ||
-    note.checklist.length > 0;
-
-  const textBlocks =
-    blocks.filter(
-      (block) =>
-        block.type === "text" &&
         block.text.trim() !== "",
     );
 
@@ -975,11 +896,7 @@ function NoteCard({
       .join(" ")
       .trim() ||
     note.content ||
-    (
-      hasCheckbox
-        ? "Checklist note"
-        : "No content"
-    );
+    "No content";
 
   const completedCount =
     checklistBlocks.filter(
@@ -995,291 +912,307 @@ function NoteCard({
 
   return (
     <div
-      className={`
+      className="
         group
         relative
+        overflow-hidden
         rounded-2xl
         border
-        ${
-          note.pinned
-            ? "border-green-200"
-            : "border-gray-100"
-        }
+        border-gray-100
         bg-white
-        p-5
         shadow-sm
         transition
         hover:-translate-y-0.5
         hover:shadow-md
-      `}
+      "
     >
       {/* Pinned top bar */}
 
       {note.pinned && (
         <div
           className="
-            absolute
-            left-0
-            right-0
-            top-0
-            h-1
-            rounded-t-2xl
-            bg-green-500
+            flex
+            items-center
+            gap-1.5
+            border-b
+            border-green-100
+            bg-green-50
+            px-4
+            py-1.5
+            text-[11px]
+            font-medium
+            text-green-700
           "
-        />
+        >
+          <Pin size={12} />
+          Pinned
+        </div>
       )}
 
-      {/* Pin */}
+      <div className="p-5">
 
-      <button
-        type="button"
-        onClick={(event) => {
-          event.stopPropagation();
-          onTogglePin();
-        }}
-        disabled={
-          actionId === note.id
-        }
-        className={`
-          absolute
-          right-3
-          top-3
-          rounded-lg
-          p-2
-          transition
-          disabled:opacity-50
-          ${
-            note.pinned
-              ? "bg-green-50 text-green-600"
-              : "text-gray-400 hover:bg-green-50 hover:text-green-600"
-          }
-        `}
-        title={
-          note.pinned
-            ? "Unpin note"
-            : "Pin note"
-        }
-      >
-        {note.pinned ? (
-          <Pin size={16} />
-        ) : (
-          <PinOff size={16} />
-        )}
-      </button>
-
-      {/* Open */}
-
-      <button
-        type="button"
-        onClick={onOpen}
-        className="
-          block
-          w-full
-          text-left
-        "
-      >
-        <div
-          className="
-            flex
-            items-start
-            gap-3
-            pr-8
-          "
-        >
-          <div
-            className="
-              flex
-              h-10
-              w-10
-              shrink-0
-              items-center
-              justify-center
-              rounded-xl
-              bg-green-50
-              text-green-600
-            "
-          >
-            <FileText
-              size={18}
-            />
-          </div>
-
-          <div className="min-w-0">
-            <h3
-              className="
-                truncate
-                font-semibold
-                text-gray-900
-              "
-            >
-              {note.title ||
-                "Untitled Note"}
-            </h3>
-
-            <p
-              className="
-                mt-1
-                line-clamp-3
-                text-sm
-                leading-5
-                text-gray-500
-              "
-            >
-              {preview}
-            </p>
-          </div>
-        </div>
-
-        {/* Badges */}
-
-        <div
-          className="
-            mt-4
-            flex
-            flex-wrap
-            items-center
-            gap-2
-          "
-        >
-          {hasParagraph &&
-            hasCheckbox && (
-              <span
-                className="
-                  inline-flex
-                  items-center
-                  gap-1.5
-                  rounded-lg
-                  bg-purple-50
-                  px-2
-                  py-1
-                  text-[10px]
-                  font-medium
-                  text-purple-600
-                "
-              >
-                <Layers3
-                  size={12}
-                />
-                Both
-              </span>
-            )}
-
-          {hasParagraph &&
-            !hasCheckbox && (
-              <span
-                className="
-                  inline-flex
-                  items-center
-                  gap-1.5
-                  rounded-lg
-                  bg-blue-50
-                  px-2
-                  py-1
-                  text-[10px]
-                  font-medium
-                  text-blue-600
-                "
-              >
-                <FileText
-                  size={12}
-                />
-                Paragraph
-              </span>
-            )}
-
-          {hasCheckbox &&
-            !hasParagraph && (
-              <span
-                className="
-                  inline-flex
-                  items-center
-                  gap-1.5
-                  rounded-lg
-                  bg-orange-50
-                  px-2
-                  py-1
-                  text-[10px]
-                  font-medium
-                  text-orange-600
-                "
-              >
-                <CheckSquare
-                  size={12}
-                />
-                Checkbox
-              </span>
-            )}
-
-          {hasCheckbox && (
-            <span
-              className="
-                text-[10px]
-                text-gray-400
-              "
-            >
-              {completedCount}/
-              {totalChecklist}{" "}
-              done
-            </span>
-          )}
-        </div>
-      </button>
-
-      {/* Bottom */}
-
-      <div
-        className="
-          mt-4
-          flex
-          items-center
-          justify-between
-          border-t
-          border-gray-100
-          pt-3
-        "
-      >
-        <span
-          className="
-            text-[11px]
-            text-gray-400
-          "
-        >
-          Updated{" "}
-          {formatDate(
-            note.updatedAt,
-          )}
-        </span>
+        {/* Pin */}
 
         <button
           type="button"
           onClick={(event) => {
             event.stopPropagation();
-            onDelete();
+            onTogglePin();
           }}
-          disabled={
-            deletingId === note.id
-          }
           className="
+            absolute
+            right-3
+            top-3
+            z-10
             rounded-lg
             p-2
             text-gray-400
             transition
-            hover:bg-red-50
-            hover:text-red-500
-            disabled:opacity-50
+            hover:bg-green-50
+            hover:text-green-600
           "
-          title="Delete note"
+          title={
+            note.pinned
+              ? "Unpin note"
+              : "Pin note"
+          }
         >
-          <Trash2 size={16} />
+          {note.pinned ? (
+            <Pin size={16} />
+          ) : (
+            <PinOff size={16} />
+          )}
         </button>
+
+        {/* Open */}
+
+        <button
+          type="button"
+          onClick={onOpen}
+          className="
+            block
+            w-full
+            text-left
+          "
+        >
+          <div
+            className="
+              flex
+              items-start
+              gap-3
+              pr-8
+            "
+          >
+            <div
+              className="
+                flex
+                h-10
+                w-10
+                shrink-0
+                items-center
+                justify-center
+                rounded-xl
+                bg-green-50
+                text-green-600
+              "
+            >
+              <FileText
+                size={18}
+              />
+            </div>
+
+            <div className="min-w-0">
+              <h3
+                className="
+                  truncate
+                  font-semibold
+                  text-gray-900
+                "
+              >
+                {note.title ||
+                  "Untitled Note"}
+              </h3>
+
+              <p
+                className="
+                  mt-1
+                  line-clamp-3
+                  text-sm
+                  leading-5
+                  text-gray-500
+                "
+              >
+                {preview}
+              </p>
+            </div>
+          </div>
+
+          {/* Type badges */}
+
+          <div
+            className="
+              mt-4
+              flex
+              flex-wrap
+              items-center
+              gap-2
+            "
+          >
+            {hasParagraph &&
+              hasCheckbox && (
+                <TypeBadge
+                  icon={
+                    <Layers3
+                      size={12}
+                    />
+                  }
+                  label="Both"
+                  className="
+                    bg-purple-50
+                    text-purple-600
+                  "
+                />
+              )}
+
+            {hasParagraph &&
+              !hasCheckbox && (
+                <TypeBadge
+                  icon={
+                    <FileText
+                      size={12}
+                    />
+                  }
+                  label="Paragraph"
+                  className="
+                    bg-blue-50
+                    text-blue-600
+                  "
+                />
+              )}
+
+            {hasCheckbox &&
+              !hasParagraph && (
+                <TypeBadge
+                  icon={
+                    <CheckSquare
+                      size={12}
+                    />
+                  }
+                  label="Checkbox"
+                  className="
+                    bg-orange-50
+                    text-orange-600
+                  "
+                />
+              )}
+
+            {hasCheckbox && (
+              <span
+                className="
+                  text-[10px]
+                  text-gray-400
+                "
+              >
+                {completedCount}/
+                {totalChecklist}{" "}
+                done
+              </span>
+            )}
+          </div>
+        </button>
+
+        {/* Bottom */}
+
+        <div
+          className="
+            mt-4
+            flex
+            items-center
+            justify-between
+            border-t
+            border-gray-100
+            pt-3
+          "
+        >
+          <span
+            className="
+              text-[11px]
+              text-gray-400
+            "
+          >
+            Updated{" "}
+            {formatDate(
+              note.updatedAt,
+            )}
+          </span>
+
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onDelete();
+            }}
+            disabled={
+              deletingId ===
+              note.id
+            }
+            className="
+              rounded-lg
+              p-2
+              text-gray-400
+              transition
+              hover:bg-red-50
+              hover:text-red-500
+              disabled:opacity-50
+            "
+            title="Delete note"
+          >
+            <Trash2
+              size={16}
+            />
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
-/* -------------------------------- */
+/* ================================= */
+/* Type Badge */
+/* ================================= */
+
+function TypeBadge({
+  icon,
+  label,
+  className,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  className: string;
+}) {
+  return (
+    <span
+      className={`
+        inline-flex
+        items-center
+        gap-1.5
+        rounded-lg
+        px-2
+        py-1
+        text-[10px]
+        font-medium
+        ${className}
+      `}
+    >
+      {icon}
+      {label}
+    </span>
+  );
+}
+
+/* ================================= */
 /* Empty State */
-/* -------------------------------- */
+/* ================================= */
 
 interface EmptyStateProps {
   filter: NoteFilter;
@@ -1323,6 +1256,11 @@ function EmptyState({
         ) : filter ===
           "pinned" ? (
           <Pin size={22} />
+        ) : filter ===
+          "both" ? (
+          <Layers3
+            size={22}
+          />
         ) : (
           <FileText
             size={22}
@@ -1382,9 +1320,9 @@ function EmptyState({
   );
 }
 
-/* -------------------------------- */
-/* Content Type */
-/* -------------------------------- */
+/* ================================= */
+/* Helpers */
+/* ================================= */
 
 function getNoteContentType(
   note: Note,
@@ -1395,7 +1333,8 @@ function getNoteContentType(
   const hasParagraph =
     blocks.some(
       (block) =>
-        block.type === "text" &&
+        block.type ===
+          "text" &&
         block.text.trim() !== "",
     ) ||
     note.content.trim() !== "";
@@ -1407,17 +1346,14 @@ function getNoteContentType(
           "checklist" &&
         block.text.trim() !== "",
     ) ||
-    note.checklist.length > 0;
+    note.checklist.length >
+      0;
 
   return {
     hasParagraph,
     hasCheckbox,
   };
 }
-
-/* -------------------------------- */
-/* Counts */
-/* -------------------------------- */
 
 function getParagraphCount(
   notes: Note[],
@@ -1481,10 +1417,6 @@ function getBothCount(
     },
   ).length;
 }
-
-/* -------------------------------- */
-/* Labels */
-/* -------------------------------- */
 
 function getFilterLabel(
   filter: NoteFilter,
@@ -1551,10 +1483,6 @@ function getEmptyDescription(
       return "Create your first note to get started.";
   }
 }
-
-/* -------------------------------- */
-/* Date */
-/* -------------------------------- */
 
 function formatDate(
   value: string,

@@ -40,10 +40,6 @@ let authUnsubscribe:
 
 let started = false;
 
-/* -------------------------------- */
-/* Notify React */
-/* -------------------------------- */
-
 function emit() {
   listeners.forEach(
     (listener) => {
@@ -51,10 +47,6 @@ function emit() {
     },
   );
 }
-
-/* -------------------------------- */
-/* Load Notes From Firebase */
-/* -------------------------------- */
 
 async function loadNotes() {
   const user =
@@ -110,10 +102,6 @@ async function loadNotes() {
   }
 }
 
-/* -------------------------------- */
-/* Start Auth Listener */
-/* -------------------------------- */
-
 function startStore() {
   if (started) {
     return;
@@ -129,10 +117,6 @@ function startStore() {
       },
     );
 }
-
-/* -------------------------------- */
-/* Subscribe */
-/* -------------------------------- */
 
 function subscribe(
   listener: () => void,
@@ -160,10 +144,6 @@ function subscribe(
   };
 }
 
-/* -------------------------------- */
-/* Snapshot */
-/* -------------------------------- */
-
 function getSnapshot() {
   return snapshot;
 }
@@ -177,7 +157,7 @@ function getServerSnapshot(): NotesSnapshot {
 }
 
 /* -------------------------------- */
-/* Add Note */
+/* ADD NOTE */
 /* -------------------------------- */
 
 export function addNoteToStore(
@@ -196,7 +176,7 @@ export function addNoteToStore(
 }
 
 /* -------------------------------- */
-/* Update Note */
+/* UPDATE NOTE */
 /* -------------------------------- */
 
 export function updateNoteInStore(
@@ -219,7 +199,7 @@ export function updateNoteInStore(
 }
 
 /* -------------------------------- */
-/* Delete Note */
+/* DELETE NOTE */
 /* -------------------------------- */
 
 export function deleteNoteFromStore(
@@ -239,7 +219,7 @@ export function deleteNoteFromStore(
 }
 
 /* -------------------------------- */
-/* Pin / Unpin Note */
+/* PIN NOTE */
 /* -------------------------------- */
 
 export function updateNotePinInStore(
@@ -265,7 +245,7 @@ export function updateNotePinInStore(
 }
 
 /* -------------------------------- */
-/* Hook */
+/* HOOK */
 /* -------------------------------- */
 
 export function useNotes() {
@@ -277,7 +257,7 @@ export function useNotes() {
 }
 
 /* -------------------------------- */
-/* Refresh From Firebase */
+/* REFRESH */
 /* -------------------------------- */
 
 export function refreshNotes() {

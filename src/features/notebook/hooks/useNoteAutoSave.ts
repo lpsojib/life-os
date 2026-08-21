@@ -1,18 +1,38 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import {
+  useEffect,
+  useRef,
+} from "react";
 
-import { updateNote } from "../services/notebook.service";
-import { Note } from "../types/notebook.types";
+import {
+  updateNote,
+} from "../services/notebook.service";
+
+import {
+  updateNoteInStore,
+} from "./useNotes";
+
+import {
+  Note,
+} from "../types/notebook.types";
 
 interface UseNoteAutoSaveProps {
   note: Note;
+
   title: string;
+
   blocks: Note["blocks"];
+
   enabled?: boolean;
+
   delay?: number;
+
   onSaved?: () => void;
-  onError?: (error: unknown) => void;
+
+  onError?: (
+    error: unknown,
+  ) => void;
 }
 
 export function useNoteAutoSave({
@@ -24,67 +44,163 @@ export function useNoteAutoSave({
   onSaved,
   onError,
 }: UseNoteAutoSaveProps) {
-  const firstRender = useRef(true);
+  const firstRender =
+    useRef(true);
+
+  const latestSave =
+    useRef(0);
 
   useEffect(() => {
     if (!enabled) {
       return;
     }
 
-    // Don't auto-save when the note is opened for the first time.
     if (firstRender.current) {
-      firstRender.current = false;
+      firstRender.current =
+        false;
+
       return;
     }
 
-    const timer = window.setTimeout(async () => {
+    const timer =
+      window.setTimeout(
+        () => {
+          void save();
+        },
+        delay,
+      );
+
+    async function save() {
+      const saveId =
+        Date.now();
+
+      latestSave.current =
+        saveId;
+
       try {
-        const cleanBlocks = (blocks ?? []).filter(
-          (block) => block.text.trim() !== "",
-        );
+        const cleanBlocks =
+          (
+            blocks ?? []
+          ).filter(
+            (block) =>
+              block.text
+                .trim() !== "",
+          );
 
-        const textBlocks = cleanBlocks.filter(
-          (block) => block.type === "text",
-        );
+        const textBlocks =
+          cleanBlocks.filter(
+            (block) =>
+              block.type ===
+              "text",
+          );
 
-        const checklistBlocks = cleanBlocks.filter(
-          (block) => block.type === "checklist",
-        );
+        const checklistBlocks =
+          cleanBlocks.filter(
+            (block) =>
+              block.type ===
+              "checklist",
+          );
 
-        const content = textBlocks
-          .map((block) => block.text.trim())
-          .filter(Boolean)
-          .join("\n\n");
+        const content =
+          textBlocks
+            .map(
+              (block) =>
+                block.text,
+            )
+            .join("\n\n");
 
-        const checklist = checklistBlocks.map((block) => ({
-          id: block.id,
-          text: block.text,
-          completed: Boolean(block.completed),
-        }));
+        const checklist =
+          checklistBlocks.map(
+            (block) => ({
+              id: block.id,
+              text: block.text,
+              completed:
+                Boolean(
+                  block.completed,
+                ),
+            }),
+          );
 
-        await updateNote(note.id, {
-          title: title.trim() || "Untitled Note",
-          blocks: cleanBlocks,
+        const updatedNote:
+          Note = {
+          ...note,
+
+          title:
+            title.trim() ||
+            "Untitled Note",
+
+          blocks:
+            cleanBlocks,
+
           content,
-          checklist,
-          type: note.type,
-          pinned: note.pinned,
-        });
 
-        onSaved?.();
+          checklist,
+
+          updatedAt:
+            new Date().toISOString(),
+        };
+
+        await updateNote(
+          note.id,
+          {
+            title:
+              updatedNote.title,
+
+            blocks:
+              updatedNote.blocks,
+
+            content:
+              updatedNote.content,
+
+            checklist:
+              updatedNote.checklist,
+
+            type:
+              updatedNote.type,
+
+            pinned:
+              updatedNote.pinned,
+          },
+        );
+
+        /*
+         * Only update store if this is
+         * still the latest save.
+         */
+        if (
+          latestSave.current ===
+          saveId
+        ) {
+          updateNoteInStore(
+            updatedNote,
+          );
+
+          onSaved?.();
+        }
       } catch (error) {
-        console.error("Auto-save failed:", error);
-        onError?.(error);
+        console.error(
+          "Auto-save failed:",
+          error,
+        );
+
+        if (
+          latestSave.current ===
+          saveId
+        ) {
+          onError?.(
+            error,
+          );
+        }
       }
-    }, delay);
+    }
 
     return () => {
-      window.clearTimeout(timer);
+      window.clearTimeout(
+        timer,
+      );
     };
   }, [
-    note.id,
-    note.type,
-    note.pinned,
+    note,
     title,
     blocks,
     delay,

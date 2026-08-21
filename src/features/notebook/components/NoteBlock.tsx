@@ -34,7 +34,8 @@ export default function NoteBlock({
   onDelete,
 }: NoteBlockProps) {
   const isChecklist =
-    block.type === "checklist";
+    block.type ===
+    "checklist";
 
   return (
     <div
@@ -42,7 +43,7 @@ export default function NoteBlock({
         group
         flex
         items-start
-        gap-1.5
+        gap-2
         rounded-lg
         px-1
         py-0.5
@@ -51,6 +52,7 @@ export default function NoteBlock({
       "
     >
       {/* Drag Handle */}
+
       <div
         className="
           mt-1.5
@@ -62,26 +64,29 @@ export default function NoteBlock({
         "
       >
         <GripVertical
-          size={15}
+          size={16}
         />
       </div>
 
-      {/* Checklist Checkbox */}
+      {/* Checkbox */}
+
       {isChecklist && (
         <button
           type="button"
           onClick={() =>
-            onToggle(block.id)
+            onToggle(
+              block.id,
+            )
           }
           className={`
             mt-1.5
             flex
-            h-[18px]
-            w-[18px]
+            h-5
+            w-5
             shrink-0
             items-center
             justify-center
-            rounded-[5px]
+            rounded-md
             border
             transition
             ${
@@ -90,25 +95,28 @@ export default function NoteBlock({
                 : "border-gray-300 bg-white hover:border-green-400"
             }
           `}
-          aria-label={
-            block.completed
-              ? "Mark incomplete"
-              : "Mark complete"
-          }
         >
           {block.completed && (
-            <Check size={12} />
+            <Check
+              size={13}
+            />
           )}
         </button>
       )}
 
       {/* Text */}
+
       <textarea
-        value={block.text}
-        onChange={(event) =>
+        value={
+          block.text
+        }
+        onChange={(
+          event,
+        ) =>
           onChange(
             block.id,
-            event.target.value,
+            event.target
+              .value,
           )
         }
         placeholder={
@@ -135,7 +143,9 @@ export default function NoteBlock({
               : "text-gray-700"
           }
         `}
-        onInput={(event) => {
+        onInput={(
+          event,
+        ) => {
           const textarea =
             event.currentTarget;
 
@@ -148,16 +158,19 @@ export default function NoteBlock({
       />
 
       {/* Delete */}
+
       <button
         type="button"
         onClick={() =>
-          onDelete(block.id)
+          onDelete(
+            block.id,
+          )
         }
         className="
           mt-1
           shrink-0
-          rounded-md
-          p-1
+          rounded-lg
+          p-1.5
           text-gray-200
           opacity-0
           transition
@@ -165,9 +178,11 @@ export default function NoteBlock({
           hover:bg-red-50
           hover:text-red-500
         "
-        aria-label="Delete block"
+        title="Delete block"
       >
-        <Trash2 size={14} />
+        <Trash2
+          size={15}
+        />
       </button>
     </div>
   );

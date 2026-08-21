@@ -10,15 +10,23 @@ import {
   updateDoc,
 } from "firebase/firestore";
 
-import { auth, db } from "@/lib/firebase";
+import {
+  auth,
+  db,
+} from "@/lib/firebase";
 
 import {
   Note,
   NoteType,
 } from "../types/notebook.types";
 
+/* -------------------------------- */
+/* Notes Collection */
+/* -------------------------------- */
+
 function getNotesCollection() {
-  const user = auth.currentUser;
+  const user =
+    auth.currentUser;
 
   if (!user) {
     throw new Error(
@@ -34,26 +42,47 @@ function getNotesCollection() {
   );
 }
 
+/* -------------------------------- */
+/* Timestamp */
+/* -------------------------------- */
+
 function timestampToISOString(
   timestamp: unknown,
 ): string {
   if (
     timestamp &&
-    typeof timestamp === "object" &&
+    typeof timestamp ===
+      "object" &&
     "toDate" in timestamp &&
-    typeof timestamp.toDate === "function"
+    typeof (
+      timestamp as {
+        toDate?: unknown;
+      }
+    ).toDate ===
+      "function"
   ) {
-    return timestamp
+    return (
+      timestamp as {
+        toDate: () => Date;
+      }
+    )
       .toDate()
       .toISOString();
   }
 
-  if (typeof timestamp === "string") {
+  if (
+    typeof timestamp ===
+    "string"
+  ) {
     return timestamp;
   }
 
   return new Date().toISOString();
 }
+
+/* -------------------------------- */
+/* GET NOTES */
+/* -------------------------------- */
 
 export async function getNotes(): Promise<
   Note[]
@@ -63,7 +92,10 @@ export async function getNotes(): Promise<
 
   const q = query(
     notesRef,
-    orderBy("updatedAt", "desc"),
+    orderBy(
+      "updatedAt",
+      "desc",
+    ),
   );
 
   const snapshot =
@@ -88,13 +120,23 @@ export async function getNotes(): Promise<
           data.content ?? "",
 
         blocks:
-          data.blocks ?? [],
+          Array.isArray(
+            data.blocks,
+          )
+            ? data.blocks
+            : [],
 
         checklist:
-          data.checklist ?? [],
+          Array.isArray(
+            data.checklist,
+          )
+            ? data.checklist
+            : [],
 
         pinned:
-          data.pinned ?? false,
+          Boolean(
+            data.pinned,
+          ),
 
         createdAt:
           timestampToISOString(
@@ -110,6 +152,10 @@ export async function getNotes(): Promise<
   );
 }
 
+/* -------------------------------- */
+/* ADD NOTE */
+/* -------------------------------- */
+
 export async function addNote(
   title: string,
   type: NoteType = "text",
@@ -118,45 +164,50 @@ export async function addNote(
   const notesRef =
     getNotesCollection();
 
-  const noteRef = await addDoc(
-    notesRef,
-    {
-      title:
-        title.trim() ||
-        "Untitled Note",
+  const noteRef =
+    await addDoc(
+      notesRef,
+      {
+        title:
+          title.trim() ||
+          "Untitled Note",
 
-      type,
+        type,
 
-      content,
+        content,
 
-      blocks: [],
+        blocks: [],
 
-      checklist: [],
+        checklist: [],
 
-      pinned: false,
+        pinned: false,
 
-      createdAt:
-        serverTimestamp(),
+        createdAt:
+          serverTimestamp(),
 
-      updatedAt:
-        serverTimestamp(),
-    },
-  );
+        updatedAt:
+          serverTimestamp(),
+      },
+    );
 
   return noteRef.id;
 }
+
+/* -------------------------------- */
+/* UPDATE NOTE */
+/* -------------------------------- */
 
 export async function updateNote(
   noteId: string,
   data: Partial<
     Omit<
       Note,
-      "id" |
-        "createdAt" |
-        "updatedAt"
+      | "id"
+      | "createdAt"
+      | "updatedAt"
     >
   >,
-) {
+): Promise<void> {
   const user =
     auth.currentUser;
 
@@ -184,9 +235,13 @@ export async function updateNote(
   );
 }
 
+/* -------------------------------- */
+/* DELETE NOTE */
+/* -------------------------------- */
+
 export async function deleteNote(
   noteId: string,
-) {
+): Promise<void> {
   const user =
     auth.currentUser;
 
@@ -204,13 +259,19 @@ export async function deleteNote(
     noteId,
   );
 
-  await deleteDoc(noteRef);
+  await deleteDoc(
+    noteRef,
+  );
 }
+
+/* -------------------------------- */
+/* PIN / UNPIN */
+/* -------------------------------- */
 
 export async function toggleNotePin(
   noteId: string,
   pinned: boolean,
-) {
+): Promise<void> {
   await updateNote(
     noteId,
     {
