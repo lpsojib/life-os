@@ -1,9 +1,6 @@
 "use client";
 
-import {
-  useSyncExternalStore,
-} from "react";
-
+import { useSyncExternalStore } from "react";
 import {
   onAuthStateChanged,
   type Unsubscribe,
@@ -11,14 +8,8 @@ import {
 
 import { auth } from "@/lib/firebase";
 
-import {
-  getNotes,
-  syncPendingNotes,
-} from "../services/notebook.service";
-
-import {
-  Note,
-} from "../types/notebook.types";
+import { getNotes } from "../services/notebook.service";
+import { Note } from "../types/notebook.types";
 
 interface NotesSnapshot {
   notes: Note[];
@@ -26,94 +17,152 @@ interface NotesSnapshot {
   error: string | null;
 }
 
+const STORAGE_KEY = "life-os-notebook-notes";
+
 let snapshot: NotesSnapshot = {
   notes: [],
   loading: true,
   error: null,
 };
 
-const listeners =
-  new Set<() => void>();
+const listeners = new Set<() => void>();
 
-let authUnsubscribe:
-  | Unsubscribe
-  | null = null;
-
+let authUnsubscribe: Unsubscribe | null = null;
 let started = false;
-
-/* ================================================= */
-/* EMIT */
-/* ================================================= */
+let loadedLocal = false;
 
 function emit() {
-  listeners.forEach(
-    (listener) => {
-      listener();
-    },
-  );
+  listeners.forEach((listener) => {
+    listener();
+  });
 }
 
-/* ================================================= */
-/* LOAD NOTES */
-/* ================================================= */
+/* -------------------------------- */
+/* Local Storage */
+/* -------------------------------- */
 
-async function loadNotes() {
-  const user =
-    auth.currentUser;
-
-  if (!user) {
-    snapshot = {
-      notes: [],
-      loading: false,
-      error: null,
-    };
-
-    emit();
-
-    return;
+function readLocalNotes(): Note[] {
+  if (typeof window === "undefined") {
+    return [];
   }
 
-  snapshot = {
-    ...snapshot,
-    loading: true,
-    error: null,
-  };
-
-  emit();
-
   try {
-    const notes =
-      await getNotes();
+    const raw = localStorage.getItem(
+      STORAGE_KEY,
+    );
 
-    snapshot = {
-      notes,
-      loading: false,
-      error: null,
-    };
+    if (!raw) {
+      return [];
+    }
 
-    emit();
+    const parsed = JSON.parse(raw);
+
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed as Note[];
   } catch (error) {
     console.error(
-      "Failed to load notes:",
+      "Failed to read local notes:",
       error,
     );
 
+    return [];
+  }
+}
+
+function writeLocalNotes(
+  notes: Note[],
+) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify(notes),
+    );
+  } catch (error) {
+    console.error(
+      "Failed to save local notes:",
+      error,
+    );
+  }
+}
+
+/* -------------------------------- */
+/* Load Local Notes Immediately */
+/* -------------------------------- */
+
+function loadLocalNotes() {
+  const localNotes =
+    readLocalNotes();
+
+  snapshot = {
+    notes: localNotes,
+    loading: false,
+    error: null,
+  };
+
+  loadedLocal = true;
+
+  emit();
+}
+
+/* -------------------------------- */
+/* Firebase Sync */
+/* -------------------------------- */
+
+async function syncFromFirebase() {
+  const user = auth.currentUser;
+
+  if (!user) {
+    return;
+  }
+
+  /*
+   * Local notes are already visible.
+   * Firebase must NEVER block the UI.
+   */
+  try {
+    const firebaseNotes =
+      await getNotes();
+
+    snapshot = {
+      notes: firebaseNotes,
+      loading: false,
+      error: null,
+    };
+
+    writeLocalNotes(
+      firebaseNotes,
+    );
+
+    emit();
+  } catch (error) {
+    console.warn(
+      "Firebase unavailable. Using local notes.",
+      error,
+    );
+
+    /*
+     * Keep local notes visible.
+     */
     snapshot = {
       ...snapshot,
       loading: false,
-      error:
-        error instanceof Error
-          ? error.message
-          : "Failed to load notes.",
+      error: null,
     };
 
     emit();
   }
 }
 
-/* ================================================= */
-/* START STORE */
-/* ================================================= */
+/* -------------------------------- */
+/* Start Store */
+/* -------------------------------- */
 
 function startStore() {
   if (started) {
@@ -122,42 +171,29 @@ function startStore() {
 
   started = true;
 
+  /*
+   * IMPORTANT:
+   * Load local data immediately.
+   */
+  if (!loadedLocal) {
+    loadLocalNotes();
+  }
+
+  /*
+   * Firebase works in background.
+   */
   authUnsubscribe =
     onAuthStateChanged(
       auth,
-      (user) => {
-        if (!user) {
-          snapshot = {
-            notes: [],
-            loading: false,
-            error: null,
-          };
-
-          emit();
-
-          return;
-        }
-
-        void loadNotes();
-
-        /*
-         * Try pending offline
-         * notes when user logs in.
-         */
-        if (
-          typeof navigator !==
-            "undefined" &&
-          navigator.onLine
-        ) {
-          void syncPendingNotes();
-        }
+      () => {
+        void syncFromFirebase();
       },
     );
 }
 
-/* ================================================= */
-/* SUBSCRIBE */
-/* ================================================= */
+/* -------------------------------- */
+/* Subscribe */
+/* -------------------------------- */
 
 function subscribe(
   listener: () => void,
@@ -167,9 +203,7 @@ function subscribe(
   startStore();
 
   return () => {
-    listeners.delete(
-      listener,
-    );
+    listeners.delete(listener);
 
     if (
       listeners.size === 0 &&
@@ -177,17 +211,15 @@ function subscribe(
     ) {
       authUnsubscribe();
 
-      authUnsubscribe =
-        null;
-
+      authUnsubscribe = null;
       started = false;
     }
   };
 }
 
-/* ================================================= */
-/* SNAPSHOT */
-/* ================================================= */
+/* -------------------------------- */
+/* Snapshot */
+/* -------------------------------- */
 
 function getSnapshot() {
   return snapshot;
@@ -196,21 +228,18 @@ function getSnapshot() {
 function getServerSnapshot(): NotesSnapshot {
   return {
     notes: [],
-    loading: true,
+    loading: false,
     error: null,
   };
 }
 
-/* ================================================= */
-/* ADD NOTE */
-/* ================================================= */
+/* -------------------------------- */
+/* ADD */
+/* -------------------------------- */
 
 export function addNoteToStore(
   note: Note,
 ) {
-  /*
-   * Prevent duplicate note.
-   */
   const exists =
     snapshot.notes.some(
       (item) =>
@@ -221,21 +250,26 @@ export function addNoteToStore(
     return;
   }
 
+  const notes = [
+    note,
+    ...snapshot.notes,
+  ];
+
   snapshot = {
     ...snapshot,
-
-    notes: [
-      note,
-      ...snapshot.notes,
-    ],
+    notes,
+    loading: false,
+    error: null,
   };
+
+  writeLocalNotes(notes);
 
   emit();
 }
 
-/* ================================================= */
-/* UPDATE NOTE */
-/* ================================================= */
+/* -------------------------------- */
+/* UPDATE */
+/* -------------------------------- */
 
 export function updateNoteInStore(
   updatedNote: Note,
@@ -247,92 +281,96 @@ export function updateNoteInStore(
         updatedNote.id,
     );
 
-  if (!exists) {
-    /*
-     * If the note isn't loaded yet,
-     * add it to the beginning.
-     */
-    snapshot = {
-      ...snapshot,
+  let notes: Note[];
 
-      notes: [
-        updatedNote,
-        ...snapshot.notes,
-      ],
-    };
-
-    emit();
-
-    return;
+  if (exists) {
+    notes = snapshot.notes.map(
+      (note) =>
+        note.id ===
+        updatedNote.id
+          ? updatedNote
+          : note,
+    );
+  } else {
+    notes = [
+      updatedNote,
+      ...snapshot.notes,
+    ];
   }
 
   snapshot = {
     ...snapshot,
-
-    notes:
-      snapshot.notes.map(
-        (note) =>
-          note.id ===
-          updatedNote.id
-            ? updatedNote
-            : note,
-      ),
+    notes,
+    loading: false,
+    error: null,
   };
+
+  writeLocalNotes(notes);
 
   emit();
 }
 
-/* ================================================= */
-/* DELETE NOTE */
-/* ================================================= */
+/* -------------------------------- */
+/* DELETE */
+/* -------------------------------- */
 
 export function deleteNoteFromStore(
   noteId: string,
 ) {
+  const notes =
+    snapshot.notes.filter(
+      (note) =>
+        note.id !== noteId,
+    );
+
   snapshot = {
     ...snapshot,
-
-    notes:
-      snapshot.notes.filter(
-        (note) =>
-          note.id !== noteId,
-      ),
+    notes,
+    loading: false,
+    error: null,
   };
+
+  writeLocalNotes(notes);
 
   emit();
 }
 
-/* ================================================= */
-/* PIN NOTE */
-/* ================================================= */
+/* -------------------------------- */
+/* PIN */
+/* -------------------------------- */
 
 export function updateNotePinInStore(
   noteId: string,
   pinned: boolean,
 ) {
+  const notes =
+    snapshot.notes.map(
+      (note) =>
+        note.id === noteId
+          ? {
+              ...note,
+              pinned,
+              updatedAt:
+                new Date().toISOString(),
+            }
+          : note,
+    );
+
   snapshot = {
     ...snapshot,
-
-    notes:
-      snapshot.notes.map(
-        (note) =>
-          note.id === noteId
-            ? {
-                ...note,
-                pinned,
-                updatedAt:
-                  new Date().toISOString(),
-              }
-            : note,
-      ),
+    notes,
+    loading: false,
+    error: null,
   };
+
+  writeLocalNotes(notes);
 
   emit();
 }
 
-/* ================================================= */
+/* -------------------------------- */
 /* HOOK */
-/* ================================================= */
+/* -------------------------------- */
 
 export function useNotes() {
   return useSyncExternalStore(
@@ -342,34 +380,18 @@ export function useNotes() {
   );
 }
 
-/* ================================================= */
-/* REFRESH */
-/* ================================================= */
+/* -------------------------------- */
+/* Refresh */
+/* -------------------------------- */
 
 export function refreshNotes() {
-  void loadNotes();
-}
+  /*
+   * Local data first.
+   */
+  loadLocalNotes();
 
-/* ================================================= */
-/* ONLINE EVENT */
-/* ================================================= */
-
-if (
-  typeof window !==
-  "undefined"
-) {
-  window.addEventListener(
-    "online",
-    () => {
-      void syncPendingNotes();
-
-      /*
-       * Reload after pending
-       * notes have been synced.
-       */
-      window.setTimeout(() => {
-        void loadNotes();
-      }, 500);
-    },
-  );
+  /*
+   * Firebase in background.
+   */
+  void syncFromFirebase();
 }
