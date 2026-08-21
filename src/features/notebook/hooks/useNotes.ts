@@ -1,12 +1,23 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
-import { onAuthStateChanged, type Unsubscribe } from "firebase/auth";
+import {
+  useSyncExternalStore,
+} from "react";
+
+import {
+  onAuthStateChanged,
+  type Unsubscribe,
+} from "firebase/auth";
 
 import { auth } from "@/lib/firebase";
 
-import { getNotes } from "../services/notebook.service";
-import { Note } from "../types/notebook.types";
+import {
+  getNotes,
+} from "../services/notebook.service";
+
+import {
+  Note,
+} from "../types/notebook.types";
 
 interface NotesSnapshot {
   notes: Note[];
@@ -20,19 +31,34 @@ let snapshot: NotesSnapshot = {
   error: null,
 };
 
-const listeners = new Set<() => void>();
+const listeners =
+  new Set<() => void>();
 
-let authUnsubscribe: Unsubscribe | null = null;
+let authUnsubscribe:
+  | Unsubscribe
+  | null = null;
+
 let started = false;
 
+/* -------------------------------- */
+/* Notify React */
+/* -------------------------------- */
+
 function emit() {
-  listeners.forEach((listener) => {
-    listener();
-  });
+  listeners.forEach(
+    (listener) => {
+      listener();
+    },
+  );
 }
 
+/* -------------------------------- */
+/* Load Notes From Firebase */
+/* -------------------------------- */
+
 async function loadNotes() {
-  const user = auth.currentUser;
+  const user =
+    auth.currentUser;
 
   if (!user) {
     snapshot = {
@@ -55,7 +81,8 @@ async function loadNotes() {
   emit();
 
   try {
-    const notes = await getNotes();
+    const notes =
+      await getNotes();
 
     snapshot = {
       notes,
@@ -65,7 +92,10 @@ async function loadNotes() {
 
     emit();
   } catch (error) {
-    console.error("Failed to load notes:", error);
+    console.error(
+      "Failed to load notes:",
+      error,
+    );
 
     snapshot = {
       ...snapshot,
@@ -80,6 +110,10 @@ async function loadNotes() {
   }
 }
 
+/* -------------------------------- */
+/* Start Auth Listener */
+/* -------------------------------- */
+
 function startStore() {
   if (started) {
     return;
@@ -87,18 +121,30 @@ function startStore() {
 
   started = true;
 
-  authUnsubscribe = onAuthStateChanged(auth, () => {
-    void loadNotes();
-  });
+  authUnsubscribe =
+    onAuthStateChanged(
+      auth,
+      () => {
+        void loadNotes();
+      },
+    );
 }
 
-function subscribe(listener: () => void) {
+/* -------------------------------- */
+/* Subscribe */
+/* -------------------------------- */
+
+function subscribe(
+  listener: () => void,
+) {
   listeners.add(listener);
 
   startStore();
 
   return () => {
-    listeners.delete(listener);
+    listeners.delete(
+      listener,
+    );
 
     if (
       listeners.size === 0 &&
@@ -106,11 +152,17 @@ function subscribe(listener: () => void) {
     ) {
       authUnsubscribe();
 
-      authUnsubscribe = null;
+      authUnsubscribe =
+        null;
+
       started = false;
     }
   };
 }
+
+/* -------------------------------- */
+/* Snapshot */
+/* -------------------------------- */
 
 function getSnapshot() {
   return snapshot;
@@ -124,6 +176,98 @@ function getServerSnapshot(): NotesSnapshot {
   };
 }
 
+/* -------------------------------- */
+/* Add Note */
+/* -------------------------------- */
+
+export function addNoteToStore(
+  note: Note,
+) {
+  snapshot = {
+    ...snapshot,
+
+    notes: [
+      note,
+      ...snapshot.notes,
+    ],
+  };
+
+  emit();
+}
+
+/* -------------------------------- */
+/* Update Note */
+/* -------------------------------- */
+
+export function updateNoteInStore(
+  updatedNote: Note,
+) {
+  snapshot = {
+    ...snapshot,
+
+    notes:
+      snapshot.notes.map(
+        (note) =>
+          note.id ===
+          updatedNote.id
+            ? updatedNote
+            : note,
+      ),
+  };
+
+  emit();
+}
+
+/* -------------------------------- */
+/* Delete Note */
+/* -------------------------------- */
+
+export function deleteNoteFromStore(
+  noteId: string,
+) {
+  snapshot = {
+    ...snapshot,
+
+    notes:
+      snapshot.notes.filter(
+        (note) =>
+          note.id !== noteId,
+      ),
+  };
+
+  emit();
+}
+
+/* -------------------------------- */
+/* Pin / Unpin Note */
+/* -------------------------------- */
+
+export function updateNotePinInStore(
+  noteId: string,
+  pinned: boolean,
+) {
+  snapshot = {
+    ...snapshot,
+
+    notes:
+      snapshot.notes.map(
+        (note) =>
+          note.id === noteId
+            ? {
+                ...note,
+                pinned,
+              }
+            : note,
+      ),
+  };
+
+  emit();
+}
+
+/* -------------------------------- */
+/* Hook */
+/* -------------------------------- */
+
 export function useNotes() {
   return useSyncExternalStore(
     subscribe,
@@ -131,6 +275,10 @@ export function useNotes() {
     getServerSnapshot,
   );
 }
+
+/* -------------------------------- */
+/* Refresh From Firebase */
+/* -------------------------------- */
 
 export function refreshNotes() {
   void loadNotes();

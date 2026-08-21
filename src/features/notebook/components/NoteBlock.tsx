@@ -6,16 +6,25 @@ import {
   Trash2,
 } from "lucide-react";
 
-import { NoteBlock as NoteBlockType } from "../types/notebook.types";
+import {
+  NoteBlock as NoteBlockType,
+} from "../types/notebook.types";
 
 interface NoteBlockProps {
   block: NoteBlockType;
+
   onChange: (
     id: string,
     value: string,
   ) => void;
-  onToggle: (id: string) => void;
-  onDelete: (id: string) => void;
+
+  onToggle: (
+    id: string,
+  ) => void;
+
+  onDelete: (
+    id: string,
+  ) => void;
 }
 
 export default function NoteBlock({
@@ -30,27 +39,34 @@ export default function NoteBlock({
   return (
     <div
       className="
-        group flex items-start gap-2
-        rounded-xl
-        px-2 py-2
+        group
+        flex
+        items-start
+        gap-1.5
+        rounded-lg
+        px-1
+        py-0.5
         transition
         hover:bg-gray-50
       "
     >
-      {/* Drag handle */}
+      {/* Drag Handle */}
       <div
         className="
-          mt-2 shrink-0
+          mt-1.5
+          shrink-0
           text-gray-200
           opacity-0
           transition
           group-hover:opacity-100
         "
       >
-        <GripVertical size={17} />
+        <GripVertical
+          size={15}
+        />
       </div>
 
-      {/* Checklist checkbox */}
+      {/* Checklist Checkbox */}
       {isChecklist && (
         <button
           type="button"
@@ -58,10 +74,15 @@ export default function NoteBlock({
             onToggle(block.id)
           }
           className={`
-            mt-2 flex h-5 w-5
-            shrink-0 items-center
+            mt-1.5
+            flex
+            h-[18px]
+            w-[18px]
+            shrink-0
+            items-center
             justify-center
-            rounded-md border
+            rounded-[5px]
+            border
             transition
             ${
               block.completed
@@ -69,9 +90,14 @@ export default function NoteBlock({
                 : "border-gray-300 bg-white hover:border-green-400"
             }
           `}
+          aria-label={
+            block.completed
+              ? "Mark incomplete"
+              : "Mark complete"
+          }
         >
           {block.completed && (
-            <Check size={13} />
+            <Check size={12} />
           )}
         </button>
       )}
@@ -92,14 +118,15 @@ export default function NoteBlock({
         }
         rows={1}
         className={`
-          min-h-[36px]
+          min-h-[30px]
           flex-1
           resize-none
           border-0
           bg-transparent
-          px-1 py-1
+          px-1
+          py-0.5
           text-[15px]
-          leading-7
+          leading-5
           outline-none
           placeholder:text-gray-300
           ${
@@ -112,7 +139,9 @@ export default function NoteBlock({
           const textarea =
             event.currentTarget;
 
-          textarea.style.height = "auto";
+          textarea.style.height =
+            "auto";
+
           textarea.style.height =
             `${textarea.scrollHeight}px`;
         }}
@@ -125,9 +154,10 @@ export default function NoteBlock({
           onDelete(block.id)
         }
         className="
-          mt-2 shrink-0
-          rounded-lg
-          p-1.5
+          mt-1
+          shrink-0
+          rounded-md
+          p-1
           text-gray-200
           opacity-0
           transition
@@ -135,8 +165,9 @@ export default function NoteBlock({
           hover:bg-red-50
           hover:text-red-500
         "
+        aria-label="Delete block"
       >
-        <Trash2 size={15} />
+        <Trash2 size={14} />
       </button>
     </div>
   );
