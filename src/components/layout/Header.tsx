@@ -24,9 +24,9 @@ export default function Header({
           <Menu size={24} />
         </button>
 
-        <h2 className="text-xl font-semibold text-gray-900">
-          Dashboard
-        </h2>
+        <h3 className="text-xl font-semibold text-gray-900">
+          Developed By LP Sojib
+        </h3>
       </div>
 
       {/* Search */}
@@ -47,12 +47,12 @@ export default function Header({
 
       {/* Right Side */}
       <div className="flex items-center gap-2 md:gap-4">
-        <button
+        {/* <button
           type="button"
           className="rounded-lg p-2 hover:bg-gray-100"
         >
           <Moon size={20} />
-        </button>
+        </button> */}
 
         <button
           type="button"
