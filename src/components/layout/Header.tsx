@@ -33,7 +33,10 @@ export default function Header({
         md:left-64
       "
     >
-      {/* Left Side */}
+      {/* =================================================
+          LEFT SIDE
+      ================================================= */}
+
       <div
         className="
           absolute
@@ -47,6 +50,7 @@ export default function Header({
         "
       >
         {/* Mobile Menu */}
+
         <button
           type="button"
           onClick={onMenuClick}
@@ -64,6 +68,7 @@ export default function Header({
         </button>
 
         {/* Desktop Search */}
+
         <div
           className="
             hidden
@@ -100,7 +105,12 @@ export default function Header({
         </div>
       </div>
 
-      {/* Center Logo */}
+      {/* =================================================
+          CENTER LOGO
+          Header height stays h-16
+          Logo is larger: 64px
+      ================================================= */}
+
       <div
         className="
           pointer-events-none
@@ -114,13 +124,11 @@ export default function Header({
           justify-center
         "
       >
-        {/* Logo size is bigger,
-            header height remains h-16 */}
         <div
           className="
             flex
-            h-14
-            w-14
+            h-16
+            w-16
             items-center
             justify-center
             bg-transparent
@@ -129,19 +137,22 @@ export default function Header({
           <Image
             src="/logo.png"
             alt="Life OS"
-            width={66}
-            height={66}
+            width={64}
+            height={64}
             priority
             className="
-              h-20
-              w-20
+              h-16
+              w-16
               object-contain
             "
           />
         </div>
       </div>
 
-      {/* Right Side */}
+      {/* =================================================
+          RIGHT SIDE
+      ================================================= */}
+
       <div
         className="
           absolute
@@ -157,6 +168,7 @@ export default function Header({
         "
       >
         {/* Notification */}
+
         <button
           type="button"
           className="
@@ -186,6 +198,7 @@ export default function Header({
         </button>
 
         {/* User */}
+
         <UserMenu />
       </div>
     </header>
