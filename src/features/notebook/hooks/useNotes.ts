@@ -2,8 +2,16 @@
 
 import {
   useCallback,
-  useSyncExternalStore,
+  useEffect,
+  useState,
 } from "react";
+
+import {
+  onAuthStateChanged,
+  User,
+} from "firebase/auth";
+
+import { auth } from "@/lib/firebase";
 
 import {
   getNotes,
@@ -13,180 +21,139 @@ import {
   Note,
 } from "../types/notebook.types";
 
-/* =========================================================
-   NOTE STORE
-========================================================= */
-
-let notes: Note[] = [];
-
-let loading = true;
-
-let error: string | null = null;
-
-let initialized = false;
-
-let loadingPromise:
-  | Promise<void>
-  | null = null;
-
-const listeners = new Set<
-  () => void
->();
-
-/* =========================================================
-   SUBSCRIBE
-========================================================= */
-
-function subscribe(
-  listener: () => void,
-) {
-  listeners.add(listener);
-
-  return () => {
-    listeners.delete(listener);
-  };
+interface UseNotesReturn {
+  notes: Note[];
+  setNotes: React.Dispatch<
+    React.SetStateAction<Note[]>
+  >;
+  loading: boolean;
+  error: string | null;
+  reload: () => Promise<void>;
 }
 
-/* =========================================================
-   SNAPSHOT
-========================================================= */
+export function useNotes(): UseNotesReturn {
+  const [notes, setNotes] =
+    useState<Note[]>([]);
 
-function getSnapshot() {
-  return {
-    notes,
-    loading,
-    error,
-  };
-}
+  const [loading, setLoading] =
+    useState(true);
 
-function getServerSnapshot() {
-  return {
-    notes: [] as Note[],
-    loading: true,
-    error: null as string | null,
-  };
-}
+  const [error, setError] =
+    useState<string | null>(null);
 
-/* =========================================================
-   NOTIFY
-========================================================= */
+  const [user, setUser] =
+    useState<User | null>(null);
 
-function notify() {
-  listeners.forEach(
-    (listener) => {
-      listener();
-    },
-  );
-}
+  const [authReady, setAuthReady] =
+    useState(false);
 
-/* =========================================================
-   LOAD NOTES
-========================================================= */
+  /* =====================================================
+     AUTH LISTENER
+  ===================================================== */
 
-async function loadNotes() {
-  if (loadingPromise) {
-    return loadingPromise;
-  }
+  useEffect(() => {
+    const unsubscribe =
+      onAuthStateChanged(
+        auth,
+        (currentUser) => {
+          setUser(currentUser);
+          setAuthReady(true);
+        },
+      );
 
-  loading = true;
-  error = null;
+    return unsubscribe;
+  }, []);
 
-  notify();
+  /* =====================================================
+     LOAD NOTES
+  ===================================================== */
 
-  loadingPromise =
-    getNotes()
-      .then((result) => {
-        notes = result;
-        error = null;
-        initialized = true;
-      })
-      .catch((reason) => {
-        console.error(
-          "Failed to load notes:",
-          reason,
-        );
-
-        error =
-          reason instanceof Error
-            ? reason.message
-            : "Failed to load notes.";
-
-        initialized = true;
-      })
-      .finally(() => {
-        loading = false;
-        loadingPromise = null;
-
-        notify();
-      });
-
-  return loadingPromise;
-}
-
-/* =========================================================
-   INITIAL LOAD
-========================================================= */
-
-if (
-  typeof window !== "undefined" &&
-  !initialized
-) {
-  void loadNotes();
-}
-
-/* =========================================================
-   SET NOTES
-========================================================= */
-
-function setNotes(
-  value:
-    | Note[]
-    | ((
-        previous: Note[],
-      ) => Note[]),
-) {
-  if (typeof value === "function") {
-    notes = value(notes);
-  } else {
-    notes = value;
-  }
-
-  notify();
-}
-
-/* =========================================================
-   RELOAD
-========================================================= */
-
-async function reload() {
-  await loadNotes();
-}
-
-/* =========================================================
-   HOOK
-========================================================= */
-
-export function useNotes() {
-  const snapshot =
-    useSyncExternalStore(
-      subscribe,
-      getSnapshot,
-      getServerSnapshot,
-    );
-
-  const reloadNotes =
+  const reload =
     useCallback(
       async () => {
-        await reload();
+        /*
+         * Firebase auth এখনো ready না হলে
+         * কিছুই করবো না।
+         */
+        if (!authReady) {
+          return;
+        }
+
+        /*
+         * User login করা না থাকলে
+         * Firebase query চালাবো না।
+         */
+        if (!user) {
+          setNotes([]);
+          setLoading(false);
+          setError(null);
+          return;
+        }
+
+        setLoading(true);
+        setError(null);
+
+        try {
+          const result =
+            await getNotes();
+
+          setNotes(
+            Array.isArray(result)
+              ? result
+              : [],
+          );
+        } catch (err) {
+          console.error(
+            "Could not load notes:",
+            err,
+          );
+
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Could not load notes",
+          );
+        } finally {
+          setLoading(false);
+        }
       },
-      [],
+      [
+        authReady,
+        user,
+      ],
     );
 
+  /* =====================================================
+     INITIAL LOAD
+  ===================================================== */
+
+  useEffect(() => {
+    if (!authReady) {
+      return;
+    }
+
+    const reloadTimer = setTimeout(() => {
+      void reload();
+    }, 0);
+
+    return () => {
+      clearTimeout(reloadTimer);
+    };
+  }, [
+    authReady,
+    user,
+    reload,
+  ]);
+
+  /* =====================================================
+     RETURN
+  ===================================================== */
+
   return {
-    notes: snapshot.notes,
+    notes,
     setNotes,
-    loading: snapshot.loading,
-    error: snapshot.error,
-    reload: reloadNotes,
+    loading,
+    error,
+    reload,
   };
 }
