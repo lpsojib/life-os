@@ -129,8 +129,8 @@ export default function Header({
           <Image
             src="/logo.png"
             alt="Life OS"
-            width={56}
-            height={56}
+            width={66}
+            height={66}
             priority
             className="
               h-20
