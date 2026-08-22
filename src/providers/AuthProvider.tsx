@@ -1,11 +1,12 @@
 "use client";
 
 import { ReactNode, useEffect } from "react";
-import { onAuthStateChanged } from "firebase/auth";
 import { usePathname, useRouter } from "next/navigation";
 
-import { auth } from "@/lib/firebase";
-import { useAuthStore } from "@/store/auth.store";
+import {
+  initializeAuthListener,
+  useAuthStore,
+} from "@/store/auth.store";
 
 interface Props {
   children: ReactNode;
@@ -16,13 +17,13 @@ const PUBLIC_ROUTES = [
   "/register",
 ];
 
-const isPublicRoute = (pathname: string) => {
+function isPublicRoute(pathname: string) {
   return PUBLIC_ROUTES.some(
     (route) =>
       pathname === route ||
       pathname.startsWith(`${route}/`)
   );
-};
+}
 
 export default function AuthProvider({
   children,
@@ -30,95 +31,79 @@ export default function AuthProvider({
   const router = useRouter();
   const pathname = usePathname();
 
-  const user = useAuthStore((state) => state.user);
+  const user = useAuthStore(
+    (state) => state.user
+  );
+
   const loading = useAuthStore(
     (state) => state.loading
   );
 
-  const setUser = useAuthStore(
-    (state) => state.setUser
-  );
-
-  const setLoading = useAuthStore(
-    (state) => state.setLoading
+  const initialized = useAuthStore(
+    (state) => state.initialized
   );
 
   /**
-   * Firebase authentication listener
+   * Firebase listener only once
    */
   useEffect(() => {
-    setLoading(true);
+    initializeAuthListener();
+  }, []);
 
-    const unsubscribe = onAuthStateChanged(
-      auth,
-      (firebaseUser) => {
-        setUser(firebaseUser);
-        setLoading(false);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [setUser, setLoading]);
+  const publicRoute = isPublicRoute(pathname);
 
   /**
-   * Protect routes
+   * Authentication redirect
    */
   useEffect(() => {
-    if (loading) {
+    if (!initialized || loading) {
       return;
     }
 
-    /**
-     * User is NOT logged in
-     *
-     * Any protected URL:
-     * /dashboard
-     * /tasks
-     * /habits
-     * /goals
-     * etc.
-     *
-     * → Login page
-     */
-    if (!user && !isPublicRoute(pathname)) {
+    // User logged out → protected route
+    if (!user && !publicRoute) {
       router.replace("/login");
       return;
     }
 
-    /**
-     * User is already logged in
-     *
-     * Don't allow logged-in user
-     * to stay on Login/Register.
-     */
-    if (
-      user &&
-      isPublicRoute(pathname)
-    ) {
+    // Already logged in → login/register
+    if (user && publicRoute) {
       router.replace("/dashboard");
     }
   }, [
     user,
     loading,
-    pathname,
+    initialized,
+    publicRoute,
     router,
   ]);
 
   /**
-   * Firebase এখনো session check করছে।
+   * Splash screen
    *
-   * এই সময় Login page বা Dashboard
-   * ভুল করে দেখানো হবে না।
+   * Firebase auth initialize হওয়া পর্যন্ত
+   * LP logo দেখাবে।
    */
-  if (loading) {
+  if (!initialized || loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50">
-        <div className="text-center">
-          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-blue-600" />
+      <div className="flex min-h-screen items-center justify-center bg-gray-50">
+        <div className="flex flex-col items-center">
 
-          <p className="text-sm font-medium text-slate-600">
-            Checking your account...
-          </p>
+          {/* LP Logo */}
+          <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-black shadow-xl">
+            <span className="text-3xl font-black tracking-tight text-white">
+              LP
+            </span>
+          </div>
+
+          <h1 className="mt-4 text-xl font-bold tracking-tight text-gray-900">
+            Life OS
+          </h1>
+
+          <div className="mt-4 h-1 w-16 overflow-hidden rounded-full bg-gray-200">
+            <div className="h-full w-1/2 animate-pulse rounded-full bg-black" />
+          </div>
+
         </div>
       </div>
     );
