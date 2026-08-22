@@ -66,13 +66,15 @@ function normalizeBlocks(
 
   return blocks.map((block) => {
     if (
-      block.type ===
-      "checklist"
+      block.type === "checklist"
     ) {
       return {
         ...block,
         type: "checklist",
-        text: block.text ?? "",
+        text:
+          typeof block.text === "string"
+            ? block.text
+            : "",
         checked: Boolean(
           block.checked,
         ),
@@ -82,7 +84,10 @@ function normalizeBlocks(
     return {
       ...block,
       type: "text",
-      text: block.text ?? "",
+      text:
+        typeof block.text === "string"
+          ? block.text
+          : "",
     };
   });
 }
@@ -98,14 +103,13 @@ export default function NoteEditor({
   onDelete,
   onClose,
 }: NoteEditorProps) {
-  const [title, setTitle] =
-    useState(note.title ?? "");
+  const [title, setTitle] = useState(
+    note.title ?? "",
+  );
 
   const [blocks, setBlocks] =
     useState<NoteBlock[]>(() =>
-      normalizeBlocks(
-        note.blocks,
-      ),
+      normalizeBlocks(note.blocks),
     );
 
   const [pinned, setPinned] =
@@ -130,11 +134,22 @@ export default function NoteEditor({
   ): Note {
     return {
       ...note,
+
+      /*
+       * Empty title is intentional.
+       * No "Untitled Note".
+       */
       title: nextTitle,
+
       type: note.type ?? "text",
+
       blocks: nextBlocks,
+
       pinned: nextPinned,
-      createdAt: note.createdAt,
+
+      createdAt:
+        note.createdAt,
+
       updatedAt:
         new Date().toISOString(),
     };
@@ -277,8 +292,7 @@ export default function NoteEditor({
       );
 
     if (
-      updatedBlocks.length ===
-      0
+      updatedBlocks.length === 0
     ) {
       updatedBlocks = [
         createTextBlock(),
@@ -342,6 +356,13 @@ export default function NoteEditor({
       } else {
         await saveNote(updated);
       }
+
+      /*
+       * IMPORTANT:
+       * Do NOT call onClose().
+       *
+       * Editor stays open after Save.
+       */
     } catch (error) {
       console.error(
         "Note save failed:",
@@ -398,6 +419,7 @@ export default function NoteEditor({
     element: HTMLTextAreaElement,
   ) {
     element.style.height = "auto";
+
     element.style.height =
       `${element.scrollHeight}px`;
   }
@@ -435,6 +457,7 @@ export default function NoteEditor({
           sm:h-[90vh]
         "
       >
+
         {/* =================================================
             HEADER
         ================================================= */}
@@ -452,6 +475,7 @@ export default function NoteEditor({
           "
         >
           <div className="flex items-center gap-2">
+
             <button
               type="button"
               onClick={onClose}
@@ -479,9 +503,11 @@ export default function NoteEditor({
             >
               Notebook
             </span>
+
           </div>
 
           <div className="flex items-center gap-1">
+
             {/* PIN */}
 
             <button
@@ -565,6 +591,7 @@ export default function NoteEditor({
                   : "Save"}
               </span>
             </button>
+
           </div>
         </div>
 
@@ -576,10 +603,10 @@ export default function NoteEditor({
           className="
             flex-1
             overflow-y-auto
-            px-5
-            py-6
+            px-4
+            py-5
             sm:px-10
-            sm:py-8
+            sm:py-7
           "
         >
           <div className="mx-auto max-w-3xl">
@@ -599,20 +626,24 @@ export default function NoteEditor({
               placeholder="Write a title"
               className="
                 w-full
-                border-b
+                rounded-xl
+                border
                 border-gray-200
-                bg-transparent
-                px-0
-                pb-3
-                text-2xl
+                bg-white
+                px-4
+                py-3
+                text-lg
                 font-semibold
+                leading-6
                 tracking-tight
                 text-gray-900
                 outline-none
                 transition
                 focus:border-green-500
-                placeholder:text-gray-300
-                sm:text-3xl
+                focus:ring-2
+                focus:ring-green-100
+                placeholder:text-gray-400
+                sm:text-xl
               "
             />
 
@@ -623,7 +654,7 @@ export default function NoteEditor({
             <div
               className="
                 mt-5
-                space-y-1
+                space-y-0.5
               "
             >
               {blocks.map((block) => {
@@ -637,11 +668,12 @@ export default function NoteEditor({
                     className="
                       group
                       flex
-                      items-start
-                      gap-3
+                      items-center
+                      gap-2.5
                       py-0.5
                     "
                   >
+
                     {/* =================================================
                         CHECKBOX
                     ================================================= */}
@@ -661,14 +693,13 @@ export default function NoteEditor({
                           )
                         }
                         className={`
-                          mt-[5px]
                           flex
-                          h-[19px]
-                          w-[19px]
+                          h-[18px]
+                          w-[18px]
                           shrink-0
                           items-center
                           justify-center
-                          rounded-[5px]
+                          rounded-[4px]
                           border-2
                           transition
                           ${
@@ -679,14 +710,15 @@ export default function NoteEditor({
                         `}
                       >
                         <Check
-                          size={13}
+                          size={12}
                           strokeWidth={3}
                         />
                       </button>
                     ) : (
                       <div
                         className="
-                          w-[19px]
+                          h-[18px]
+                          w-[18px]
                           shrink-0
                         "
                       />
@@ -722,16 +754,17 @@ export default function NoteEditor({
                       }
                       rows={1}
                       className={`
-                        min-h-[30px]
+                        min-h-[24px]
+                        min-w-0
                         flex-1
                         resize-none
                         overflow-hidden
                         border-0
                         bg-transparent
                         p-0
-                        text-[16px]
+                        text-sm
                         font-normal
-                        leading-[1.55]
+                        leading-5
                         outline-none
                         placeholder:text-gray-300
                         ${
@@ -755,7 +788,7 @@ export default function NoteEditor({
                       }
                       title="Remove"
                       className="
-                        mt-0.5
+                        shrink-0
                         rounded-lg
                         p-1
                         text-gray-300
@@ -768,6 +801,7 @@ export default function NoteEditor({
                     >
                       <X size={14} />
                     </button>
+
                   </div>
                 );
               })}
@@ -789,6 +823,7 @@ export default function NoteEditor({
                 pt-4
               "
             >
+
               <button
                 type="button"
                 onClick={
@@ -836,7 +871,9 @@ export default function NoteEditor({
                 <Plus size={16} />
                 Checkbox
               </button>
+
             </div>
+
           </div>
         </div>
 
@@ -871,6 +908,7 @@ export default function NoteEditor({
               : "blocks"}
           </span>
         </div>
+
       </div>
     </div>
   );
