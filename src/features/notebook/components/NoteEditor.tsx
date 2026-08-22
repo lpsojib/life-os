@@ -14,6 +14,7 @@ import {
   FileText,
   GripVertical,
   Plus,
+  Save,
   Trash2,
   Type,
   X,
@@ -126,14 +127,15 @@ export default function NoteEditor({
   const [saveError, setSaveError] =
     useState(false);
 
+  const [dirty, setDirty] =
+    useState(false);
+
   /* ------------------------------------------------ */
   /* REFS */
   /* ------------------------------------------------ */
 
-  const saveTimer =
-    useRef<ReturnType<
-      typeof setTimeout
-    > | null>(null);
+  const mountedRef =
+    useRef(true);
 
   const latestTitle =
     useRef(title);
@@ -141,13 +143,7 @@ export default function NoteEditor({
   const latestBlocks =
     useRef(blocks);
 
-  const savingRef =
-    useRef(false);
-
-  const mountedRef =
-    useRef(true);
-
-  const savedTimer =
+  const savedMessageTimer =
     useRef<ReturnType<
       typeof setTimeout
     > | null>(null);
@@ -168,7 +164,7 @@ export default function NoteEditor({
 
   /* ================================================= */
   /* BUILD NOTE */
-  /* ================================================= */
+/* ================================================= */
 
   const buildUpdatedNote =
     useCallback(
@@ -177,10 +173,7 @@ export default function NoteEditor({
         currentBlocks: NoteBlockType[],
       ): Note => {
         /*
-         * Remove completely empty blocks.
-         *
-         * Keep one empty text block in editor,
-         * but don't send empty blocks to storage.
+         * Remove empty blocks before saving.
          */
         const cleanBlocks =
           currentBlocks
@@ -212,13 +205,14 @@ export default function NoteEditor({
             });
 
         /*
-         * Paragraph content
+         * Paragraph content.
          */
         const content =
           cleanBlocks
             .filter(
               (block) =>
-                block.type === "text",
+                block.type ===
+                "text",
             )
             .map(
               (block) =>
@@ -227,7 +221,7 @@ export default function NoteEditor({
             .join("\n\n");
 
         /*
-         * Checklist
+         * Checklist.
          */
         const checklist =
           cleanBlocks
@@ -252,7 +246,8 @@ export default function NoteEditor({
             currentTitle.trim() ||
             "Untitled Note",
 
-          blocks: cleanBlocks,
+          blocks:
+            cleanBlocks,
 
           content,
 
@@ -266,33 +261,31 @@ export default function NoteEditor({
     );
 
   /* ================================================= */
-  /* SAVE NOTE */
-  /* ================================================= */
+  /* MANUAL SAVE */
+/* ================================================= */
 
-  const saveNote = useCallback(
-    async (
-      currentTitle: string,
-      currentBlocks: NoteBlockType[],
-    ) => {
-      /*
-       * Prevent duplicate saves running
-       * at the exact same time.
-       */
-      if (savingRef.current) {
+  const handleSave =
+    useCallback(async () => {
+      if (saving) {
         return;
       }
 
       try {
-        savingRef.current = true;
-
-        if (mountedRef.current) {
-          setSaving(true);
-          setSaved(false);
-          setSaveError(false);
-        }
+        setSaving(true);
+        setSaved(false);
+        setSaveError(false);
 
         /*
-         * Build latest note from editor.
+         * Get the latest editor values.
+         */
+        const currentTitle =
+          latestTitle.current;
+
+        const currentBlocks =
+          latestBlocks.current;
+
+        /*
+         * Build updated note.
          */
         const updatedNote =
           buildUpdatedNote(
@@ -301,177 +294,124 @@ export default function NoteEditor({
           );
 
         /*
-         * LOCAL FIRST
+         * Save locally first.
          *
          * updateNote() saves to IndexedDB
-         * immediately and Firebase sync
-         * happens in background.
+         * immediately and starts Firebase
+         * sync in background.
          */
-        await updateNote(
-          note.id,
-          {
-            title:
-              updatedNote.title,
+        const savedNote =
+          await updateNote(
+            note.id,
+            {
+              title:
+                updatedNote.title,
 
-            type:
-              updatedNote.type,
+              type:
+                updatedNote.type,
 
-            blocks:
-              updatedNote.blocks,
+              blocks:
+                updatedNote.blocks,
 
-            content:
-              updatedNote.content,
+              content:
+                updatedNote.content,
 
-            checklist:
-              updatedNote.checklist,
+              checklist:
+                updatedNote.checklist,
 
-            pinned:
-              updatedNote.pinned,
-          },
-        );
+              pinned:
+                updatedNote.pinned,
+            },
+          );
 
         /*
-         * Update parent Notebook state
-         * immediately after local save.
+         * Update parent Notebook.
          */
-        if (mountedRef.current) {
-          onChange(updatedNote);
+        onChange(
+          savedNote,
+        );
 
-          setSaving(false);
+        if (
+          mountedRef.current
+        ) {
+          setDirty(false);
           setSaved(true);
           setSaveError(false);
-
-          /*
-           * Hide "Saved" after 1.5 seconds.
-           */
-          if (
-            savedTimer.current
-          ) {
-            clearTimeout(
-              savedTimer.current,
-            );
-          }
-
-          savedTimer.current =
-            setTimeout(() => {
-              if (
-                mountedRef.current
-              ) {
-                setSaved(false);
-              }
-            }, 1500);
         }
+
+        /*
+         * Hide Saved message.
+         */
+        if (
+          savedMessageTimer.current
+        ) {
+          clearTimeout(
+            savedMessageTimer.current,
+          );
+        }
+
+        savedMessageTimer.current =
+          setTimeout(() => {
+            if (
+              mountedRef.current
+            ) {
+              setSaved(false);
+            }
+          }, 1800);
       } catch (error) {
         console.error(
-          "Note auto-save failed:",
+          "Manual note save failed:",
           error,
         );
 
-        if (mountedRef.current) {
-          setSaving(false);
-          setSaved(false);
+        if (
+          mountedRef.current
+        ) {
           setSaveError(true);
+          setSaved(false);
         }
       } finally {
-        savingRef.current =
-          false;
+        if (
+          mountedRef.current
+        ) {
+          setSaving(false);
+        }
       }
-    },
-    [
+    }, [
       buildUpdatedNote,
       note.id,
       onChange,
-    ],
-  );
+      saving,
+    ]);
 
   /* ================================================= */
-  /* AUTO SAVE */
-  /* ================================================= */
+  /* MARK DIRTY */
+/* ================================================= */
 
-  useEffect(() => {
-    /*
-     * First render should NOT save.
-     *
-     * We only want to save after the user
-     * actually changes something.
-     */
-    if (
-      latestTitle.current ===
-        note.title &&
-      JSON.stringify(
-        latestBlocks.current,
-      ) ===
-        JSON.stringify(
-          note.blocks?.length
-            ? note.blocks
-            : latestBlocks.current,
-        )
-    ) {
-      return;
-    }
-
-    /*
-     * Cancel previous timer.
-     */
-    if (saveTimer.current) {
-      clearTimeout(
-        saveTimer.current,
-      );
-    }
-
-    /*
-     * Wait 700ms after last change.
-     */
-    saveTimer.current =
-      setTimeout(() => {
-        void saveNote(
-          latestTitle.current,
-          latestBlocks.current,
-        );
-      }, 700);
-
-    return () => {
-      if (saveTimer.current) {
-        clearTimeout(
-          saveTimer.current,
-        );
-      }
-    };
-  }, [
-    title,
-    blocks,
-    note.title,
-    note.blocks,
-    saveNote,
-  ]);
+  function markDirty() {
+    setDirty(true);
+    setSaved(false);
+    setSaveError(false);
+  }
 
   /* ================================================= */
-  /* CLEANUP */
-  /* ================================================= */
+  /* UPDATE TITLE */
+/* ================================================= */
 
-  useEffect(() => {
-    mountedRef.current = true;
+  function handleTitleChange(
+    value: string,
+  ) {
+    latestTitle.current =
+      value;
 
-    return () => {
-      mountedRef.current = false;
+    setTitle(value);
 
-      if (saveTimer.current) {
-        clearTimeout(
-          saveTimer.current,
-        );
-      }
-
-      if (savedTimer.current) {
-        clearTimeout(
-          savedTimer.current,
-        );
-      }
-    };
-  }, []);
+    markDirty();
+  }
 
   /* ================================================= */
   /* UPDATE BLOCK */
-  /* ================================================= */
+/* ================================================= */
 
   function updateBlock(
     id: string,
@@ -487,11 +427,24 @@ export default function NoteEditor({
           : block,
       ),
     );
+
+    latestBlocks.current =
+      latestBlocks.current.map(
+        (block) =>
+          block.id === id
+            ? {
+                ...block,
+                text: value,
+              }
+            : block,
+      );
+
+    markDirty();
   }
 
   /* ================================================= */
   /* TOGGLE CHECKBOX */
-  /* ================================================= */
+/* ================================================= */
 
   function toggleBlock(
     id: string,
@@ -518,11 +471,37 @@ export default function NoteEditor({
         };
       }),
     );
+
+    latestBlocks.current =
+      latestBlocks.current.map(
+        (block) => {
+          if (
+            block.id !== id
+          ) {
+            return block;
+          }
+
+          if (
+            block.type !==
+            "checklist"
+          ) {
+            return block;
+          }
+
+          return {
+            ...block,
+            completed:
+              !block.completed,
+          };
+        },
+      );
+
+    markDirty();
   }
 
   /* ================================================= */
   /* DELETE BLOCK */
-  /* ================================================= */
+/* ================================================= */
 
   function deleteBlock(
     id: string,
@@ -534,7 +513,9 @@ export default function NoteEditor({
             block.id !== id,
         );
 
-      if (next.length === 0) {
+      if (
+        next.length === 0
+      ) {
         return [
           createBlock("text"),
         ];
@@ -542,49 +523,72 @@ export default function NoteEditor({
 
       return next;
     });
+
+    const next =
+      latestBlocks.current.filter(
+        (block) =>
+          block.id !== id,
+      );
+
+    latestBlocks.current =
+      next.length === 0
+        ? [
+            createBlock("text"),
+          ]
+        : next;
+
+    markDirty();
   }
 
   /* ================================================= */
   /* ADD BLOCK */
-  /* ================================================= */
+/* ================================================= */
 
   function addBlock(
     type: "text" | "checklist",
   ) {
+    const newBlock =
+      createBlock(type);
+
     setBlocks((current) => [
       ...current,
-      createBlock(type),
+      newBlock,
     ]);
+
+    latestBlocks.current =
+      [
+        ...latestBlocks.current,
+        newBlock,
+      ];
+
+    markDirty();
   }
 
   /* ================================================= */
-  /* CLOSE */
+  /* CLEANUP */
 /* ================================================= */
 
-  function handleClose() {
-    /*
-     * If a save timer is waiting,
-     * save immediately before closing.
-     */
-    if (saveTimer.current) {
-      clearTimeout(
-        saveTimer.current,
-      );
+  useEffect(() => {
+    mountedRef.current =
+      true;
 
-      saveTimer.current = null;
+    return () => {
+      mountedRef.current =
+        false;
 
-      void saveNote(
-        latestTitle.current,
-        latestBlocks.current,
-      );
-    }
-
-    onClose();
-  }
+      if (
+        savedMessageTimer.current
+      ) {
+        clearTimeout(
+          savedMessageTimer.current,
+        );
+      }
+    };
+  }, []);
 
   /* ================================================= */
   /* RENDER */
-  /* ================================================= */
+/* ================================================= */
 
   return (
     <div
@@ -612,7 +616,7 @@ export default function NoteEditor({
             sm:shadow-2xl
           "
         >
-          {/* Header */}
+          {/* HEADER */}
 
           <header
             className="
@@ -629,7 +633,7 @@ export default function NoteEditor({
 
             <button
               type="button"
-              onClick={handleClose}
+              onClick={onClose}
               className="
                 inline-flex
                 items-center
@@ -652,7 +656,7 @@ export default function NoteEditor({
               </span>
             </button>
 
-            {/* Status */}
+            {/* SAVE STATUS */}
 
             <div
               className="
@@ -661,6 +665,18 @@ export default function NoteEditor({
                 gap-3
               "
             >
+              {dirty &&
+                !saving && (
+                  <span
+                    className="
+                      text-xs
+                      text-amber-500
+                    "
+                  >
+                    Unsaved
+                  </span>
+                )}
+
               {saving && (
                 <span
                   className="
@@ -703,9 +719,48 @@ export default function NoteEditor({
                   </span>
                 )}
 
+              {/* SAVE BUTTON */}
+
               <button
                 type="button"
-                onClick={handleClose}
+                onClick={() =>
+                  void handleSave()
+                }
+                disabled={
+                  saving ||
+                  !dirty
+                }
+                className="
+                  inline-flex
+                  items-center
+                  gap-2
+                  rounded-xl
+                  bg-green-600
+                  px-4 py-2
+                  text-sm
+                  font-semibold
+                  text-white
+                  transition
+                  hover:bg-green-700
+                  disabled:cursor-not-allowed
+                  disabled:bg-gray-200
+                  disabled:text-gray-400
+                "
+              >
+                <Save
+                  size={16}
+                />
+
+                {saving
+                  ? "Saving..."
+                  : "Save"}
+              </button>
+
+              {/* CLOSE */}
+
+              <button
+                type="button"
+                onClick={onClose}
                 className="
                   rounded-xl
                   p-2
@@ -720,7 +775,7 @@ export default function NoteEditor({
             </div>
           </header>
 
-          {/* Editor */}
+          {/* EDITOR */}
 
           <main
             className="
@@ -738,7 +793,7 @@ export default function NoteEditor({
                 sm:py-9
               "
             >
-              {/* Type */}
+              {/* TYPE */}
 
               <div className="mb-4">
                 <span
@@ -762,14 +817,15 @@ export default function NoteEditor({
                 </span>
               </div>
 
-              {/* Title */}
+              {/* TITLE */}
 
               <input
                 type="text"
                 value={title}
                 onChange={(event) =>
-                  setTitle(
-                    event.target.value,
+                  handleTitleChange(
+                    event.target
+                      .value,
                   )
                 }
                 placeholder="Note title"
@@ -788,7 +844,7 @@ export default function NoteEditor({
                 "
               />
 
-              {/* Blocks */}
+              {/* BLOCKS */}
 
               <div
                 className="
@@ -817,7 +873,7 @@ export default function NoteEditor({
                           hover:bg-gray-50
                         "
                       >
-                        {/* Drag */}
+                        {/* DRAG */}
 
                         <div
                           className="
@@ -834,7 +890,7 @@ export default function NoteEditor({
                           />
                         </div>
 
-                        {/* Checkbox */}
+                        {/* CHECKBOX */}
 
                         {isChecklist && (
                           <button
@@ -868,7 +924,7 @@ export default function NoteEditor({
                           </button>
                         )}
 
-                        {/* Text */}
+                        {/* TEXT */}
 
                         <textarea
                           value={
@@ -921,7 +977,7 @@ export default function NoteEditor({
                           }}
                         />
 
-                        {/* Delete */}
+                        {/* DELETE */}
 
                         <button
                           type="button"
@@ -953,7 +1009,7 @@ export default function NoteEditor({
                 )}
               </div>
 
-              {/* Add */}
+              {/* ADD */}
 
               <div
                 className="
@@ -982,7 +1038,7 @@ export default function NoteEditor({
                     Add
                   </span>
 
-                  {/* Paragraph */}
+                  {/* PARAGRAPH */}
 
                   <button
                     type="button"
@@ -1009,12 +1065,14 @@ export default function NoteEditor({
                       hover:text-green-700
                     "
                   >
-                    <Type size={15} />
+                    <Type
+                      size={15}
+                    />
 
                     Paragraph
                   </button>
 
-                  {/* Checklist */}
+                  {/* CHECKLIST */}
 
                   <button
                     type="button"
@@ -1050,7 +1108,7 @@ export default function NoteEditor({
                 </div>
               </div>
 
-              {/* Auto save info */}
+              {/* SAVE INFO */}
 
               <div
                 className="
@@ -1062,15 +1120,15 @@ export default function NoteEditor({
                   text-gray-400
                 "
               >
-                <Plus size={14} />
+                <Save size={14} />
 
-                Changes save
-                automatically.
+                Click Save to save
+                your changes.
               </div>
             </div>
           </main>
 
-          {/* Footer */}
+          {/* FOOTER */}
 
           <footer
             className="
@@ -1087,7 +1145,7 @@ export default function NoteEditor({
             {blocks.length === 1
               ? "block"
               : "blocks"}{" "}
-            · Auto-save enabled
+            · Manual save
           </footer>
         </div>
       </div>
