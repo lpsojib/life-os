@@ -5,18 +5,19 @@ import {
 } from "react";
 
 import {
-  ArrowLeft,
   Check,
-  CheckSquare,
-  MoreVertical,
   Pin,
   PinOff,
   Plus,
   Save,
   Trash2,
-  Type,
   X,
 } from "lucide-react";
+
+import {
+  deleteNote,
+  saveNote,
+} from "../services/notebook.service";
 
 import {
   Note,
@@ -25,11 +26,77 @@ import {
 
 interface NoteEditorProps {
   note: Note;
-  onChange: (note: Note) => void;
-  onSave: (note: Note) => Promise<void> | void;
-  onDelete: () => Promise<void> | void;
+  onChange?: (note: Note) => void;
+  onSave?: (
+    note: Note,
+  ) => Promise<void> | void;
+  onDelete?: () =>
+    Promise<void> | void;
   onClose: () => void;
 }
+
+/* =========================================================
+   HELPERS
+========================================================= */
+
+function createTextBlock(): NoteBlock {
+  return {
+    id: crypto.randomUUID(),
+    type: "text",
+    text: "",
+  };
+}
+
+function createChecklistBlock(): NoteBlock {
+  return {
+    id: crypto.randomUUID(),
+    type: "checklist",
+    text: "",
+    checked: false,
+  };
+}
+
+function normalizeBlocks(
+  blocks: NoteBlock[] | undefined,
+): NoteBlock[] {
+  if (
+    !Array.isArray(blocks) ||
+    blocks.length === 0
+  ) {
+    return [createTextBlock()];
+  }
+
+  return blocks.map(
+    (block) => {
+      if (
+        block.type ===
+        "checklist"
+      ) {
+        return {
+          ...block,
+          type: "checklist",
+          text:
+            block.text ?? "",
+          checked:
+            Boolean(
+              block.checked,
+            ),
+        };
+      }
+
+      return {
+        ...block,
+        type: "text",
+        text:
+          block.text ?? "",
+      };
+    },
+  );
+}
+
+/* =========================================================
+   COMPONENT
+========================================================= */
 
 export default function NoteEditor({
   note,
@@ -39,197 +106,255 @@ export default function NoteEditor({
   onClose,
 }: NoteEditorProps) {
   const [title, setTitle] =
-    useState(note.title || "");
+    useState(
+      note.title ?? "",
+    );
 
   const [blocks, setBlocks] =
     useState<NoteBlock[]>(
-      Array.isArray(note.blocks)
-        ? note.blocks
-        : [],
+      () =>
+        normalizeBlocks(
+          note.blocks,
+        ),
+    );
+
+  const [pinned, setPinned] =
+    useState(
+      Boolean(note.pinned),
     );
 
   const [saving, setSaving] =
     useState(false);
 
-  const [menuOpen, setMenuOpen] =
+  const [deleting, setDeleting] =
     useState(false);
 
-  const [saved, setSaved] =
-    useState(false);
+  /* =======================================================
+     CREATE UPDATED NOTE
+  ======================================================= */
 
-  /* =====================================================
-     UPDATE TITLE
-  ===================================================== */
+  function createUpdatedNote(
+    nextTitle: string,
+    nextBlocks: NoteBlock[],
+    nextPinned: boolean,
+  ): Note {
+    return {
+      ...note,
+
+      title:
+        nextTitle,
+
+      type:
+        note.type ?? "text",
+
+      blocks:
+        nextBlocks,
+
+      pinned:
+        nextPinned,
+
+      createdAt:
+        note.createdAt,
+
+      updatedAt:
+        new Date().toISOString(),
+    };
+  }
+
+  /* =======================================================
+     TITLE
+  ======================================================= */
 
   function handleTitleChange(
     value: string,
   ) {
     setTitle(value);
-    setSaved(false);
 
-    onChange({
-      ...note,
-      title: value,
-      blocks,
-    });
+    const updated =
+      createUpdatedNote(
+        value,
+        blocks,
+        pinned,
+      );
+
+    onChange?.(updated);
   }
 
-  /* =====================================================
-     UPDATE BLOCK
-  ===================================================== */
+  /* =======================================================
+     BLOCK TEXT
+  ======================================================= */
 
-  function updateBlock(
+  function handleBlockChange(
     blockId: string,
     value: string,
   ) {
     const updatedBlocks =
-      blocks.map((block) =>
-        block.id === blockId
-          ? {
-              ...block,
-              text: value,
-            }
-          : block,
+      blocks.map(
+        (block) =>
+          block.id === blockId
+            ? {
+                ...block,
+                text: value,
+              }
+            : block,
       );
 
-    setBlocks(updatedBlocks);
-    setSaved(false);
+    setBlocks(
+      updatedBlocks,
+    );
 
-    onChange({
-      ...note,
-      title,
-      blocks: updatedBlocks,
-    });
+    const updated =
+      createUpdatedNote(
+        title,
+        updatedBlocks,
+        pinned,
+      );
+
+    onChange?.(updated);
   }
 
-  /* =====================================================
-     TOGGLE CHECKBOX
-  ===================================================== */
+  /* =======================================================
+     CHECKBOX
+  ======================================================= */
 
-  function toggleCheckbox(
+  function handleCheckboxChange(
     blockId: string,
+    checked: boolean,
   ) {
     const updatedBlocks =
-      blocks.map((block) =>
-        block.id === blockId
-          ? {
-              ...block,
-              checked:
-                !Boolean(
-                  block.checked,
-                ),
-            }
-          : block,
+      blocks.map(
+        (block) =>
+          block.id === blockId
+            ? {
+                ...block,
+                checked,
+              }
+            : block,
       );
 
-    setBlocks(updatedBlocks);
-    setSaved(false);
+    setBlocks(
+      updatedBlocks,
+    );
 
-    onChange({
-      ...note,
-      title,
-      blocks: updatedBlocks,
-    });
+    const updated =
+      createUpdatedNote(
+        title,
+        updatedBlocks,
+        pinned,
+      );
+
+    onChange?.(updated);
   }
 
-  /* =====================================================
-     ADD TEXT
-  ===================================================== */
+  /* =======================================================
+     ADD PARAGRAPH
+  ======================================================= */
 
-  function addTextBlock() {
-    const block: NoteBlock = {
-      id: crypto.randomUUID(),
-      type: "text",
-      text: "",
-    };
-
+  function addParagraph() {
     const updatedBlocks = [
       ...blocks,
-      block,
+      createTextBlock(),
     ];
 
-    setBlocks(updatedBlocks);
+    setBlocks(
+      updatedBlocks,
+    );
 
-    onChange({
-      ...note,
-      title,
-      blocks: updatedBlocks,
-    });
+    const updated =
+      createUpdatedNote(
+        title,
+        updatedBlocks,
+        pinned,
+      );
 
-    setSaved(false);
+    onChange?.(updated);
   }
 
-  /* =====================================================
+  /* =======================================================
      ADD CHECKBOX
-  ===================================================== */
+  ======================================================= */
 
-  function addChecklistBlock() {
-    const block: NoteBlock = {
-      id: crypto.randomUUID(),
-      type: "checklist",
-      text: "",
-      checked: false,
-    };
-
+  function addCheckbox() {
     const updatedBlocks = [
       ...blocks,
-      block,
+      createChecklistBlock(),
     ];
 
-    setBlocks(updatedBlocks);
+    setBlocks(
+      updatedBlocks,
+    );
 
-    onChange({
-      ...note,
-      title,
-      blocks: updatedBlocks,
-    });
+    const updated =
+      createUpdatedNote(
+        title,
+        updatedBlocks,
+        pinned,
+      );
 
-    setSaved(false);
+    onChange?.(updated);
   }
 
-  /* =====================================================
-     DELETE BLOCK
-  ===================================================== */
+  /* =======================================================
+     REMOVE BLOCK
+  ======================================================= */
 
-  function deleteBlock(
+  function removeBlock(
     blockId: string,
   ) {
-    const updatedBlocks =
+    let updatedBlocks =
       blocks.filter(
         (block) =>
           block.id !== blockId,
       );
 
-    setBlocks(updatedBlocks);
+    if (
+      updatedBlocks.length ===
+      0
+    ) {
+      updatedBlocks = [
+        createTextBlock(),
+      ];
+    }
 
-    onChange({
-      ...note,
-      title,
-      blocks: updatedBlocks,
-    });
+    setBlocks(
+      updatedBlocks,
+    );
 
-    setSaved(false);
+    const updated =
+      createUpdatedNote(
+        title,
+        updatedBlocks,
+        pinned,
+      );
+
+    onChange?.(updated);
   }
 
-  /* =====================================================
+  /* =======================================================
      PIN
-  ===================================================== */
+  ======================================================= */
 
   function togglePin() {
-    const updatedNote = {
-      ...note,
-      title,
-      blocks,
-      pinned: !note.pinned,
-    };
+    const nextPinned =
+      !pinned;
 
-    onChange(updatedNote);
-    setSaved(false);
+    setPinned(
+      nextPinned,
+    );
+
+    const updated =
+      createUpdatedNote(
+        title,
+        blocks,
+        nextPinned,
+      );
+
+    onChange?.(updated);
   }
 
-  /* =====================================================
+  /* =======================================================
      SAVE
-  ===================================================== */
+  ======================================================= */
 
   async function handleSave() {
     if (saving) {
@@ -239,43 +364,27 @@ export default function NoteEditor({
     setSaving(true);
 
     try {
-      const cleanBlocks =
-        blocks.filter(
-          (block) =>
-            block.text.trim() !== "",
+      const updated =
+        createUpdatedNote(
+          title,
+          blocks,
+          pinned,
         );
 
-      const updatedNote: Note = {
-        ...note,
+      onChange?.(updated);
 
-        /*
-         * No default title.
-         */
-        title: title.trim(),
-
-        blocks: cleanBlocks,
-
-        pinned:
-          Boolean(note.pinned),
-
-        updatedAt:
-          new Date().toISOString(),
-      };
-
-      setBlocks(cleanBlocks);
-
-      onChange(updatedNote);
-
-      await onSave(updatedNote);
-
-      setSaved(true);
-
-      setTimeout(() => {
-        setSaved(false);
-      }, 1800);
+      if (onSave) {
+        await onSave(
+          updated,
+        );
+      } else {
+        await saveNote(
+          updated,
+        );
+      }
     } catch (error) {
       console.error(
-        "Could not save note:",
+        "Note save failed:",
         error,
       );
     } finally {
@@ -283,26 +392,57 @@ export default function NoteEditor({
     }
   }
 
-  /* =====================================================
+  /* =======================================================
      DELETE
-  ===================================================== */
+  ======================================================= */
 
   async function handleDelete() {
+    if (deleting) {
+      return;
+    }
+
     const confirmed =
       window.confirm(
-        "Delete this note?",
+        "Are you sure you want to delete this note?",
       );
 
     if (!confirmed) {
       return;
     }
 
-    await onDelete();
+    setDeleting(true);
+
+    try {
+      if (onDelete) {
+        await onDelete();
+      } else {
+        await deleteNote(
+          note.id,
+        );
+      }
+
+      onClose();
+    } catch (error) {
+      console.error(
+        "Note delete failed:",
+        error,
+      );
+    } finally {
+      setDeleting(false);
+    }
   }
 
-  /* =====================================================
-     RENDER
-  ===================================================== */
+  /* =======================================================
+     CLOSE
+  ======================================================= */
+
+  function handleClose() {
+    onClose();
+  }
+
+  /* =======================================================
+     UI
+  ======================================================= */
 
   return (
     <div
@@ -311,533 +451,496 @@ export default function NoteEditor({
         inset-0
         z-50
         flex
-        flex-col
-        bg-white
+        items-center
+        justify-center
+        bg-black/40
+        p-3
+        backdrop-blur-sm
+        sm:p-6
       "
     >
-      {/* =================================================
-         HEADER
-      ================================================= */}
-
-      <header
+      <div
         className="
           flex
-          h-16
-          shrink-0
-          items-center
-          justify-between
-          border-b
-          border-gray-100
-          px-4
-          sm:px-6
+          h-[95vh]
+          w-full
+          max-w-4xl
+          flex-col
+          overflow-hidden
+          rounded-3xl
+          bg-white
+          shadow-2xl
+          sm:h-[90vh]
         "
       >
-        {/* LEFT */}
+        {/* =================================================
+            HEADER
+        ================================================= */}
 
-        <button
-          type="button"
-          onClick={onClose}
-          className="
-            inline-flex
-            items-center
-            gap-2
-            rounded-xl
-            px-2
-            py-2
-            text-sm
-            text-gray-500
-            transition
-            hover:bg-gray-100
-            hover:text-gray-900
-          "
-        >
-          <ArrowLeft size={19} />
-
-          <span className="hidden sm:block">
-            Notes
-          </span>
-        </button>
-
-        {/* RIGHT */}
-
-        <div className="flex items-center gap-1">
-          {/* PIN */}
-
-          <button
-            type="button"
-            onClick={togglePin}
-            title={
-              note.pinned
-                ? "Unpin"
-                : "Pin"
-            }
-            className={`
-              rounded-xl
-              p-2.5
-              transition
-              ${
-                note.pinned
-                  ? "bg-green-50 text-green-600"
-                  : "text-gray-400 hover:bg-gray-100 hover:text-gray-700"
-              }
-            `}
-          >
-            {note.pinned ? (
-              <Pin size={18} />
-            ) : (
-              <PinOff size={18} />
-            )}
-          </button>
-
-          {/* DELETE */}
-
-          <button
-            type="button"
-            onClick={
-              handleDelete
-            }
-            title="Delete"
-            className="
-              rounded-xl
-              p-2.5
-              text-gray-400
-              transition
-              hover:bg-red-50
-              hover:text-red-500
-            "
-          >
-            <Trash2 size={18} />
-          </button>
-
-          {/* SAVE */}
-
-          <button
-            type="button"
-            onClick={
-              handleSave
-            }
-            disabled={saving}
-            className="
-              ml-1
-              inline-flex
-              items-center
-              gap-2
-              rounded-xl
-              bg-green-600
-              px-4
-              py-2.5
-              text-sm
-              font-semibold
-              text-white
-              shadow-sm
-              transition
-              hover:bg-green-700
-              disabled:cursor-not-allowed
-              disabled:opacity-60
-            "
-          >
-            {saved ? (
-              <>
-                <Check size={17} />
-                <span>Saved</span>
-              </>
-            ) : (
-              <>
-                <Save size={17} />
-                <span>
-                  {saving
-                    ? "Saving..."
-                    : "Save"}
-                </span>
-              </>
-            )}
-          </button>
-
-          {/* CLOSE */}
-
-          <button
-            type="button"
-            onClick={onClose}
-            className="
-              ml-1
-              rounded-xl
-              p-2.5
-              text-gray-400
-              transition
-              hover:bg-gray-100
-              hover:text-gray-700
-            "
-          >
-            <X size={19} />
-          </button>
-        </div>
-      </header>
-
-      {/* =================================================
-         CONTENT
-      ================================================= */}
-
-      <main
-        className="
-          flex-1
-          overflow-y-auto
-        "
-      >
         <div
           className="
-            mx-auto
-            w-full
-            max-w-3xl
-            px-5
-            py-10
-            sm:px-8
-            sm:py-14
+            flex
+            items-center
+            justify-between
+            border-b
+            border-gray-100
+            px-4
+            py-3
+            sm:px-6
           "
         >
-          {/* TITLE */}
-
-          <input
-            type="text"
-            value={title}
-            onChange={(event) =>
-              handleTitleChange(
-                event.target.value,
-              )
-            }
-            placeholder="Untitled"
-            className="
-              w-full
-              border-0
-              bg-transparent
-              p-0
-              text-3xl
-              font-bold
-              tracking-tight
-              text-gray-900
-              outline-none
-              placeholder:text-gray-300
-              sm:text-4xl
-            "
-          />
-
-          {/* DIVIDER */}
-
-          <div className="my-7 h-px bg-gray-100" />
-
-          {/* BLOCKS */}
-
-          <div className="space-y-1">
-            {blocks.map(
-              (block, index) => (
-                <EditorBlock
-                  key={block.id}
-                  block={block}
-                  index={index}
-                  onChange={
-                    updateBlock
-                  }
-                  onToggle={
-                    toggleCheckbox
-                  }
-                  onDelete={
-                    deleteBlock
-                  }
-                />
-              ),
-            )}
-          </div>
-
-          {/* EMPTY */}
-
-          {blocks.length ===
-            0 && (
-            <button
-              type="button"
-              onClick={
-                addTextBlock
-              }
-              className="
-                group
-                mt-2
-                flex
-                w-full
-                items-center
-                gap-3
-                py-3
-                text-left
-                text-gray-400
-                transition
-                hover:text-gray-600
-              "
-            >
-              <Type size={18} />
-
-              <span className="text-sm">
-                Start writing...
-              </span>
-            </button>
-          )}
-
-          {/* ADD */}
-
           <div
             className="
-              mt-8
               flex
-              flex-wrap
               items-center
               gap-2
-              border-t
-              border-gray-100
-              pt-5
             "
           >
             <button
               type="button"
               onClick={
-                addTextBlock
+                handleClose
               }
               className="
-                inline-flex
-                items-center
-                gap-2
                 rounded-xl
-                px-3
-                py-2
-                text-sm
-                text-gray-500
+                p-2
+                text-gray-400
                 transition
                 hover:bg-gray-100
-                hover:text-gray-900
+                hover:text-gray-700
               "
+              title="Close"
             >
-              <Type size={16} />
-              Paragraph
+              <X size={20} />
             </button>
 
-            <button
-              type="button"
-              onClick={
-                addChecklistBlock
-              }
+            <span
               className="
-                inline-flex
-                items-center
-                gap-2
-                rounded-xl
-                px-3
-                py-2
+                hidden
                 text-sm
+                font-medium
                 text-gray-500
-                transition
-                hover:bg-gray-100
-                hover:text-gray-900
+                sm:block
               "
             >
-              <CheckSquare
-                size={16}
-              />
-              Checkbox
-            </button>
+              Notebook
+            </span>
           </div>
-
-          {/* BOTTOM SAVE */}
 
           <div
             className="
-              mt-10
               flex
               items-center
-              justify-between
-              border-t
-              border-gray-100
-              pt-5
+              gap-1
             "
           >
-            <span className="text-xs text-gray-400">
-              {saved
-                ? "Changes saved"
-                : "Changes are not saved yet"}
-            </span>
+            {/* PIN */}
+
+            <button
+              type="button"
+              onClick={
+                togglePin
+              }
+              title={
+                pinned
+                  ? "Unpin"
+                  : "Pin"
+              }
+              className={`
+                rounded-xl
+                p-2.5
+                transition
+                ${
+                  pinned
+                    ? "bg-green-50 text-green-600"
+                    : "text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                }
+              `}
+            >
+              {pinned ? (
+                <Pin
+                  size={18}
+                />
+              ) : (
+                <PinOff
+                  size={18}
+                />
+              )}
+            </button>
+
+            {/* DELETE */}
+
+            <button
+              type="button"
+              onClick={
+                handleDelete
+              }
+              disabled={
+                deleting
+              }
+              title="Delete"
+              className="
+                rounded-xl
+                p-2.5
+                text-gray-400
+                transition
+                hover:bg-red-50
+                hover:text-red-500
+                disabled:opacity-50
+              "
+            >
+              <Trash2
+                size={18}
+              />
+            </button>
+
+            {/* SAVE */}
 
             <button
               type="button"
               onClick={
                 handleSave
               }
-              disabled={saving}
+              disabled={
+                saving
+              }
               className="
+                ml-1
                 inline-flex
                 items-center
                 gap-2
                 rounded-xl
-                bg-gray-900
-                px-5
-                py-2.5
+                bg-green-600
+                px-3
+                py-2
                 text-sm
                 font-semibold
                 text-white
                 transition
-                hover:bg-gray-800
+                hover:bg-green-700
+                disabled:cursor-not-allowed
                 disabled:opacity-60
+                sm:px-4
               "
             >
-              <Save size={16} />
+              <Save
+                size={16}
+              />
 
-              {saving
-                ? "Saving..."
-                : "Save Note"}
+              <span>
+                {saving
+                  ? "Saving..."
+                  : "Save"}
+              </span>
             </button>
           </div>
         </div>
-      </main>
-    </div>
-  );
-}
 
-/* =========================================================
-   EDITOR BLOCK
-========================================================= */
+        {/* =================================================
+            EDITOR
+        ================================================= */}
 
-function EditorBlock({
-  block,
-  index,
-  onChange,
-  onToggle,
-  onDelete,
-}: {
-  block: NoteBlock;
-  index: number;
-  onChange: (
-    id: string,
-    value: string,
-  ) => void;
-  onToggle: (
-    id: string,
-  ) => void;
-  onDelete: (
-    id: string,
-  ) => void;
-}) {
-  const isChecklist =
-    block.type ===
-    "checklist";
-
-  return (
-    <div
-      className="
-        group
-        relative
-        flex
-        items-start
-        gap-3
-        py-1
-      "
-    >
-      {/* CHECKBOX */}
-
-      {isChecklist && (
-        <button
-          type="button"
-          onClick={() =>
-            onToggle(block.id)
-          }
+        <div
           className="
-            mt-1
-            flex
-            h-5
-            w-5
-            shrink-0
-            items-center
-            justify-center
-            rounded-md
-            border
-            border-gray-300
-            transition
-            hover:border-green-500
+            flex-1
+            overflow-y-auto
+            px-5
+            py-6
+            sm:px-10
+            sm:py-8
           "
         >
-          {block.checked && (
-            <Check
-              size={14}
-              className="text-green-600"
+          <div
+            className="
+              mx-auto
+              max-w-3xl
+            "
+          >
+            {/* TITLE */}
+
+            <input
+              type="text"
+              value={title}
+              onChange={(
+                event,
+              ) =>
+                handleTitleChange(
+                  event.target
+                    .value,
+                )
+              }
+              placeholder="Note title..."
+              className="
+                w-full
+                border-0
+                bg-transparent
+                text-3xl
+                font-bold
+                tracking-tight
+                text-gray-900
+                outline-none
+                placeholder:text-gray-300
+                sm:text-4xl
+              "
             />
-          )}
-        </button>
-      )}
 
-      {/* TEXT */}
+            {/* CONTENT */}
 
-      <textarea
-        value={block.text}
-        onChange={(event) =>
-          onChange(
-            block.id,
-            event.target.value,
-          )
-        }
-        placeholder={
-          isChecklist
-            ? "To-do..."
-            : index === 0
-              ? "Start writing..."
-              : "Continue writing..."
-        }
-        rows={1}
-        className={`
-          min-h-[28px]
-          flex-1
-          resize-none
-          overflow-hidden
-          border-0
-          bg-transparent
-          p-0
-          text-[16px]
-          leading-7
-          outline-none
-          placeholder:text-gray-300
-          ${
-            block.checked
-              ? "text-gray-400 line-through"
-              : "text-gray-700"
-          }
-        `}
-        onInput={(event) => {
-          const target =
-            event.currentTarget;
+            <div
+              className="
+                mt-8
+                space-y-2
+              "
+            >
+              {blocks.map(
+                (block) => {
+                  const checklist =
+                    block.type ===
+                    "checklist";
 
-          target.style.height =
-            "auto";
+                  return (
+                    <div
+                      key={
+                        block.id
+                      }
+                      className="
+                        group
+                        flex
+                        items-start
+                        gap-3
+                      "
+                    >
+                      {/* CHECKBOX */}
 
-          target.style.height =
-            `${target.scrollHeight}px`;
-        }}
-      />
+                      {checklist ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleCheckboxChange(
+                              block.id,
+                              !block.checked,
+                            )
+                          }
+                          className={`
+                            mt-2
+                            flex
+                            h-5
+                            w-5
+                            shrink-0
+                            items-center
+                            justify-center
+                            rounded-md
+                            border
+                            transition
+                            ${
+                              block.checked
+                                ? "border-green-600 bg-green-600 text-white"
+                                : "border-gray-300 bg-white text-transparent hover:border-green-500"
+                            }
+                          `}
+                        >
+                          <Check
+                            size={13}
+                          />
+                        </button>
+                      ) : (
+                        <div
+                          className="
+                            w-5
+                            shrink-0
+                          "
+                        />
+                      )}
 
-      {/* DELETE */}
+                      {/* TEXT */}
 
-      <button
-        type="button"
-        onClick={() =>
-          onDelete(block.id)
-        }
-        className="
-          mt-1
-          shrink-0
-          rounded-lg
-          p-1.5
-          text-gray-300
-          opacity-0
-          transition
-          hover:bg-red-50
-          hover:text-red-500
-          group-hover:opacity-100
-          focus:opacity-100
-        "
-        title="Remove"
-      >
-        <Trash2 size={14} />
-      </button>
+                      <textarea
+                        value={
+                          block.text ??
+                          ""
+                        }
+                        onChange={(
+                          event,
+                        ) =>
+                          handleBlockChange(
+                            block.id,
+                            event
+                              .target
+                              .value,
+                          )
+                        }
+                        placeholder={
+                          checklist
+                            ? "Write a checklist item..."
+                            : "Start writing..."
+                        }
+                        rows={1}
+                        className={`
+                          min-h-[44px]
+                          flex-1
+                          resize-none
+                          overflow-hidden
+                          border-0
+                          bg-transparent
+                          px-0
+                          py-1
+                          text-lg
+                          leading-8
+                          outline-none
+                          placeholder:text-gray-300
+                          ${
+                            block.checked
+                              ? "text-gray-400 line-through"
+                              : "text-gray-800"
+                          }
+                        `}
+                        onInput={(
+                          event,
+                        ) => {
+                          const target =
+                            event.currentTarget;
+
+                          target.style.height =
+                            "auto";
+
+                          target.style.height =
+                            `${target.scrollHeight}px`;
+                        }}
+                      />
+
+                      {/* REMOVE */}
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          removeBlock(
+                            block.id,
+                          )
+                        }
+                        title="Remove"
+                        className="
+                          mt-1
+                          rounded-lg
+                          p-1.5
+                          text-gray-300
+                          opacity-0
+                          transition
+                          group-hover:opacity-100
+                          hover:bg-red-50
+                          hover:text-red-500
+                        "
+                      >
+                        <X
+                          size={15}
+                        />
+                      </button>
+                    </div>
+                  );
+                },
+              )}
+            </div>
+
+            {/* ADD OPTIONS */}
+
+            <div
+              className="
+                mt-8
+                flex
+                flex-wrap
+                items-center
+                gap-2
+                border-t
+                border-gray-100
+                pt-5
+              "
+            >
+              <button
+                type="button"
+                onClick={
+                  addParagraph
+                }
+                className="
+                  inline-flex
+                  items-center
+                  gap-2
+                  rounded-xl
+                  px-3
+                  py-2
+                  text-sm
+                  font-medium
+                  text-gray-500
+                  transition
+                  hover:bg-gray-100
+                  hover:text-gray-800
+                "
+              >
+                <Plus
+                  size={16}
+                />
+                Paragraph
+              </button>
+
+              <button
+                type="button"
+                onClick={
+                  addCheckbox
+                }
+                className="
+                  inline-flex
+                  items-center
+                  gap-2
+                  rounded-xl
+                  px-3
+                  py-2
+                  text-sm
+                  font-medium
+                  text-gray-500
+                  transition
+                  hover:bg-gray-100
+                  hover:text-gray-800
+                "
+              >
+                <Plus
+                  size={16}
+                />
+                Checkbox
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* =================================================
+            FOOTER
+        ================================================= */}
+
+        <div
+          className="
+            flex
+            items-center
+            justify-between
+            border-t
+            border-gray-100
+            px-5
+            py-3
+            text-xs
+            text-gray-400
+            sm:px-6
+          "
+        >
+          <span>
+            {pinned
+              ? "Pinned note"
+              : "Notebook"}
+          </span>
+
+          <span>
+            {blocks.length}{" "}
+            {blocks.length === 1
+              ? "block"
+              : "blocks"}
+          </span>
+        </div>
+      </div>
     </div>
   );
 }
