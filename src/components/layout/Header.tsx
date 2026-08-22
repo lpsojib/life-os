@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+
 import {
   Bell,
   Menu,
@@ -24,19 +25,27 @@ export default function Header({
         right-0
         top-0
         z-30
-        flex
         h-16
-        items-center
-        justify-between
         border-b
+        border-gray-100
         bg-white
-        px-4
+        shadow-sm
         md:left-64
-        md:px-6
       "
     >
       {/* Left Side */}
-      <div className="flex items-center gap-3">
+      <div
+        className="
+          absolute
+          left-0
+          top-0
+          flex
+          h-16
+          items-center
+          px-4
+          md:px-6
+        "
+      >
         {/* Mobile Menu */}
         <button
           type="button"
@@ -44,6 +53,8 @@ export default function Header({
           className="
             rounded-lg
             p-2
+            text-gray-700
+            transition
             hover:bg-gray-100
             md:hidden
           "
@@ -52,45 +63,25 @@ export default function Header({
           <Menu size={24} />
         </button>
 
-        {/* Logo */}
-        <div className="flex items-center">
-          <Image
-            src="/logo.png"
-            alt="Life OS"
-            width={42}
-            height={42}
-            priority
-            className="
-              h-10
-              w-10
-              object-contain
-            "
-          />
-        </div>
-      </div>
-
-      {/* Search */}
-      <div
-        className="
-          hidden
-          w-full
-          max-w-md
-          lg:block
-        "
-      >
+        {/* Desktop Search */}
         <div
           className="
-            flex
+            hidden
+            lg:flex
             items-center
-            rounded-lg
+            rounded-xl
             border
+            border-gray-200
+            bg-gray-50
             px-3
             py-2
+            md:w-56
+            xl:w-64
           "
         >
           <Search
-            size={18}
-            className="text-gray-500"
+            size={17}
+            className="text-gray-400"
           />
 
           <input
@@ -100,7 +91,51 @@ export default function Header({
               ml-2
               w-full
               bg-transparent
+              text-sm
+              text-gray-700
               outline-none
+              placeholder:text-gray-400
+            "
+          />
+        </div>
+      </div>
+
+      {/* Center Logo */}
+      <div
+        className="
+          pointer-events-none
+          absolute
+          left-1/2
+          top-1/2
+          flex
+          -translate-x-1/2
+          -translate-y-1/2
+          items-center
+          justify-center
+        "
+      >
+        <div
+          className="
+            flex
+            h-11
+            w-11
+            items-center
+            justify-center
+            rounded-xl
+            bg-white
+            p-1
+          "
+        >
+          <Image
+            src="/logo.png"
+            alt="Life OS"
+            width={44}
+            height={44}
+            priority
+            className="
+              h-full
+              w-full
+              object-contain
             "
           />
         </div>
@@ -109,10 +144,16 @@ export default function Header({
       {/* Right Side */}
       <div
         className="
+          absolute
+          right-0
+          top-0
           flex
+          h-16
           items-center
           gap-2
+          px-4
           md:gap-4
+          md:px-6
         "
       >
         {/* Notification */}
@@ -120,9 +161,12 @@ export default function Header({
           type="button"
           className="
             relative
-            rounded-lg
+            rounded-xl
             p-2
+            text-gray-600
+            transition
             hover:bg-gray-100
+            hover:text-gray-900
           "
           aria-label="Notifications"
         >
