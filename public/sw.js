@@ -1,27 +1,23 @@
-const CACHE_NAME = "life-os-v4";
+const CACHE_NAME = "life-os-v6";
 
 const APP_SHELL = [
   "/",
   "/dashboard",
+  "/login",
+  "/register",
 ];
 
 /**
- * ================================
  * INSTALL
- * ================================
+ *
+ * App shell cache করি।
  */
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(async (cache) => {
       for (const url of APP_SHELL) {
         try {
-          const response = await fetch(url, {
-            cache: "no-store",
-          });
-
-          if (response.ok) {
-            await cache.put(url, response);
-          }
+          await cache.add(url);
         } catch (error) {
           console.warn(
             "Life OS cache failed:",
@@ -33,13 +29,18 @@ self.addEventListener("install", (event) => {
     })
   );
 
+  /**
+   * নতুন Service Worker-কে
+   * waiting অবস্থায় না রেখে activate করি।
+   */
   self.skipWaiting();
 });
 
+
 /**
- * ================================
  * ACTIVATE
- * ================================
+ *
+ * পুরোনো Life OS cache delete করি।
  */
 self.addEventListener("activate", (event) => {
   event.waitUntil(
@@ -49,25 +50,35 @@ self.addEventListener("activate", (event) => {
         return Promise.all(
           cacheNames
             .filter(
-              (name) => name !== CACHE_NAME
+              (name) =>
+                name.startsWith("life-os-") &&
+                name !== CACHE_NAME
             )
             .map((name) =>
               caches.delete(name)
             )
         );
       })
-      .then(() => self.clients.claim())
+      .then(() => {
+        /**
+         * বর্তমানে open থাকা page-গুলোকেও
+         * নতুন Service Worker control করবে।
+         */
+        return self.clients.claim();
+      })
   );
 });
 
+
 /**
- * ================================
  * FETCH
- * ================================
  */
 self.addEventListener("fetch", (event) => {
   const request = event.request;
 
+  /**
+   * শুধু GET request cache করব।
+   */
   if (request.method !== "GET") {
     return;
   }
@@ -75,297 +86,177 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
 
   /**
-   * শুধু নিজের Life OS domain-এর request
-   * handle করব।
+   * অন্য domain-এর request Service Worker
+   * handle করবে না।
    */
   if (url.origin !== self.location.origin) {
     return;
   }
 
+
   /**
-   * ================================
-   * PAGE NAVIGATION
-   * ================================
+   * ----------------------------------------
+   * NAVIGATION REQUEST
+   * ----------------------------------------
+   *
+   * User যখন page/app open করে।
+   *
+   * আগে cache → তারপর network।
+   *
+   * Offline হলে cache থেকে page দেওয়া হবে।
    */
   if (request.mode === "navigate") {
     event.respondWith(
-      handleNavigation(request)
+      caches.match(request).then((cachedPage) => {
+        /**
+         * Cached page থাকলে
+         * সঙ্গে সঙ্গে return করি।
+         */
+        if (cachedPage) {
+          /**
+           * Background-এ network update করার
+           * চেষ্টা করি।
+           */
+          fetch(request)
+            .then((response) => {
+              if (
+                response &&
+                response.ok
+              ) {
+                caches.open(CACHE_NAME).then(
+                  (cache) => {
+                    cache.put(
+                      request,
+                      response.clone()
+                    );
+                  }
+                );
+              }
+            })
+            .catch(() => {
+              /**
+               * Offline হলে কিছু করার নেই।
+               */
+            });
+
+          return cachedPage;
+        }
+
+
+        /**
+         * Cache-এ page নেই।
+         *
+         * Network try করব।
+         */
+        return fetch(request)
+          .then((response) => {
+            if (
+              response &&
+              response.ok
+            ) {
+              const copy =
+                response.clone();
+
+              caches.open(CACHE_NAME).then(
+                (cache) => {
+                  cache.put(
+                    request,
+                    copy
+                  );
+                }
+              );
+            }
+
+            return response;
+          })
+          .catch(() => {
+            /**
+             * Network unavailable হলে
+             * Dashboard cache থেকে দেওয়ার চেষ্টা।
+             */
+            return caches.match(
+              "/dashboard"
+            );
+          });
+      })
     );
 
     return;
   }
 
+
   /**
-   * ================================
-   * NEXT.JS STATIC FILES
-   * ================================
+   * ----------------------------------------
+   * STATIC / JS / CSS / IMAGE / FONT
+   * ----------------------------------------
    *
-   * এগুলো offline app-এর জন্য সবচেয়ে
-   * গুরুত্বপূর্ণ।
+   * Cache থাকলে cache থেকে।
+   * না থাকলে network থেকে এনে cache করি।
    */
-  if (
-    url.pathname.startsWith("/_next/static/")
-  ) {
-    event.respondWith(
-      handleStaticAsset(request)
-    );
+  event.respondWith(
+    caches.match(request).then((cached) => {
+      if (cached) {
+        return cached;
+      }
 
-    return;
-  }
+      return fetch(request)
+        .then((response) => {
+          /**
+           * Valid response হলে cache করি।
+           */
+          if (
+            response &&
+            response.ok &&
+            response.type === "basic"
+          ) {
+            const copy =
+              response.clone();
 
-  /**
-   * ================================
-   * IMAGES / FONTS / CSS / JS
-   * ================================
-   */
-  if (
-    request.destination === "script" ||
-    request.destination === "style" ||
-    request.destination === "image" ||
-    request.destination === "font"
-  ) {
-    event.respondWith(
-      handleStaticAsset(request)
-    );
+            caches.open(CACHE_NAME).then(
+              (cache) => {
+                cache.put(
+                  request,
+                  copy
+                );
+              }
+            );
+          }
 
-    return;
-  }
-});
+          return response;
+        })
+        .catch(() => {
+          /**
+           * Image request হলে fallback।
+           */
+          if (
+            request.destination ===
+            "image"
+          ) {
+            return new Response(
+              "",
+              {
+                status: 200,
+                headers: {
+                  "Content-Type":
+                    "image/svg+xml",
+                },
+              }
+            );
+          }
 
-/**
- * ================================
- * NAVIGATION
- * ================================
- */
-async function handleNavigation(request) {
-  /**
-   * 1. Exact page cache
-   */
-  const cached = await caches.match(request);
-
-  if (cached) {
-    return cached;
-  }
-
-  /**
-   * 2. Network
-   */
-  try {
-    const response = await fetch(request);
-
-    if (response.ok) {
-      const copy = response.clone();
-
-      const cache = await caches.open(
-        CACHE_NAME
-      );
-
-      await cache.put(
-        request,
-        copy
-      );
-    }
-
-    return response;
-  } catch (error) {
-    console.warn(
-      "Life OS navigation offline:",
-      error
-    );
-
-    /**
-     * 3. Dashboard fallback
-     */
-    const dashboard =
-      await caches.match("/dashboard");
-
-    if (dashboard) {
-      return dashboard;
-    }
-
-    /**
-     * 4. Root fallback
-     */
-    const root = await caches.match("/");
-
-    if (root) {
-      return root;
-    }
-
-    /**
-     * 5. Final offline page
-     */
-    return createOfflinePage();
-  }
-}
-
-/**
- * ================================
- * STATIC ASSETS
- * ================================
- */
-async function handleStaticAsset(request) {
-  /**
-   * Cache first
-   */
-  const cached =
-    await caches.match(request);
-
-  if (cached) {
-    return cached;
-  }
-
-  /**
-   * Network
-   */
-  try {
-    const response =
-      await fetch(request);
-
-    if (
-      response &&
-      response.ok
-    ) {
-      const copy =
-        response.clone();
-
-      const cache =
-        await caches.open(
-          CACHE_NAME
-        );
-
-      await cache.put(
-        request,
-        copy
-      );
-    }
-
-    return response;
-  } catch (error) {
-    console.warn(
-      "Life OS asset offline:",
-      request.url
-    );
-
-    return new Response("", {
-      status: 503,
-    });
-  }
-}
-
-/**
- * ================================
- * OFFLINE FALLBACK
- * ================================
- */
-function createOfflinePage() {
-  return new Response(
-    `
-      <!DOCTYPE html>
-
-      <html>
-        <head>
-          <meta charset="UTF-8" />
-
-          <meta
-            name="viewport"
-            content="width=device-width, initial-scale=1"
-          />
-
-          <title>Life OS</title>
-
-          <style>
-            * {
-              box-sizing: border-box;
+          /**
+           * অন্য resource পাওয়া না গেলে
+           * browser-এর default error।
+           */
+          return new Response(
+            "",
+            {
+              status: 503,
+              statusText:
+                "Offline",
             }
-
-            body {
-              margin: 0;
-              min-height: 100vh;
-
-              display: flex;
-              align-items: center;
-              justify-content: center;
-
-              background: #f8fafc;
-
-              font-family:
-                Arial,
-                Helvetica,
-                sans-serif;
-            }
-
-            .container {
-              text-align: center;
-            }
-
-            .logo {
-              width: 80px;
-              height: 80px;
-
-              margin: 0 auto 18px;
-
-              display: flex;
-              align-items: center;
-              justify-content: center;
-
-              border-radius: 24px;
-
-              background: #000;
-              color: #fff;
-
-              font-size: 28px;
-              font-weight: 900;
-
-              box-shadow:
-                0 10px 30px
-                rgba(0, 0, 0, 0.15);
-            }
-
-            h1 {
-              margin: 0;
-
-              font-size: 21px;
-              font-weight: 700;
-
-              color: #111827;
-            }
-
-            p {
-              margin-top: 8px;
-
-              font-size: 14px;
-
-              color: #64748b;
-            }
-          </style>
-        </head>
-
-        <body>
-          <div class="container">
-
-            <div class="logo">
-              LP
-            </div>
-
-            <h1>
-              Life OS
-            </h1>
-
-            <p>
-              You're offline
-            </p>
-
-          </div>
-        </body>
-      </html>
-    `,
-    {
-      status: 200,
-      headers: {
-        "Content-Type":
-          "text/html; charset=utf-8",
-      },
-    }
+          );
+        });
+    })
   );
-}
+});

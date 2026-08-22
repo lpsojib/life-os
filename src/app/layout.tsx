@@ -1,46 +1,38 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+"use client";
 
-import AuthProvider from "../providers/AuthProvider";
-import AppShell from "../components/layout/AppShell";
-import PWARegister from "@/components/PWARegister";
+import { useEffect } from "react";
 
-import "./globals.css";
+export default function Home() {
+  useEffect(() => {
+    const hasSession =
+      localStorage.getItem(
+        "life-os-authenticated"
+      ) === "true";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
+    if (hasSession) {
+      window.location.replace(
+        "/dashboard"
+      );
+    } else {
+      window.location.replace(
+        "/login"
+      );
+    }
+  }, []);
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-export const metadata: Metadata = {
-  title: "Life OS",
-  description: "Your personal Life OS",
-};
-
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full bg-gray-50">
-        <PWARegister />
+    <main className="flex min-h-screen items-center justify-center bg-gray-50">
+      <div className="flex flex-col items-center">
+        <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-black shadow-xl">
+          <span className="text-3xl font-black text-white">
+            LP
+          </span>
+        </div>
 
-        <AuthProvider>
-          <AppShell>
-            {children}
-          </AppShell>
-        </AuthProvider>
-      </body>
-    </html>
+        <h1 className="mt-4 text-xl font-bold text-gray-900">
+          Life OS
+        </h1>
+      </div>
+    </main>
   );
 }
