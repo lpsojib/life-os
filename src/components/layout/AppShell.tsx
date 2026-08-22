@@ -1,6 +1,10 @@
 "use client";
 
-import { ReactNode, useState } from "react";
+import {
+  ReactNode,
+  useState,
+} from "react";
+
 import { usePathname } from "next/navigation";
 
 import Sidebar from "./Sidebar";
@@ -10,7 +14,10 @@ interface AppShellProps {
   children: ReactNode;
 }
 
-const PUBLIC_ROUTES = ["/login", "/register"];
+const PUBLIC_ROUTES = [
+  "/login",
+  "/register",
+];
 
 function isPublicRoute(pathname: string) {
   return PUBLIC_ROUTES.some(
@@ -24,8 +31,14 @@ export default function AppShell({
   children,
 }: AppShellProps) {
   const pathname = usePathname();
-  const [menuOpen, setMenuOpen] = useState(false);
 
+  const [menuOpen, setMenuOpen] =
+    useState(false);
+
+  /**
+   * Login / Register page
+   * → Header + Sidebar থাকবে না।
+   */
   if (isPublicRoute(pathname)) {
     return <>{children}</>;
   }
@@ -34,12 +47,16 @@ export default function AppShell({
     <div className="min-h-screen bg-gray-50">
       <Sidebar
         isOpen={menuOpen}
-        onClose={() => setMenuOpen(false)}
+        onClose={() =>
+          setMenuOpen(false)
+        }
       />
 
       <div className="md:ml-64">
         <Header
-          onMenuClick={() => setMenuOpen(true)}
+          onMenuClick={() =>
+            setMenuOpen(true)
+          }
         />
 
         <main className="pt-16">

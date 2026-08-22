@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  ReactNode,
-  useEffect,
-  useState,
-} from "react";
-
+import { ReactNode, useEffect } from "react";
 import {
   usePathname,
   useRouter,
@@ -25,9 +20,6 @@ const PUBLIC_ROUTES = [
   "/register",
 ];
 
-const AUTH_KEY =
-  "life-os-authenticated";
-
 function isPublicRoute(pathname: string) {
   return PUBLIC_ROUTES.some(
     (route) =>
@@ -46,116 +38,37 @@ export default function AuthProvider({
     (state) => state.user
   );
 
-  const loading = useAuthStore(
-    (state) => state.loading
-  );
-
   const initialized = useAuthStore(
     (state) => state.initialized
   );
 
   /**
-   * Local cached login state।
-   *
-   * App open হওয়ার সময় এটা Firebase-এর
-   * জন্য অপেক্ষা করবে না।
-   */
-  const [hasLocalSession, setHasLocalSession] =
-    useState(false);
-
-  const [offline, setOffline] =
-    useState(false);
-
-  /**
-   * Browser-এর local login session
-   * immediately read করি।
-   */
-  useEffect(() => {
-    const checkSession = () => {
-      const saved =
-        localStorage.getItem(AUTH_KEY) ===
-        "true";
-
-      setHasLocalSession(saved);
-      setOffline(!navigator.onLine);
-    };
-
-    checkSession();
-
-    const handleOnline = () => {
-      setOffline(false);
-    };
-
-    const handleOffline = () => {
-      setOffline(true);
-    };
-
-    window.addEventListener(
-      "online",
-      handleOnline
-    );
-
-    window.addEventListener(
-      "offline",
-      handleOffline
-    );
-
-    return () => {
-      window.removeEventListener(
-        "online",
-        handleOnline
-      );
-
-      window.removeEventListener(
-        "offline",
-        handleOffline
-      );
-    };
-  }, []);
-
-  /**
-   * Firebase listener।
-   *
-   * এটা background-এ চলবে।
+   * Firebase listener background-এ চলবে।
+   * App startup আটকে রাখবে না।
    */
   useEffect(() => {
     initializeAuthListener();
   }, []);
 
-  const publicRoute =
-    isPublicRoute(pathname);
-
-  /**
-   * Local session থাকলে offline অবস্থায়
-   * protected page থেকে Login-এ পাঠাব না।
-   */
-  const locallyAuthenticated =
-    hasLocalSession && offline;
-
   useEffect(() => {
-    /**
-     * Firebase initialization-এর জন্য
-     * আর পুরো app block করব না।
-     */
-    if (!initialized || loading) {
+    if (!initialized) {
       return;
     }
 
-    /**
-     * Offline + previous login
-     *
-     * → current page-এ থাকতে দাও।
-     */
-    if (
-      locallyAuthenticated &&
-      !publicRoute
-    ) {
-      return;
-    }
+    const publicRoute =
+      isPublicRoute(pathname);
 
     /**
-     * Firebase user আছে
-     * → Login/Register থেকে Dashboard
+     * আগে login করা user-এর local session
+     */
+    const hasLocalSession =
+      typeof window !== "undefined" &&
+      localStorage.getItem(
+        "life-os-authenticated"
+      ) === "true";
+
+    /**
+     * Logged in
      */
     if (user && publicRoute) {
       router.replace("/dashboard");
@@ -163,42 +76,40 @@ export default function AuthProvider({
     }
 
     /**
-     * Firebase user নেই + local session নেই
-     * → protected page থেকে Login
+     * Offline কিন্তু আগে login করা ছিল
+     *
+     * Firebase-এর user object এখনো না থাকলেও
+     * Dashboard থেকে বের করব না।
      */
     if (
       !user &&
-      !locallyAuthenticated &&
-      !publicRoute
+      hasLocalSession &&
+      !navigator.onLine
     ) {
-      router.replace("/login");
       return;
     }
 
     /**
-     * Logged-in user login page-এ গেলে
-     * Dashboard।
+     * সত্যিই logged out
      */
     if (
-      user &&
-      publicRoute
+      !user &&
+      !hasLocalSession &&
+      !publicRoute
     ) {
-      router.replace("/dashboard");
+      router.replace("/login");
     }
   }, [
     user,
-    loading,
     initialized,
-    publicRoute,
-    locallyAuthenticated,
+    pathname,
     router,
   ]);
 
   /**
-   * আর Firebase auth-এর জন্য
-   * Logo দেখিয়ে অনেকক্ষণ অপেক্ষা করব না।
+   * এখানে আর loading screen নেই।
    *
-   * App immediately render হবে।
+   * Firebase-এর জন্য app আটকে থাকবে না।
    */
   return <>{children}</>;
 }
