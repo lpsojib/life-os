@@ -1,8 +1,6 @@
 "use client";
 
-import {
-  useState,
-} from "react";
+import { useState } from "react";
 
 import {
   Check,
@@ -63,37 +61,30 @@ function normalizeBlocks(
     !Array.isArray(blocks) ||
     blocks.length === 0
   ) {
-    return [
-      createTextBlock(),
-    ];
+    return [createTextBlock()];
   }
 
-  return blocks.map(
-    (block) => {
-      if (
-        block.type ===
-        "checklist"
-      ) {
-        return {
-          ...block,
-          type: "checklist",
-          text:
-            block.text ?? "",
-          checked:
-            Boolean(
-              block.checked,
-            ),
-        };
-      }
-
+  return blocks.map((block) => {
+    if (
+      block.type ===
+      "checklist"
+    ) {
       return {
         ...block,
-        type: "text",
-        text:
-          block.text ?? "",
+        type: "checklist",
+        text: block.text ?? "",
+        checked: Boolean(
+          block.checked,
+        ),
       };
-    },
-  );
+    }
+
+    return {
+      ...block,
+      type: "text",
+      text: block.text ?? "",
+    };
+  });
 }
 
 /* =========================================================
@@ -107,23 +98,14 @@ export default function NoteEditor({
   onDelete,
   onClose,
 }: NoteEditorProps) {
-  /*
-   * IMPORTANT:
-   * No useEffect is used here.
-   * This avoids React cascading-render warnings.
-   */
-
   const [title, setTitle] =
-    useState(
-      note.title ?? "",
-    );
+    useState(note.title ?? "");
 
   const [blocks, setBlocks] =
-    useState<NoteBlock[]>(
-      () =>
-        normalizeBlocks(
-          note.blocks,
-        ),
+    useState<NoteBlock[]>(() =>
+      normalizeBlocks(
+        note.blocks,
+      ),
     );
 
   const [pinned, setPinned] =
@@ -148,32 +130,11 @@ export default function NoteEditor({
   ): Note {
     return {
       ...note,
-
-      title:
-        nextTitle,
-
-      type:
-        note.type ?? "text",
-
-      content:
-        note.content ?? "",
-
-      blocks:
-        nextBlocks,
-
-      checklist:
-        Array.isArray(
-          note.checklist,
-        )
-          ? note.checklist
-          : [],
-
-      pinned:
-        nextPinned,
-
-      createdAt:
-        note.createdAt,
-
+      title: nextTitle,
+      type: note.type ?? "text",
+      blocks: nextBlocks,
+      pinned: nextPinned,
+      createdAt: note.createdAt,
       updatedAt:
         new Date().toISOString(),
     };
@@ -207,19 +168,16 @@ export default function NoteEditor({
     value: string,
   ) {
     const updatedBlocks =
-      blocks.map(
-        (block) =>
-          block.id === blockId
-            ? {
-                ...block,
-                text: value,
-              }
-            : block,
+      blocks.map((block) =>
+        block.id === blockId
+          ? {
+              ...block,
+              text: value,
+            }
+          : block,
       );
 
-    setBlocks(
-      updatedBlocks,
-    );
+    setBlocks(updatedBlocks);
 
     const updated =
       createUpdatedNote(
@@ -240,19 +198,16 @@ export default function NoteEditor({
     checked: boolean,
   ) {
     const updatedBlocks =
-      blocks.map(
-        (block) =>
-          block.id === blockId
-            ? {
-                ...block,
-                checked,
-              }
-            : block,
+      blocks.map((block) =>
+        block.id === blockId
+          ? {
+              ...block,
+              checked,
+            }
+          : block,
       );
 
-    setBlocks(
-      updatedBlocks,
-    );
+    setBlocks(updatedBlocks);
 
     const updated =
       createUpdatedNote(
@@ -274,9 +229,7 @@ export default function NoteEditor({
       createTextBlock(),
     ];
 
-    setBlocks(
-      updatedBlocks,
-    );
+    setBlocks(updatedBlocks);
 
     const updated =
       createUpdatedNote(
@@ -298,9 +251,7 @@ export default function NoteEditor({
       createChecklistBlock(),
     ];
 
-    setBlocks(
-      updatedBlocks,
-    );
+    setBlocks(updatedBlocks);
 
     const updated =
       createUpdatedNote(
@@ -334,9 +285,7 @@ export default function NoteEditor({
       ];
     }
 
-    setBlocks(
-      updatedBlocks,
-    );
+    setBlocks(updatedBlocks);
 
     const updated =
       createUpdatedNote(
@@ -353,12 +302,9 @@ export default function NoteEditor({
   ======================================================= */
 
   function togglePin() {
-    const nextPinned =
-      !pinned;
+    const nextPinned = !pinned;
 
-    setPinned(
-      nextPinned,
-    );
+    setPinned(nextPinned);
 
     const updated =
       createUpdatedNote(
@@ -392,13 +338,9 @@ export default function NoteEditor({
       onChange?.(updated);
 
       if (onSave) {
-        await onSave(
-          updated,
-        );
+        await onSave(updated);
       } else {
-        await saveNote(
-          updated,
-        );
+        await saveNote(updated);
       }
     } catch (error) {
       console.error(
@@ -434,9 +376,7 @@ export default function NoteEditor({
       if (onDelete) {
         await onDelete();
       } else {
-        await deleteNote(
-          note.id,
-        );
+        await deleteNote(note.id);
       }
 
       onClose();
@@ -448,6 +388,18 @@ export default function NoteEditor({
     } finally {
       setDeleting(false);
     }
+  }
+
+  /* =======================================================
+     AUTO RESIZE
+  ======================================================= */
+
+  function resizeTextarea(
+    element: HTMLTextAreaElement,
+  ) {
+    element.style.height = "auto";
+    element.style.height =
+      `${element.scrollHeight}px`;
   }
 
   /* =======================================================
@@ -483,8 +435,9 @@ export default function NoteEditor({
           sm:h-[90vh]
         "
       >
-
-        {/* HEADER */}
+        {/* =================================================
+            HEADER
+        ================================================= */}
 
         <div
           className="
@@ -498,9 +451,7 @@ export default function NoteEditor({
             sm:px-6
           "
         >
-
           <div className="flex items-center gap-2">
-
             <button
               type="button"
               onClick={onClose}
@@ -528,11 +479,9 @@ export default function NoteEditor({
             >
               Notebook
             </span>
-
           </div>
 
           <div className="flex items-center gap-1">
-
             {/* PIN */}
 
             <button
@@ -565,7 +514,9 @@ export default function NoteEditor({
 
             <button
               type="button"
-              onClick={handleDelete}
+              onClick={
+                handleDelete
+              }
               disabled={deleting}
               title="Delete"
               className="
@@ -614,11 +565,12 @@ export default function NoteEditor({
                   : "Save"}
               </span>
             </button>
-
           </div>
         </div>
 
-        {/* EDITOR */}
+        {/* =================================================
+            EDITOR
+        ================================================= */}
 
         <div
           className="
@@ -630,14 +582,11 @@ export default function NoteEditor({
             sm:py-8
           "
         >
-          <div
-            className="
-              mx-auto
-              max-w-3xl
-            "
-          >
+          <div className="mx-auto max-w-3xl">
 
-            {/* TITLE */}
+            {/* =================================================
+                TITLE
+            ================================================= */}
 
             <input
               type="text"
@@ -650,181 +599,187 @@ export default function NoteEditor({
               placeholder="Write a title"
               className="
                 w-full
-                rounded-xl
-                border
+                border-b
                 border-gray-200
-                bg-white
-                px-4
-                py-3
+                bg-transparent
+                px-0
+                pb-3
                 text-2xl
-                font-bold
+                font-semibold
                 tracking-tight
                 text-gray-900
                 outline-none
                 transition
                 focus:border-green-500
-                focus:ring-2
-                focus:ring-green-100
                 placeholder:text-gray-300
                 sm:text-3xl
               "
             />
 
-            {/* CONTENT */}
+            {/* =================================================
+                CONTENT
+            ================================================= */}
 
             <div
               className="
                 mt-5
-                space-y-0
+                space-y-1
               "
             >
-              {blocks.map(
-                (block) => {
-                  const checklist =
-                    block.type ===
-                    "checklist";
+              {blocks.map((block) => {
+                const checklist =
+                  block.type ===
+                  "checklist";
 
-                  return (
-                    <div
-                      key={
-                        block.id
-                      }
-                      className="
-                        group
-                        flex
-                        items-start
-                        gap-3
-                      "
-                    >
+                return (
+                  <div
+                    key={block.id}
+                    className="
+                      group
+                      flex
+                      items-start
+                      gap-3
+                      py-0.5
+                    "
+                  >
+                    {/* =================================================
+                        CHECKBOX
+                    ================================================= */}
 
-                      {/* CHECKBOX */}
-
-                      {checklist ? (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleCheckboxChange(
-                              block.id,
-                              !block.checked,
-                            )
-                          }
-                          className={`
-                            mt-2
-                            flex
-                            h-5
-                            w-5
-                            shrink-0
-                            items-center
-                            justify-center
-                            rounded-md
-                            border
-                            transition
-                            ${
-                              block.checked
-                                ? "border-green-600 bg-green-600 text-white"
-                                : "border-gray-300 bg-white text-transparent hover:border-green-500"
-                            }
-                          `}
-                        >
-                          <Check
-                            size={13}
-                          />
-                        </button>
-                      ) : (
-                        <div
-                          className="
-                            w-5
-                            shrink-0
-                          "
-                        />
-                      )}
-
-                      {/* TEXT */}
-
-                      <textarea
-                        value={
-                          block.text ??
-                          ""
-                        }
-                        onChange={(event) =>
-                          handleBlockChange(
-                            block.id,
-                            event.target.value,
-                          )
-                        }
-                        placeholder={
-                          checklist
-                            ? "Write a checklist item..."
-                            : "Start writing..."
-                        }
-                        rows={1}
-                        className={`
-                          min-h-[36px]
-                          flex-1
-                          resize-none
-                          overflow-hidden
-                          border-0
-                          bg-transparent
-                          px-0
-                          py-0
-                          text-lg
-                          leading-6
-                          outline-none
-                          placeholder:text-gray-300
-                          ${
-                            block.checked
-                              ? "text-gray-400 line-through"
-                              : "text-gray-800"
-                          }
-                        `}
-                        onInput={(event) => {
-                          const target =
-                            event.currentTarget;
-
-                          target.style.height =
-                            "auto";
-
-                          target.style.height =
-                            `${target.scrollHeight}px`;
-                        }}
-                      />
-
-                      {/* REMOVE */}
-
+                    {checklist ? (
                       <button
                         type="button"
+                        aria-label={
+                          block.checked
+                            ? "Uncheck item"
+                            : "Check item"
+                        }
                         onClick={() =>
-                          removeBlock(
+                          handleCheckboxChange(
                             block.id,
+                            !block.checked,
                           )
                         }
-                        title="Remove"
-                        className="
-                          mt-1
-                          rounded-lg
-                          p-1.5
-                          text-gray-300
-                          opacity-0
+                        className={`
+                          mt-[5px]
+                          flex
+                          h-[19px]
+                          w-[19px]
+                          shrink-0
+                          items-center
+                          justify-center
+                          rounded-[5px]
+                          border-2
                           transition
-                          group-hover:opacity-100
-                          hover:bg-red-50
-                          hover:text-red-500
-                        "
+                          ${
+                            block.checked
+                              ? "border-green-600 bg-green-600 text-white"
+                              : "border-gray-400 bg-white text-transparent hover:border-green-600"
+                          }
+                        `}
                       >
-                        <X size={15} />
+                        <Check
+                          size={13}
+                          strokeWidth={3}
+                        />
                       </button>
+                    ) : (
+                      <div
+                        className="
+                          w-[19px]
+                          shrink-0
+                        "
+                      />
+                    )}
 
-                    </div>
-                  );
-                },
-              )}
+                    {/* =================================================
+                        TEXT
+                    ================================================= */}
+
+                    <textarea
+                      value={
+                        block.text ?? ""
+                      }
+                      onChange={(event) => {
+                        handleBlockChange(
+                          block.id,
+                          event.target.value,
+                        );
+
+                        resizeTextarea(
+                          event.currentTarget,
+                        );
+                      }}
+                      onInput={(event) => {
+                        resizeTextarea(
+                          event.currentTarget,
+                        );
+                      }}
+                      placeholder={
+                        checklist
+                          ? "Write a checklist item..."
+                          : "Start writing..."
+                      }
+                      rows={1}
+                      className={`
+                        min-h-[30px]
+                        flex-1
+                        resize-none
+                        overflow-hidden
+                        border-0
+                        bg-transparent
+                        p-0
+                        text-[16px]
+                        font-normal
+                        leading-[1.55]
+                        outline-none
+                        placeholder:text-gray-300
+                        ${
+                          block.checked
+                            ? "text-gray-400 line-through"
+                            : "text-gray-800"
+                        }
+                      `}
+                    />
+
+                    {/* =================================================
+                        REMOVE
+                    ================================================= */}
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        removeBlock(
+                          block.id,
+                        )
+                      }
+                      title="Remove"
+                      className="
+                        mt-0.5
+                        rounded-lg
+                        p-1
+                        text-gray-300
+                        opacity-0
+                        transition
+                        group-hover:opacity-100
+                        hover:bg-red-50
+                        hover:text-red-500
+                      "
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                );
+              })}
             </div>
 
-            {/* ADD OPTIONS */}
+            {/* =================================================
+                ADD OPTIONS
+            ================================================= */}
 
             <div
               className="
-                mt-6
+                mt-5
                 flex
                 flex-wrap
                 items-center
@@ -834,10 +789,11 @@ export default function NoteEditor({
                 pt-4
               "
             >
-
               <button
                 type="button"
-                onClick={addParagraph}
+                onClick={
+                  addParagraph
+                }
                 className="
                   inline-flex
                   items-center
@@ -859,7 +815,9 @@ export default function NoteEditor({
 
               <button
                 type="button"
-                onClick={addCheckbox}
+                onClick={
+                  addCheckbox
+                }
                 className="
                   inline-flex
                   items-center
@@ -878,12 +836,13 @@ export default function NoteEditor({
                 <Plus size={16} />
                 Checkbox
               </button>
-
             </div>
           </div>
         </div>
 
-        {/* FOOTER */}
+        {/* =================================================
+            FOOTER
+        ================================================= */}
 
         <div
           className="
@@ -912,7 +871,6 @@ export default function NoteEditor({
               : "blocks"}
           </span>
         </div>
-
       </div>
     </div>
   );
