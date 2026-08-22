@@ -1,25 +1,26 @@
-const CACHE_NAME = "life-os-v7";
+const CACHE_NAME = "life-os-v8";
 
 const APP_SHELL = [
   "/",
+  "/dashboard",
   "/login",
   "/register",
 ];
 
-/**
- * INSTALL
- */
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(async (cache) => {
       for (const url of APP_SHELL) {
         try {
-          await cache.add(url);
+          const response = await fetch(url);
+
+          if (response.ok) {
+            await cache.put(url, response);
+          }
         } catch (error) {
           console.warn(
-            "Life OS cache failed:",
-            url,
-            error
+            "Could not cache:",
+            url
           );
         }
       }
@@ -30,16 +31,13 @@ self.addEventListener("install", (event) => {
 });
 
 
-/**
- * ACTIVATE
- */
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches
       .keys()
-      .then((names) =>
+      .then((cacheNames) =>
         Promise.all(
-          names
+          cacheNames
             .filter(
               (name) =>
                 name.startsWith("life-os-") &&
@@ -50,19 +48,13 @@ self.addEventListener("activate", (event) => {
             )
         )
       )
-      .then(() => self.clients.claim())
+      .then(() =>
+        self.clients.claim()
+      )
   );
 });
 
 
-/**
- * FETCH
- *
- * IMPORTANT:
- * Navigation request এখানে intercept করছি না।
- *
- * এতে Next.js-এর routing/reload নষ্ট হবে না।
- */
 self.addEventListener("fetch", (event) => {
   const request = event.request;
 
@@ -72,53 +64,120 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(request.url);
 
-  if (url.origin !== self.location.origin) {
+  if (
+    url.origin !==
+    self.location.origin
+  ) {
     return;
   }
 
   /**
-   * Page navigation browser/Next.js-কে
-   * সরাসরি handle করতে দাও।
+   * Page navigation
+   *
+   * Cache first.
    */
   if (request.mode === "navigate") {
+    event.respondWith(
+      caches.match(request).then(
+        async (cached) => {
+          if (cached) {
+            return cached;
+          }
+
+          try {
+            const response =
+              await fetch(request);
+
+            if (response.ok) {
+              const cache =
+                await caches.open(
+                  CACHE_NAME
+                );
+
+              await cache.put(
+                request,
+                response.clone()
+              );
+            }
+
+            return response;
+          } catch (error) {
+            /**
+             * Offline হলে Dashboard fallback।
+             */
+            const dashboard =
+              await caches.match(
+                "/dashboard"
+              );
+
+            if (dashboard) {
+              return dashboard;
+            }
+
+            const root =
+              await caches.match("/");
+
+            if (root) {
+              return root;
+            }
+
+            return new Response(
+              "Life OS is offline",
+              {
+                status: 503,
+                headers: {
+                  "Content-Type":
+                    "text/plain",
+                },
+              }
+            );
+          }
+        }
+      )
+    );
+
     return;
   }
 
+
   /**
-   * Static files:
+   * JS / CSS / images / fonts
    *
-   * Cache first → Network fallback
+   * Cache first.
    */
   event.respondWith(
-    caches.match(request).then((cached) => {
-      if (cached) {
-        return cached;
-      }
+    caches.match(request).then(
+      async (cached) => {
+        if (cached) {
+          return cached;
+        }
 
-      return fetch(request)
-        .then((response) => {
+        try {
+          const response =
+            await fetch(request);
+
           if (
-            response &&
             response.ok &&
             response.type === "basic"
           ) {
-            const copy = response.clone();
+            const cache =
+              await caches.open(
+                CACHE_NAME
+              );
 
-            caches.open(CACHE_NAME).then(
-              (cache) => {
-                cache.put(request, copy);
-              }
+            await cache.put(
+              request,
+              response.clone()
             );
           }
 
           return response;
-        })
-        .catch(() => {
+        } catch (error) {
           return new Response("", {
             status: 503,
-            statusText: "Offline",
           });
-        });
-    })
+        }
+      }
+    )
   );
 });
