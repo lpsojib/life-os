@@ -133,8 +133,8 @@ export default function Header({
             height={56}
             priority
             className="
-              h-14
-              w-14
+              h-20
+              w-20
               object-contain
             "
           />
