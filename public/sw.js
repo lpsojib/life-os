@@ -1,21 +1,26 @@
-const CACHE_NAME = "life-os-v1";
+const CACHE_NAME = "life-os-v2";
 
-const APP_SHELL = [
-  "/",
-  "/login",
-  "/dashboard",
-];
+const OFFLINE_FALLBACK = "/dashboard";
 
+/**
+ * Install
+ *
+ * Service Worker install হবে।
+ * এখানে শুধু basic app entry cache করছি।
+ */
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(APP_SHELL);
+      return cache.add("/");
     })
   );
 
   self.skipWaiting();
 });
 
+/**
+ * Activate
+ */
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
@@ -31,78 +36,103 @@ self.addEventListener("activate", (event) => {
 });
 
 /**
- * Navigation request
+ * Navigation requests
  *
- * Online → Vercel থেকে নতুন page
- * Offline → cached page
+ * IMPORTANT:
+ *
+ * আগে Cache
+ * তারপর Network
+ *
+ * ফলে app open করার সময় Vercel-এর response-এর
+ * জন্য অপেক্ষা করতে হবে না যদি cached page থাকে।
  */
 self.addEventListener("fetch", (event) => {
-  if (event.request.method !== "GET") {
+  const request = event.request;
+
+  if (request.method !== "GET") {
     return;
   }
 
-  if (event.request.mode === "navigate") {
+  /**
+   * Page navigation
+   */
+  if (request.mode === "navigate") {
     event.respondWith(
-      fetch(event.request)
-        .then((response) => {
-          const copy = response.clone();
+      caches.match(request).then((cachedPage) => {
+        if (cachedPage) {
+          /**
+           * Cached page সঙ্গে সঙ্গে return
+           */
+          return cachedPage;
+        }
 
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, copy);
-          });
+        /**
+         * Exact page cache না থাকলে dashboard
+         * অথবা root cache থেকে fallback।
+         */
+        return caches.match("/dashboard").then(
+          (cachedDashboard) => {
+            if (cachedDashboard) {
+              return cachedDashboard;
+            }
 
-          return response;
-        })
-        .catch(() => {
-          return caches.match("/dashboard").then((cached) => {
-            return (
-              cached ||
-              caches.match("/") ||
-              new Response(
-                "Life OS is currently offline.",
-                {
-                  status: 503,
-                  headers: {
-                    "Content-Type": "text/plain",
-                  },
+            return caches.match("/").then((cachedRoot) => {
+              if (cachedRoot) {
+                return cachedRoot;
+              }
+
+              /**
+               * একদম cache না থাকলে network
+               */
+              return fetch(request).then((response) => {
+                if (response.ok) {
+                  const copy = response.clone();
+
+                  caches.open(CACHE_NAME).then((cache) => {
+                    cache.put(request, copy);
+                  });
                 }
-              )
-            );
-          });
-        })
+
+                return response;
+              });
+            });
+          }
+        );
+      })
     );
 
     return;
   }
 
   /**
-   * Static files
+   * JS / CSS / images / fonts
    *
-   * Cache first → network fallback
+   * Cache first
    */
   if (
-    event.request.destination === "script" ||
-    event.request.destination === "style" ||
-    event.request.destination === "font" ||
-    event.request.destination === "image"
+    request.destination === "script" ||
+    request.destination === "style" ||
+    request.destination === "image" ||
+    request.destination === "font"
   ) {
     event.respondWith(
-      caches.match(event.request).then((cached) => {
+      caches.match(request).then((cached) => {
         if (cached) {
           return cached;
         }
 
-        return fetch(event.request)
+        return fetch(request)
           .then((response) => {
-            if (!response || response.status !== 200) {
-              return response;
+            if (
+              response &&
+              response.status === 200
+            ) {
+              const copy = response.clone();
+
+              caches.open(CACHE_NAME).then((cache) => {
+                cache.put(request, copy);
+              });
             }
-
-            const copy = response.clone();
-
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(event.request, copy);
-            });
 
             return response;
           })

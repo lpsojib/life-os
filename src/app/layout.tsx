@@ -20,6 +20,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Life OS",
   description: "Your personal Life OS",
+  manifest: "/manifest.webmanifest",
 };
 
 export default function RootLayout({
@@ -36,9 +37,7 @@ export default function RootLayout({
         <PWARegister />
 
         <AuthProvider>
-          <AppShell>
-            {children}
-          </AppShell>
+          <AppShell>{children}</AppShell>
         </AuthProvider>
       </body>
     </html>
