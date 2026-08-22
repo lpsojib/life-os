@@ -10,7 +10,6 @@ import {
   FileText,
   Layers3,
   Pin,
-  PinOff,
   Plus,
   Search,
   Trash2,
@@ -19,23 +18,23 @@ import {
 import {
   addNote,
   deleteNote,
+  saveNote,
   toggleNotePin,
-  updateNote,
 } from "../services/notebook.service";
 
 import {
-  addNoteToStore,
-  deleteNoteFromStore,
-  updateNoteInStore,
-  updateNotePinInStore,
   useNotes,
 } from "../hooks/useNotes";
-
-import NoteEditor from "./NoteEditor";
 
 import {
   Note,
 } from "../types/notebook.types";
+
+import NoteEditor from "./NoteEditor";
+
+/* =========================================================
+   FILTER TYPE
+========================================================= */
 
 type NoteFilter =
   | "all"
@@ -44,30 +43,16 @@ type NoteFilter =
   | "both"
   | "pinned";
 
-function createEmptyNote(
-  id: string,
-): Note {
-  const now =
-    new Date().toISOString();
-
-  return {
-    id,
-    title: "",
-    type: "text",
-    content: "",
-    blocks: [],
-    checklist: [],
-    pinned: false,
-    createdAt: now,
-    updatedAt: now,
-  };
-}
+/* =========================================================
+   NOTEBOOK PAGE
+========================================================= */
 
 export default function NotebookPage() {
   const {
     notes,
     loading,
     error,
+    reload: refresh,
   } = useNotes();
 
   const [search, setSearch] =
@@ -85,111 +70,205 @@ export default function NotebookPage() {
   const [deletingId, setDeletingId] =
     useState<string | null>(null);
 
-  const filteredNotes =
-    useMemo(() => {
-      const query =
-        search
-          .trim()
+  /* =======================================================
+     FILTER NOTES
+  ======================================================= */
+
+  const filteredNotes = useMemo(() => {
+    const query =
+      search.trim().toLowerCase();
+
+    return notes.filter((note) => {
+      const blocks =
+        Array.isArray(note.blocks)
+          ? note.blocks
+          : [];
+
+      const hasParagraph =
+        blocks.some(
+          (block) =>
+            block.type === "text" &&
+            typeof block.text === "string" &&
+            block.text.trim().length > 0,
+        ) ||
+        (
+          typeof note.content === "string" &&
+          note.content.trim().length > 0
+        );
+
+      const hasCheckbox =
+        blocks.some(
+          (block) =>
+            block.type === "checklist" &&
+            typeof block.text === "string" &&
+            block.text.trim().length > 0,
+        ) ||
+        (
+          Array.isArray(note.checklist) &&
+          note.checklist.length > 0
+        );
+
+      /* FILTER */
+
+      if (
+        activeFilter === "paragraph" &&
+        !(hasParagraph && !hasCheckbox)
+      ) {
+        return false;
+      }
+
+      if (
+        activeFilter === "checkbox" &&
+        !(hasCheckbox && !hasParagraph)
+      ) {
+        return false;
+      }
+
+      if (
+        activeFilter === "both" &&
+        !(hasParagraph && hasCheckbox)
+      ) {
+        return false;
+      }
+
+      if (
+        activeFilter === "pinned" &&
+        !note.pinned
+      ) {
+        return false;
+      }
+
+      /* SEARCH */
+
+      if (!query) {
+        return true;
+      }
+
+      const title =
+        typeof note.title === "string"
+          ? note.title.toLowerCase()
+          : "";
+
+      const content =
+        typeof note.content === "string"
+          ? note.content.toLowerCase()
+          : "";
+
+      const blockText =
+        blocks
+          .map((block) =>
+            typeof block.text === "string"
+              ? block.text
+              : "",
+          )
+          .join(" ")
           .toLowerCase();
 
-      return notes.filter((note) => {
-        const blocks =
-          note.blocks ?? [];
+      const checklistText =
+        Array.isArray(note.checklist)
+          ? note.checklist
+              .map((item) => {
+                if (
+                  typeof item === "string"
+                ) {
+                  return item;
+                }
 
-        const hasParagraph =
-          blocks.some(
-            (block) =>
-              block.type === "text" &&
-              block.text.trim() !== "",
-          ) ||
-          Boolean(
-            note.content?.trim(),
-          );
+                if (
+                  item &&
+                  typeof item === "object" &&
+                  "text" in item &&
+                  typeof item.text === "string"
+                ) {
+                  return item.text;
+                }
 
-        const hasCheckbox =
-          blocks.some(
-            (block) =>
-              block.type ===
-                "checklist" &&
-              block.text.trim() !== "",
-          ) ||
-          note.checklist.length > 0;
+                return "";
+              })
+              .join(" ")
+              .toLowerCase()
+          : "";
 
-        let matchesFilter = true;
+      return (
+        title.includes(query) ||
+        content.includes(query) ||
+        blockText.includes(query) ||
+        checklistText.includes(query)
+      );
+    });
+  }, [
+    notes,
+    search,
+    activeFilter,
+  ]);
 
-        if (
-          activeFilter ===
-          "paragraph"
-        ) {
-          matchesFilter =
-            hasParagraph &&
-            !hasCheckbox;
-        }
+  /* =======================================================
+     COUNTS
+  ======================================================= */
 
-        if (
-          activeFilter ===
-          "checkbox"
-        ) {
-          matchesFilter =
-            hasCheckbox &&
-            !hasParagraph;
-        }
+  const counts = useMemo(() => {
+    let paragraph = 0;
+    let checkbox = 0;
+    let both = 0;
+    let pinned = 0;
 
-        if (
-          activeFilter ===
-          "both"
-        ) {
-          matchesFilter =
-            hasParagraph &&
-            hasCheckbox;
-        }
+    for (const note of notes) {
+      const blocks =
+        Array.isArray(note.blocks)
+          ? note.blocks
+          : [];
 
-        if (
-          activeFilter ===
-          "pinned"
-        ) {
-          matchesFilter =
-            note.pinned;
-        }
-
-        if (!matchesFilter) {
-          return false;
-        }
-
-        if (!query) {
-          return true;
-        }
-
-        const title =
-          note.title
-            ?.toLowerCase() ?? "";
-
-        const content =
-          note.content
-            ?.toLowerCase() ?? "";
-
-        const blockMatch =
-          blocks.some((block) =>
-            block.text
-              ?.toLowerCase()
-              .includes(query),
-          );
-
-        return (
-          title.includes(query) ||
-          content.includes(query) ||
-          blockMatch
+      const hasParagraph =
+        blocks.some(
+          (block) =>
+            block.type === "text" &&
+            typeof block.text === "string" &&
+            block.text.trim().length > 0,
+        ) ||
+        (
+          typeof note.content === "string" &&
+          note.content.trim().length > 0
         );
-      });
-    }, [
-      notes,
-      search,
-      activeFilter,
-    ]);
 
-  /* -------------------------------- */
-  /* Create */
-  /* -------------------------------- */
+      const hasCheckbox =
+        blocks.some(
+          (block) =>
+            block.type === "checklist" &&
+            typeof block.text === "string" &&
+            block.text.trim().length > 0,
+        ) ||
+        (
+          Array.isArray(note.checklist) &&
+          note.checklist.length > 0
+        );
+
+      if (
+        hasParagraph &&
+        hasCheckbox
+      ) {
+        both++;
+      } else if (hasParagraph) {
+        paragraph++;
+      } else if (hasCheckbox) {
+        checkbox++;
+      }
+
+      if (note.pinned) {
+        pinned++;
+      }
+    }
+
+    return {
+      paragraph,
+      checkbox,
+      both,
+      pinned,
+    };
+  }, [notes]);
+
+  /* =======================================================
+     CREATE NOTE
+  ======================================================= */
 
   async function handleCreateNote() {
     if (creating) {
@@ -198,50 +277,24 @@ export default function NotebookPage() {
 
     setCreating(true);
 
-    const tempId =
-      crypto.randomUUID();
-
-    const localNote =
-      createEmptyNote(tempId);
-
-    /*
-     * IMPORTANT:
-     * Show note immediately.
-     */
-    addNoteToStore(
-      localNote,
-    );
-
-    setEditingNote(
-      localNote,
-    );
-
     try {
-      /*
-       * Firebase creation runs
-       * in background.
-       */
-      const firebaseId =
+      const note =
         await addNote(
           "Untitled Note",
-          "text",
-          "",
         );
 
       /*
-       * Replace temporary ID.
+       * Open immediately.
        */
-      const firebaseNote =
-        createEmptyNote(
-          firebaseId,
-        );
+      setEditingNote(note);
 
-      updateNoteInStore(
-        firebaseNote,
-      );
+      /*
+       * Reload local store.
+       */
+      await refresh();
     } catch (error) {
-      console.warn(
-        "Offline note created locally:",
+      console.error(
+        "Could not create note:",
         error,
       );
     } finally {
@@ -249,28 +302,44 @@ export default function NotebookPage() {
     }
   }
 
-  /* -------------------------------- */
-  /* Editor Change */
-  /* -------------------------------- */
+  /* =======================================================
+     EDITOR CHANGE
+  ======================================================= */
 
   function handleEditorChange(
-    updatedNote: Note,
+    note: Note,
   ) {
     /*
-     * Update UI immediately.
+     * Editor UI stays instant.
      */
-    updateNoteInStore(
-      updatedNote,
-    );
-
-    setEditingNote(
-      updatedNote,
-    );
+    setEditingNote(note);
   }
 
-  /* -------------------------------- */
-  /* Delete */
-  /* -------------------------------- */
+  /* =======================================================
+     SAVE NOTE
+  ======================================================= */
+
+  async function handleSaveNote(
+    note: Note,
+  ) {
+    try {
+      const saved =
+        await saveNote(note);
+
+      setEditingNote(saved);
+
+      await refresh();
+    } catch (error) {
+      console.error(
+        "Could not save note:",
+        error,
+      );
+    }
+  }
+
+  /* =======================================================
+     DELETE NOTE
+  ======================================================= */
 
   async function handleDeleteNote(
     noteId: string,
@@ -284,27 +353,21 @@ export default function NotebookPage() {
       return;
     }
 
-    /*
-     * Remove immediately.
-     */
-    deleteNoteFromStore(
-      noteId,
-    );
-
-    if (
-      editingNote?.id ===
-      noteId
-    ) {
-      setEditingNote(null);
-    }
-
     setDeletingId(noteId);
 
     try {
       await deleteNote(noteId);
+
+      if (
+        editingNote?.id === noteId
+      ) {
+        setEditingNote(null);
+      }
+
+      await refresh();
     } catch (error) {
-      console.warn(
-        "Offline delete. Firebase sync will happen later.",
+      console.error(
+        "Could not delete note:",
         error,
       );
     } finally {
@@ -312,470 +375,286 @@ export default function NotebookPage() {
     }
   }
 
-  /* -------------------------------- */
-  /* Pin */
-/* -------------------------------- */
+  /* =======================================================
+     TOGGLE PIN
+  ======================================================= */
 
   async function handleTogglePin(
     note: Note,
   ) {
-    const newPinned =
-      !note.pinned;
-
-    /*
-     * Update immediately.
-     */
-    updateNotePinInStore(
-      note.id,
-      newPinned,
-    );
-
     try {
-      await toggleNotePin(
-        note.id,
-        newPinned,
-      );
+      const updated =
+        await toggleNotePin(note);
+
+      if (
+        editingNote?.id === note.id
+      ) {
+        setEditingNote(updated);
+      }
+
+      await refresh();
     } catch (error) {
-      console.warn(
-        "Offline pin update:",
+      console.error(
+        "Could not update pin:",
         error,
       );
     }
   }
 
-  /* -------------------------------- */
-  /* Save */
-  /* -------------------------------- */
-
-  async function handleSaveNote(
-    updatedNote: Note,
-  ) {
-    /*
-     * UI/local save first.
-     */
-    updateNoteInStore(
-      updatedNote,
-    );
-
-    try {
-      await updateNote(
-        updatedNote.id,
-        {
-          title:
-            updatedNote.title,
-
-          type:
-            updatedNote.type,
-
-          content:
-            updatedNote.content,
-
-          blocks:
-            updatedNote.blocks,
-
-          checklist:
-            updatedNote.checklist,
-
-          pinned:
-            updatedNote.pinned,
-        },
-      );
-    } catch (error) {
-      console.warn(
-        "Offline note save. Saved locally.",
-        error,
-      );
-    }
-  }
-
-  /*
-   * IMPORTANT:
-   * Do NOT show loading screen here.
-   *
-   * Local notes must appear immediately.
-   */
+  /* =======================================================
+     PAGE
+  ======================================================= */
 
   return (
-    <>
-      <div
-        className="
-          min-h-full
-          bg-gray-50
-          p-4
-          sm:p-6
-        "
-      >
-        <div className="mx-auto max-w-6xl">
+    <div className="min-h-full bg-gray-50 p-4 sm:p-6">
+      <div className="mx-auto max-w-7xl">
 
-          {/* Header */}
+        {/* =================================================
+            HEADER
+        ================================================= */}
 
-          <div
-            className="
-              flex
-              flex-col
-              gap-4
-              sm:flex-row
-              sm:items-center
-              sm:justify-between
-            "
-          >
-            <div>
-              <h1
-                className="
-                  text-2xl
-                  font-bold
-                  text-gray-900
-                  sm:text-3xl
-                "
-              >
-                Notebook
-              </h1>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 
-              <p
-                className="
-                  mt-1
-                  text-sm
-                  text-gray-500
-                "
-              >
-                Write, organize and
-                save your thoughts.
-              </p>
-            </div>
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-gray-900">
+              Notebook
+            </h1>
 
-            <button
-              type="button"
-              onClick={
-                handleCreateNote
-              }
-              disabled={creating}
-              className="
-                inline-flex
-                items-center
-                justify-center
-                gap-2
-                rounded-xl
-                bg-green-600
-                px-4
-                py-2.5
-                text-sm
-                font-semibold
-                text-white
-                transition
-                hover:bg-green-700
-                disabled:opacity-60
-              "
-            >
-              <Plus size={18} />
-
-              {creating
-                ? "Creating..."
-                : "New Note"}
-            </button>
+            <p className="mt-1 text-sm text-gray-500">
+              Write, organize and keep your thoughts.
+            </p>
           </div>
 
-          {/* Search */}
-
-          <div className="mt-6">
-            <div
-              className="
-                flex
-                items-center
-                gap-3
-                rounded-xl
-                border
-                border-gray-200
-                bg-white
-                px-4
-                py-3
-              "
-            >
-              <Search
-                size={18}
-                className="text-gray-400"
-              />
-
-              <input
-                type="text"
-                value={search}
-                onChange={(event) =>
-                  setSearch(
-                    event.target.value,
-                  )
-                }
-                placeholder="Search notes..."
-                className="
-                  w-full
-                  border-0
-                  bg-transparent
-                  text-sm
-                  text-gray-900
-                  outline-none
-                "
-              />
-            </div>
-          </div>
-
-          {/* Filter */}
-
-          <div
+          <button
+            type="button"
+            onClick={handleCreateNote}
+            disabled={creating}
             className="
-              mt-4
-              overflow-x-auto
-              rounded-2xl
-              border
-              border-gray-200
-              bg-white
-              p-1.5
-            "
-          >
-            <div
-              className="
-                flex
-                min-w-max
-                gap-1
-              "
-            >
-              <FilterButton
-                active={
-                  activeFilter ===
-                  "all"
-                }
-                onClick={() =>
-                  setActiveFilter(
-                    "all",
-                  )
-                }
-                icon={
-                  <FileText
-                    size={15}
-                  />
-                }
-                label="All Notes"
-                count={
-                  notes.length
-                }
-              />
-
-              <FilterButton
-                active={
-                  activeFilter ===
-                  "paragraph"
-                }
-                onClick={() =>
-                  setActiveFilter(
-                    "paragraph",
-                  )
-                }
-                icon={
-                  <FileText
-                    size={15}
-                  />
-                }
-                label="Paragraph"
-                count={getParagraphCount(
-                  notes,
-                )}
-              />
-
-              <FilterButton
-                active={
-                  activeFilter ===
-                  "checkbox"
-                }
-                onClick={() =>
-                  setActiveFilter(
-                    "checkbox",
-                  )
-                }
-                icon={
-                  <CheckSquare
-                    size={15}
-                  />
-                }
-                label="Checkbox"
-                count={getCheckboxCount(
-                  notes,
-                )}
-              />
-
-              <FilterButton
-                active={
-                  activeFilter ===
-                  "both"
-                }
-                onClick={() =>
-                  setActiveFilter(
-                    "both",
-                  )
-                }
-                icon={
-                  <Layers3
-                    size={15}
-                  />
-                }
-                label="Both"
-                count={getBothCount(
-                  notes,
-                )}
-              />
-
-              <FilterButton
-                active={
-                  activeFilter ===
-                  "pinned"
-                }
-                onClick={() =>
-                  setActiveFilter(
-                    "pinned",
-                  )
-                }
-                icon={
-                  <Pin size={15} />
-                }
-                label="Pinned"
-                count={
-                  notes.filter(
-                    (note) =>
-                      note.pinned,
-                  ).length
-                }
-              />
-            </div>
-          </div>
-
-          {/* Status */}
-
-          <div
-            className="
-              mt-6
-              flex
+              inline-flex
               items-center
-              justify-between
+              justify-center
+              gap-2
+              rounded-xl
+              bg-green-600
+              px-5
+              py-3
+              text-sm
+              font-semibold
+              text-white
+              shadow-sm
+              transition
+              hover:bg-green-700
+              disabled:cursor-not-allowed
+              disabled:opacity-60
             "
           >
-            <h2 className="text-sm font-semibold text-gray-800">
-              {getFilterLabel(
+            <Plus size={18} />
+
+            {creating
+              ? "Creating..."
+              : "New Note"}
+          </button>
+        </div>
+
+        {/* =================================================
+            SEARCH
+        ================================================= */}
+
+        <div className="mt-6 rounded-2xl border border-gray-200 bg-white p-3 shadow-sm">
+          <div className="flex items-center gap-3 px-1">
+            <Search
+              size={19}
+              className="shrink-0 text-gray-400"
+            />
+
+            <input
+              type="text"
+              value={search}
+              onChange={(event) =>
+                setSearch(
+                  event.target.value,
+                )
+              }
+              placeholder="Search notes..."
+              className="
+                w-full
+                bg-transparent
+                text-sm
+                text-gray-900
+                outline-none
+                placeholder:text-gray-400
+              "
+            />
+          </div>
+        </div>
+
+        {/* =================================================
+            FILTERS
+        ================================================= */}
+
+        <div className="mt-4 overflow-x-auto pb-1">
+          <div className="flex min-w-max gap-2">
+
+            <FilterButton
+              active={
+                activeFilter === "all"
+              }
+              onClick={() =>
+                setActiveFilter("all")
+              }
+              icon={
+                <FileText size={15} />
+              }
+              label="All Notes"
+              count={notes.length}
+            />
+
+            <FilterButton
+              active={
+                activeFilter ===
+                "paragraph"
+              }
+              onClick={() =>
+                setActiveFilter(
+                  "paragraph",
+                )
+              }
+              icon={
+                <FileText size={15} />
+              }
+              label="Paragraph"
+              count={counts.paragraph}
+            />
+
+            <FilterButton
+              active={
+                activeFilter ===
+                "checkbox"
+              }
+              onClick={() =>
+                setActiveFilter(
+                  "checkbox",
+                )
+              }
+              icon={
+                <CheckSquare size={15} />
+              }
+              label="Checkbox"
+              count={counts.checkbox}
+            />
+
+            <FilterButton
+              active={
+                activeFilter === "both"
+              }
+              onClick={() =>
+                setActiveFilter("both")
+              }
+              icon={
+                <Layers3 size={15} />
+              }
+              label="Both"
+              count={counts.both}
+            />
+
+            <FilterButton
+              active={
+                activeFilter ===
+                "pinned"
+              }
+              onClick={() =>
+                setActiveFilter(
+                  "pinned",
+                )
+              }
+              icon={
+                <Pin size={15} />
+              }
+              label="Pinned"
+              count={counts.pinned}
+            />
+
+          </div>
+        </div>
+
+        {/* =================================================
+            STATUS
+        ================================================= */}
+
+        <div className="mt-6 flex items-center justify-between">
+          <div>
+            <h2 className="font-semibold text-gray-800">
+              {getFilterName(
                 activeFilter,
               )}
             </h2>
 
-            <span className="text-xs text-gray-400">
+            <p className="mt-0.5 text-xs text-gray-400">
               {filteredNotes.length}{" "}
-              {filteredNotes.length ===
-              1
+              {filteredNotes.length === 1
                 ? "note"
                 : "notes"}
-            </span>
+            </p>
           </div>
 
-          {/* Firebase error should NOT replace notes */}
-
-          {error && (
-            <div className="mt-3 rounded-xl bg-yellow-50 px-4 py-2 text-xs text-yellow-700">
-              Offline mode — local
-              notes are being used.
-            </div>
-          )}
-
-          {/* Notes */}
-
-          {filteredNotes.length ===
-          0 ? (
-            <div
-              className="
-                mt-5
-                rounded-2xl
-                border
-                border-dashed
-                border-gray-200
-                bg-white
-                p-10
-                text-center
-              "
-            >
-              <FileText
-                className="mx-auto text-gray-300"
-                size={32}
-              />
-
-              <h2 className="mt-3 font-semibold text-gray-800">
-                No notes found
-              </h2>
-
-              <p className="mt-1 text-sm text-gray-400">
-                Create your first
-                note.
-              </p>
-
-              {activeFilter ===
-                "all" && (
-                <button
-                  type="button"
-                  onClick={
-                    handleCreateNote
-                  }
-                  className="
-                    mt-5
-                    inline-flex
-                    items-center
-                    gap-2
-                    rounded-xl
-                    bg-green-600
-                    px-4
-                    py-2.5
-                    text-sm
-                    font-semibold
-                    text-white
-                  "
-                >
-                  <Plus size={17} />
-                  Create Note
-                </button>
-              )}
-            </div>
-          ) : (
-            <div
-              className="
-                mt-5
-                grid
-                gap-4
-                sm:grid-cols-2
-                lg:grid-cols-3
-              "
-            >
-              {filteredNotes.map(
-                (note) => (
-                  <NoteCard
-                    key={note.id}
-                    note={note}
-                    deletingId={
-                      deletingId
-                    }
-                    onOpen={() =>
-                      setEditingNote(
-                        note,
-                      )
-                    }
-                    onDelete={() =>
-                      handleDeleteNote(
-                        note.id,
-                      )
-                    }
-                    onTogglePin={() =>
-                      handleTogglePin(
-                        note,
-                      )
-                    }
-                  />
-                ),
-              )}
-            </div>
+          {loading && (
+            <span className="text-xs text-gray-400">
+              Loading...
+            </span>
           )}
         </div>
+
+        {/* =================================================
+            ERROR
+        ================================================= */}
+
+        {error && (
+          <div className="mt-4 rounded-xl border border-yellow-100 bg-yellow-50 px-4 py-3 text-xs text-yellow-700">
+            Offline mode — your local notes are still available.
+          </div>
+        )}
+
+        {/* =================================================
+            NOTE LIST
+        ================================================= */}
+
+        {filteredNotes.length === 0 ? (
+          <EmptyState
+            onCreate={handleCreateNote}
+          />
+        ) : (
+          <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {filteredNotes.map(
+              (note) => (
+                <NoteCard
+                  key={note.id}
+                  note={note}
+                  deleting={
+                    deletingId === note.id
+                  }
+                  onOpen={() =>
+                    setEditingNote(note)
+                  }
+                  onDelete={() =>
+                    handleDeleteNote(
+                      note.id,
+                    )
+                  }
+                  onPin={() =>
+                    handleTogglePin(
+                      note,
+                    )
+                  }
+                />
+              ),
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Editor */}
+      {/* =================================================
+          NOTE EDITOR
+      ================================================= */}
 
       {editingNote && (
         <NoteEditor
@@ -783,18 +662,26 @@ export default function NotebookPage() {
           onChange={
             handleEditorChange
           }
+          onSave={
+            handleSaveNote
+          }
+          onDelete={() =>
+            handleDeleteNote(
+              editingNote.id,
+            )
+          }
           onClose={() =>
             setEditingNote(null)
           }
         />
       )}
-    </>
+    </div>
   );
 }
 
-/* -------------------------------- */
-/* Filter Button */
-/* -------------------------------- */
+/* =========================================================
+   FILTER BUTTON
+========================================================= */
 
 function FilterButton({
   active,
@@ -818,21 +705,24 @@ function FilterButton({
         items-center
         gap-2
         rounded-xl
-        px-3
-        py-2
+        border
+        px-4
+        py-2.5
         text-xs
-        font-medium
+        font-semibold
         transition
         ${
           active
-            ? "bg-green-600 text-white"
-            : "text-gray-500 hover:bg-gray-100"
+            ? "border-green-600 bg-green-600 text-white shadow-sm"
+            : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
         }
       `}
     >
       {icon}
 
-      {label}
+      <span>
+        {label}
+      </span>
 
       <span
         className={`
@@ -853,79 +743,134 @@ function FilterButton({
   );
 }
 
-/* -------------------------------- */
-/* Card */
-/* -------------------------------- */
+/* =========================================================
+   EMPTY STATE
+========================================================= */
 
-function NoteCard({
-  note,
-  deletingId,
-  onOpen,
-  onDelete,
-  onTogglePin,
+function EmptyState({
+  onCreate,
 }: {
-  note: Note;
-  deletingId: string | null;
-  onOpen: () => void;
-  onDelete: () => void;
-  onTogglePin: () => void;
+  onCreate: () => void;
 }) {
-  const blocks =
-    note.blocks ?? [];
-
-  const textBlocks =
-    blocks.filter(
-      (block) =>
-        block.type === "text" &&
-        block.text.trim(),
-    );
-
-  const checklistBlocks =
-    blocks.filter(
-      (block) =>
-        block.type ===
-          "checklist" &&
-        block.text.trim(),
-    );
-
-  const hasParagraph =
-    textBlocks.length > 0 ||
-    Boolean(note.content?.trim());
-
-  const hasCheckbox =
-    checklistBlocks.length > 0 ||
-    note.checklist.length > 0;
-
-  const preview =
-    textBlocks
-      .map(
-        (block) =>
-          block.text,
-      )
-      .join(" ") ||
-    note.content ||
-    "No content";
-
   return (
-    <div
-      className="
-        group
-        relative
-        rounded-2xl
-        border
-        border-gray-100
-        bg-white
-        p-5
-        shadow-sm
-        transition
-        hover:shadow-md
-      "
-    >
-      {/* Pin */}
+    <div className="mt-5 rounded-2xl border border-dashed border-gray-200 bg-white p-12 text-center">
+      <FileText
+        size={40}
+        className="mx-auto text-gray-300"
+      />
+
+      <h3 className="mt-4 font-semibold text-gray-800">
+        No notes found
+      </h3>
+
+      <p className="mt-1 text-sm text-gray-400">
+        Create a new note to get started.
+      </p>
 
       <button
         type="button"
-        onClick={onTogglePin}
+        onClick={onCreate}
+        className="
+          mt-5
+          inline-flex
+          items-center
+          gap-2
+          rounded-xl
+          bg-green-600
+          px-4
+          py-2.5
+          text-sm
+          font-semibold
+          text-white
+          transition
+          hover:bg-green-700
+        "
+      >
+        <Plus size={17} />
+        Create Note
+      </button>
+    </div>
+  );
+}
+
+/* =========================================================
+   NOTE CARD
+========================================================= */
+
+function NoteCard({
+  note,
+  deleting,
+  onOpen,
+  onDelete,
+  onPin,
+}: {
+  note: Note;
+  deleting: boolean;
+  onOpen: () => void;
+  onDelete: () => void;
+  onPin: () => void;
+}) {
+  const blocks =
+    Array.isArray(note.blocks)
+      ? note.blocks
+      : [];
+
+  const textParts =
+    blocks
+      .filter(
+        (block) =>
+          block.type === "text" &&
+          typeof block.text === "string" &&
+          block.text.trim().length > 0,
+      )
+      .map(
+        (block) => block.text,
+      );
+
+  const checklistParts =
+    blocks
+      .filter(
+        (block) =>
+          block.type === "checklist" &&
+          typeof block.text === "string" &&
+          block.text.trim().length > 0,
+      )
+      .map(
+        (block) => block.text,
+      );
+
+  const hasParagraph =
+    textParts.length > 0 ||
+    (
+      typeof note.content === "string" &&
+      note.content.trim().length > 0
+    );
+
+  const hasCheckbox =
+    checklistParts.length > 0 ||
+    (
+      Array.isArray(note.checklist) &&
+      note.checklist.length > 0
+    );
+
+  const preview =
+    textParts.join(" ") ||
+    checklistParts.join(" • ") ||
+    (
+      typeof note.content === "string"
+        ? note.content
+        : ""
+    ) ||
+    "Empty note";
+
+  return (
+    <div className="group relative overflow-hidden rounded-2xl border border-gray-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+
+      {/* PIN */}
+
+      <button
+        type="button"
+        onClick={onPin}
         className={`
           absolute
           right-3
@@ -939,59 +884,59 @@ function NoteCard({
               : "text-gray-400 hover:bg-gray-100"
           }
         `}
+        title={
+          note.pinned
+            ? "Unpin note"
+            : "Pin note"
+        }
       >
-        {note.pinned ? (
-          <Pin size={16} />
-        ) : (
-          <PinOff size={16} />
-        )}
+        <Pin size={17} />
       </button>
 
-      {/* Open */}
+      {/* OPEN */}
 
       <button
         type="button"
         onClick={onOpen}
         className="w-full text-left"
       >
-        <div className="pr-8">
-          <h3 className="font-semibold text-gray-900">
-            {note.title ||
-              "Untitled Note"}
-          </h3>
+        <h3 className="pr-10 font-semibold text-gray-900">
+          {note.title ||
+            "Untitled Note"}
+        </h3>
 
-          <p className="mt-2 line-clamp-3 text-sm leading-5 text-gray-500">
-            {preview}
-          </p>
-        </div>
+        <p className="mt-3 line-clamp-4 text-sm leading-6 text-gray-500">
+          {preview}
+        </p>
 
         <div className="mt-4 flex flex-wrap gap-2">
+
+          {hasParagraph && (
+            <span className="rounded-lg bg-blue-50 px-2.5 py-1 text-[10px] font-medium text-blue-600">
+              Paragraph
+            </span>
+          )}
+
+          {hasCheckbox && (
+            <span className="rounded-lg bg-orange-50 px-2.5 py-1 text-[10px] font-medium text-orange-600">
+              Checkbox
+            </span>
+          )}
+
           {hasParagraph &&
             hasCheckbox && (
-              <span className="rounded-lg bg-purple-50 px-2 py-1 text-[10px] text-purple-600">
+              <span className="rounded-lg bg-purple-50 px-2.5 py-1 text-[10px] font-medium text-purple-600">
                 Both
               </span>
             )}
 
-          {hasParagraph &&
-            !hasCheckbox && (
-              <span className="rounded-lg bg-blue-50 px-2 py-1 text-[10px] text-blue-600">
-                Paragraph
-              </span>
-            )}
-
-          {hasCheckbox &&
-            !hasParagraph && (
-              <span className="rounded-lg bg-orange-50 px-2 py-1 text-[10px] text-orange-600">
-                Checkbox
-              </span>
-            )}
         </div>
       </button>
 
-      {/* Bottom */}
+      {/* FOOTER */}
 
-      <div className="mt-4 flex items-center justify-between border-t border-gray-100 pt-3">
+      <div className="mt-5 flex items-center justify-between border-t border-gray-100 pt-3">
+
         <span className="text-[11px] text-gray-400">
           {formatDate(
             note.updatedAt,
@@ -1001,122 +946,63 @@ function NoteCard({
         <button
           type="button"
           onClick={onDelete}
-          disabled={
-            deletingId === note.id
-          }
-          className="rounded-lg p-2 text-gray-400 hover:bg-red-50 hover:text-red-500"
+          disabled={deleting}
+          className="
+            inline-flex
+            items-center
+            gap-1.5
+            rounded-lg
+            px-2
+            py-1.5
+            text-xs
+            font-medium
+            text-red-400
+            transition
+            hover:bg-red-50
+            hover:text-red-600
+            disabled:opacity-50
+          "
         >
-          <Trash2 size={16} />
+          <Trash2 size={14} />
+
+          {deleting
+            ? "Deleting..."
+            : "Delete"}
         </button>
+
       </div>
     </div>
   );
 }
 
-/* -------------------------------- */
-/* Helpers */
-/* -------------------------------- */
+/* =========================================================
+   FILTER NAME
+========================================================= */
 
-function getType(
-  note: Note,
-) {
-  const blocks =
-    note.blocks ?? [];
-
-  const paragraph =
-    blocks.some(
-      (block) =>
-        block.type === "text" &&
-        block.text.trim(),
-    ) ||
-    Boolean(note.content?.trim());
-
-  const checkbox =
-    blocks.some(
-      (block) =>
-        block.type ===
-          "checklist" &&
-        block.text.trim(),
-    ) ||
-    note.checklist.length > 0;
-
-  return {
-    paragraph,
-    checkbox,
-  };
-}
-
-function getParagraphCount(
-  notes: Note[],
-) {
-  return notes.filter(
-    (note) => {
-      const {
-        paragraph,
-        checkbox,
-      } = getType(note);
-
-      return (
-        paragraph && !checkbox
-      );
-    },
-  ).length;
-}
-
-function getCheckboxCount(
-  notes: Note[],
-) {
-  return notes.filter(
-    (note) => {
-      const {
-        paragraph,
-        checkbox,
-      } = getType(note);
-
-      return (
-        checkbox && !paragraph
-      );
-    },
-  ).length;
-}
-
-function getBothCount(
-  notes: Note[],
-) {
-  return notes.filter(
-    (note) => {
-      const {
-        paragraph,
-        checkbox,
-      } = getType(note);
-
-      return (
-        paragraph && checkbox
-      );
-    },
-  ).length;
-}
-
-function getFilterLabel(
+function getFilterName(
   filter: NoteFilter,
 ) {
   switch (filter) {
     case "paragraph":
-      return "Paragraph";
+      return "Paragraph Notes";
 
     case "checkbox":
-      return "Checkbox";
+      return "Checkbox Notes";
 
     case "both":
-      return "Both";
+      return "Paragraph + Checkbox";
 
     case "pinned":
-      return "Pinned";
+      return "Pinned Notes";
 
     default:
       return "All Notes";
   }
 }
+
+/* =========================================================
+   DATE
+========================================================= */
 
 function formatDate(
   value: string,
@@ -1137,6 +1023,7 @@ function formatDate(
     {
       month: "short",
       day: "numeric",
+      year: "numeric",
     },
   );
 }

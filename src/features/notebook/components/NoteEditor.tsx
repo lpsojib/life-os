@@ -1,54 +1,42 @@
 "use client";
 
 import {
-  useCallback,
-  useEffect,
-  useRef,
   useState,
 } from "react";
 
 import {
-  ArrowLeft,
   Check,
   CheckSquare,
-  FileText,
-  GripVertical,
+  Pin,
+  PinOff,
   Plus,
   Save,
   Trash2,
-  Type,
   X,
 } from "lucide-react";
 
-import { updateNote } from "../services/notebook.service";
-
 import {
   Note,
-  NoteBlock as NoteBlockType,
+  NoteBlock,
 } from "../types/notebook.types";
+
+/* =========================================================
+   PROPS
+========================================================= */
 
 interface NoteEditorProps {
   note: Note;
-  onChange: (updatedNote: Note) => void;
+  onChange: (note: Note) => void;
+  onSave: (note: Note) => Promise<void> | void;
+  onDelete: () => Promise<void> | void;
   onClose: () => void;
 }
 
-/* ================================================= */
-/* CREATE BLOCK */
-/* ================================================= */
+/* =========================================================
+   CREATE TEXT BLOCK
+========================================================= */
 
-function createBlock(
-  type: "text" | "checklist",
-): NoteBlockType {
-  if (type === "checklist") {
-    return {
-      id: crypto.randomUUID(),
-      type: "checklist",
-      text: "",
-      completed: false,
-    };
-  }
-
+function createTextBlock(): NoteBlock {
   return {
     id: crypto.randomUUID(),
     type: "text",
@@ -56,427 +44,250 @@ function createBlock(
   };
 }
 
-/* ================================================= */
-/* EDITOR */
-/* ================================================= */
+/* =========================================================
+   CREATE CHECKLIST BLOCK
+========================================================= */
+
+function createChecklistBlock(): NoteBlock {
+  return {
+    id: crypto.randomUUID(),
+    type: "checklist",
+    text: "",
+    checked: false,
+  };
+}
+
+/* =========================================================
+   INITIAL BLOCKS
+========================================================= */
+
+function getInitialBlocks(
+  note: Note,
+): NoteBlock[] {
+  if (
+    Array.isArray(note.blocks) &&
+    note.blocks.length > 0
+  ) {
+    return note.blocks;
+  }
+
+  return [
+    createTextBlock(),
+  ];
+}
+
+/* =========================================================
+   COMPONENT
+========================================================= */
 
 export default function NoteEditor({
   note,
   onChange,
+  onSave,
+  onDelete,
   onClose,
 }: NoteEditorProps) {
-  /* ------------------------------------------------ */
-  /* TITLE */
-  /* ------------------------------------------------ */
+  /*
+   * IMPORTANT
+   *
+   * No useEffect + setState.
+   *
+   * This prevents the React warning:
+   *
+   * Calling setState synchronously within an effect
+   */
 
-  const [title, setTitle] = useState(
+  const [
+    title,
+    setTitle,
+  ] = useState(
     note.title || "",
   );
 
-  /* ------------------------------------------------ */
-  /* BLOCKS */
-  /* ------------------------------------------------ */
+  const [
+    blocks,
+    setBlocks,
+  ] = useState<NoteBlock[]>(
+    getInitialBlocks(note),
+  );
 
-  const [blocks, setBlocks] =
-    useState<NoteBlockType[]>(() => {
-      if (
-        note.blocks &&
-        note.blocks.length > 0
-      ) {
-        return note.blocks;
-      }
+  const [
+    pinned,
+    setPinned,
+  ] = useState(
+    Boolean(note.pinned),
+  );
 
-      if (note.content?.trim()) {
-        return [
-          {
-            id: crypto.randomUUID(),
-            type: "text",
-            text: note.content,
-          },
-        ];
-      }
+  const [
+    saving,
+    setSaving,
+  ] = useState(false);
 
-      if (
-        note.checklist &&
-        note.checklist.length > 0
-      ) {
-        return note.checklist.map(
-          (item) => ({
-            id: item.id,
-            type: "checklist",
-            text: item.text,
-            completed:
-              Boolean(item.completed),
-          }),
-        );
-      }
+  const [
+    deleting,
+    setDeleting,
+  ] = useState(false);
 
-      return [createBlock("text")];
-    });
+  /* =======================================================
+     BUILD NOTE
+  ======================================================= */
 
-  /* ------------------------------------------------ */
-  /* SAVE STATE */
-  /* ------------------------------------------------ */
+  function buildNote(
+    currentBlocks: NoteBlock[] = blocks,
+    currentTitle: string = title,
+    currentPinned: boolean = pinned,
+  ): Note {
+    const now =
+      new Date().toISOString();
 
-  const [saving, setSaving] =
-    useState(false);
+    /*
+     * IMPORTANT
+     *
+     * checklist must remain NoteBlock[].
+     *
+     * Do NOT map it into:
+     *
+     * { id, text, checked }
+     *
+     * because NoteBlock requires "type".
+     */
 
-  const [saved, setSaved] =
-    useState(false);
+    const checklistBlocks =
+      currentBlocks.filter(
+        (block) =>
+          block.type ===
+          "checklist",
+      );
 
-  const [saveError, setSaveError] =
-    useState(false);
+    const textBlocks =
+      currentBlocks.filter(
+        (block) =>
+          block.type ===
+          "text",
+      );
 
-  const [dirty, setDirty] =
-    useState(false);
+    return {
+      ...note,
 
-  /* ------------------------------------------------ */
-  /* REFS */
-  /* ------------------------------------------------ */
+      id: note.id,
 
-  const mountedRef =
-    useRef(true);
+      title:
+        currentTitle.trim() ||
+        "Untitled Note",
 
-  const latestTitle =
-    useRef(title);
+      type:
+        "text",
 
-  const latestBlocks =
-    useRef(blocks);
+      content:
+        textBlocks
+          .map(
+            (block) =>
+              block.text,
+          )
+          .join("\n"),
 
-  const savedMessageTimer =
-    useRef<ReturnType<
-      typeof setTimeout
-    > | null>(null);
+      blocks:
+        currentBlocks,
 
-  /* ================================================= */
-  /* KEEP LATEST VALUES */
-  /* ================================================= */
+      checklist:
+        checklistBlocks,
 
-  useEffect(() => {
-    latestTitle.current =
-      title;
-  }, [title]);
+      pinned:
+        currentPinned,
 
-  useEffect(() => {
-    latestBlocks.current =
-      blocks;
-  }, [blocks]);
+      createdAt:
+        note.createdAt ||
+        now,
 
-  /* ================================================= */
-  /* BUILD NOTE */
-/* ================================================= */
-
-  const buildUpdatedNote =
-    useCallback(
-      (
-        currentTitle: string,
-        currentBlocks: NoteBlockType[],
-      ): Note => {
-        /*
-         * Remove empty blocks before saving.
-         */
-        const cleanBlocks =
-          currentBlocks
-            .filter(
-              (block) =>
-                block.text.trim() !== "",
-            )
-            .map((block) => {
-              if (
-                block.type ===
-                "checklist"
-              ) {
-                return {
-                  id: block.id,
-                  type: "checklist" as const,
-                  text: block.text,
-                  completed:
-                    Boolean(
-                      block.completed,
-                    ),
-                };
-              }
-
-              return {
-                id: block.id,
-                type: "text" as const,
-                text: block.text,
-              };
-            });
-
-        /*
-         * Paragraph content.
-         */
-        const content =
-          cleanBlocks
-            .filter(
-              (block) =>
-                block.type ===
-                "text",
-            )
-            .map(
-              (block) =>
-                block.text,
-            )
-            .join("\n\n");
-
-        /*
-         * Checklist.
-         */
-        const checklist =
-          cleanBlocks
-            .filter(
-              (block) =>
-                block.type ===
-                "checklist",
-            )
-            .map((block) => ({
-              id: block.id,
-              text: block.text,
-              completed:
-                Boolean(
-                  block.completed,
-                ),
-            }));
-
-        return {
-          ...note,
-
-          title:
-            currentTitle.trim() ||
-            "Untitled Note",
-
-          blocks:
-            cleanBlocks,
-
-          content,
-
-          checklist,
-
-          updatedAt:
-            new Date().toISOString(),
-        };
-      },
-      [note],
-    );
-
-  /* ================================================= */
-  /* MANUAL SAVE */
-/* ================================================= */
-
-  const handleSave =
-    useCallback(async () => {
-      if (saving) {
-        return;
-      }
-
-      try {
-        setSaving(true);
-        setSaved(false);
-        setSaveError(false);
-
-        /*
-         * Get the latest editor values.
-         */
-        const currentTitle =
-          latestTitle.current;
-
-        const currentBlocks =
-          latestBlocks.current;
-
-        /*
-         * Build updated note.
-         */
-        const updatedNote =
-          buildUpdatedNote(
-            currentTitle,
-            currentBlocks,
-          );
-
-        /*
-         * Save locally first.
-         *
-         * updateNote() saves to IndexedDB
-         * immediately and starts Firebase
-         * sync in background.
-         */
-        const savedNote =
-          await updateNote(
-            note.id,
-            {
-              title:
-                updatedNote.title,
-
-              type:
-                updatedNote.type,
-
-              blocks:
-                updatedNote.blocks,
-
-              content:
-                updatedNote.content,
-
-              checklist:
-                updatedNote.checklist,
-
-              pinned:
-                updatedNote.pinned,
-            },
-          );
-
-        /*
-         * Update parent Notebook.
-         */
-        onChange(
-          savedNote,
-        );
-
-        if (
-          mountedRef.current
-        ) {
-          setDirty(false);
-          setSaved(true);
-          setSaveError(false);
-        }
-
-        /*
-         * Hide Saved message.
-         */
-        if (
-          savedMessageTimer.current
-        ) {
-          clearTimeout(
-            savedMessageTimer.current,
-          );
-        }
-
-        savedMessageTimer.current =
-          setTimeout(() => {
-            if (
-              mountedRef.current
-            ) {
-              setSaved(false);
-            }
-          }, 1800);
-      } catch (error) {
-        console.error(
-          "Manual note save failed:",
-          error,
-        );
-
-        if (
-          mountedRef.current
-        ) {
-          setSaveError(true);
-          setSaved(false);
-        }
-      } finally {
-        if (
-          mountedRef.current
-        ) {
-          setSaving(false);
-        }
-      }
-    }, [
-      buildUpdatedNote,
-      note.id,
-      onChange,
-      saving,
-    ]);
-
-  /* ================================================= */
-  /* MARK DIRTY */
-/* ================================================= */
-
-  function markDirty() {
-    setDirty(true);
-    setSaved(false);
-    setSaveError(false);
+      updatedAt:
+        now,
+    };
   }
 
-  /* ================================================= */
-  /* UPDATE TITLE */
-/* ================================================= */
+  /* =======================================================
+     EMIT CHANGE
+  ======================================================= */
+
+  function emitChange(
+    currentBlocks: NoteBlock[],
+    currentTitle: string,
+    currentPinned: boolean,
+  ) {
+    const updatedNote =
+      buildNote(
+        currentBlocks,
+        currentTitle,
+        currentPinned,
+      );
+
+    onChange(updatedNote);
+  }
+
+  /* =======================================================
+     TITLE CHANGE
+  ======================================================= */
 
   function handleTitleChange(
     value: string,
   ) {
-    latestTitle.current =
-      value;
-
     setTitle(value);
 
-    markDirty();
+    emitChange(
+      blocks,
+      value,
+      pinned,
+    );
   }
 
-  /* ================================================= */
-  /* UPDATE BLOCK */
-/* ================================================= */
+  /* =======================================================
+     BLOCK TEXT CHANGE
+  ======================================================= */
 
-  function updateBlock(
-    id: string,
+  function handleBlockTextChange(
+    blockId: string,
     value: string,
   ) {
-    setBlocks((current) =>
-      current.map((block) =>
-        block.id === id
-          ? {
-              ...block,
-              text: value,
-            }
-          : block,
-      ),
-    );
-
-    latestBlocks.current =
-      latestBlocks.current.map(
-        (block) =>
-          block.id === id
-            ? {
-                ...block,
-                text: value,
-              }
-            : block,
-      );
-
-    markDirty();
-  }
-
-  /* ================================================= */
-  /* TOGGLE CHECKBOX */
-/* ================================================= */
-
-  function toggleBlock(
-    id: string,
-  ) {
-    setBlocks((current) =>
-      current.map((block) => {
-        if (
-          block.id !== id
-        ) {
-          return block;
-        }
-
-        if (
-          block.type !==
-          "checklist"
-        ) {
-          return block;
-        }
-
-        return {
-          ...block,
-          completed:
-            !block.completed,
-        };
-      }),
-    );
-
-    latestBlocks.current =
-      latestBlocks.current.map(
+    const updatedBlocks =
+      blocks.map(
         (block) => {
           if (
-            block.id !== id
+            block.id !==
+            blockId
+          ) {
+            return block;
+          }
+
+          return {
+            ...block,
+            text: value,
+          };
+        },
+      );
+
+    setBlocks(
+      updatedBlocks,
+    );
+
+    emitChange(
+      updatedBlocks,
+      title,
+      pinned,
+    );
+  }
+
+  /* =======================================================
+     TOGGLE CHECKBOX
+  ======================================================= */
+
+  function handleToggleCheckbox(
+    blockId: string,
+  ) {
+    const updatedBlocks =
+      blocks.map(
+        (block) => {
+          if (
+            block.id !==
+            blockId
           ) {
             return block;
           }
@@ -490,663 +301,757 @@ export default function NoteEditor({
 
           return {
             ...block,
-            completed:
-              !block.completed,
+            checked:
+              !Boolean(
+                block.checked,
+              ),
           };
         },
       );
 
-    markDirty();
+    setBlocks(
+      updatedBlocks,
+    );
+
+    emitChange(
+      updatedBlocks,
+      title,
+      pinned,
+    );
   }
 
-  /* ================================================= */
-  /* DELETE BLOCK */
-/* ================================================= */
+  /* =======================================================
+     ADD TEXT BLOCK
+  ======================================================= */
 
-  function deleteBlock(
-    id: string,
+  function handleAddText() {
+    const newBlock =
+      createTextBlock();
+
+    const updatedBlocks = [
+      ...blocks,
+      newBlock,
+    ];
+
+    setBlocks(
+      updatedBlocks,
+    );
+
+    emitChange(
+      updatedBlocks,
+      title,
+      pinned,
+    );
+  }
+
+  /* =======================================================
+     ADD CHECKLIST
+  ======================================================= */
+
+  function handleAddChecklist() {
+    const newBlock =
+      createChecklistBlock();
+
+    const updatedBlocks = [
+      ...blocks,
+      newBlock,
+    ];
+
+    setBlocks(
+      updatedBlocks,
+    );
+
+    emitChange(
+      updatedBlocks,
+      title,
+      pinned,
+    );
+  }
+
+  /* =======================================================
+     DELETE BLOCK
+  ======================================================= */
+
+  function handleDeleteBlock(
+    blockId: string,
   ) {
-    setBlocks((current) => {
-      const next =
-        current.filter(
-          (block) =>
-            block.id !== id,
-        );
-
-      if (
-        next.length === 0
-      ) {
-        return [
-          createBlock("text"),
-        ];
-      }
-
-      return next;
-    });
-
-    const next =
-      latestBlocks.current.filter(
+    let updatedBlocks =
+      blocks.filter(
         (block) =>
-          block.id !== id,
+          block.id !==
+          blockId,
       );
 
-    latestBlocks.current =
-      next.length === 0
-        ? [
-            createBlock("text"),
-          ]
-        : next;
+    /*
+     * Never leave the editor
+     * without a block.
+     */
 
-    markDirty();
-  }
-
-  /* ================================================= */
-  /* ADD BLOCK */
-/* ================================================= */
-
-  function addBlock(
-    type: "text" | "checklist",
-  ) {
-    const newBlock =
-      createBlock(type);
-
-    setBlocks((current) => [
-      ...current,
-      newBlock,
-    ]);
-
-    latestBlocks.current =
-      [
-        ...latestBlocks.current,
-        newBlock,
+    if (
+      updatedBlocks.length ===
+      0
+    ) {
+      updatedBlocks = [
+        createTextBlock(),
       ];
+    }
 
-    markDirty();
+    setBlocks(
+      updatedBlocks,
+    );
+
+    emitChange(
+      updatedBlocks,
+      title,
+      pinned,
+    );
   }
 
-  /* ================================================= */
-  /* CLEANUP */
-/* ================================================= */
+  /* =======================================================
+     PIN
+  ======================================================= */
 
-  useEffect(() => {
-    mountedRef.current =
-      true;
+  function handleTogglePin() {
+    const newPinned =
+      !pinned;
 
-    return () => {
-      mountedRef.current =
-        false;
+    setPinned(
+      newPinned,
+    );
 
-      if (
-        savedMessageTimer.current
-      ) {
-        clearTimeout(
-          savedMessageTimer.current,
-        );
-      }
-    };
-  }, []);
+    emitChange(
+      blocks,
+      title,
+      newPinned,
+    );
+  }
 
-  /* ================================================= */
-  /* RENDER */
-/* ================================================= */
+  /* =======================================================
+     MANUAL SAVE
+  ======================================================= */
+
+  async function handleSave() {
+    if (saving) {
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const updatedNote =
+        buildNote();
+
+      /*
+       * Update NotebookPage UI.
+       */
+
+      onChange(
+        updatedNote,
+      );
+
+      /*
+       * Save using the current
+       * notebook.service.ts API:
+       *
+       * updateNote(note)
+       */
+
+      await onSave(
+        updatedNote,
+      );
+    } catch (error) {
+      console.error(
+        "Notebook save failed:",
+        error,
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  /* =======================================================
+     DELETE
+  ======================================================= */
+
+  async function handleDelete() {
+    if (deleting) {
+      return;
+    }
+
+    const confirmed =
+      window.confirm(
+        "Are you sure you want to delete this note?",
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDeleting(
+      true,
+    );
+
+    try {
+      await onDelete();
+    } catch (error) {
+      console.error(
+        "Notebook delete failed:",
+        error,
+      );
+    } finally {
+      setDeleting(
+        false,
+      );
+    }
+  }
+
+  /* =======================================================
+     RENDER
+  ======================================================= */
 
   return (
     <div
       className="
-        fixed inset-0 z-50
-        bg-black/30
-        backdrop-blur-sm
+        fixed
+        inset-0
+        z-50
+        flex
+        items-center
+        justify-center
+        bg-black/40
+        p-3
+        sm:p-6
       "
     >
       <div
         className="
-          flex h-full w-full
-          items-center justify-center
-          p-0 sm:p-6
+          flex
+          max-h-[95vh]
+          w-full
+          max-w-3xl
+          flex-col
+          overflow-hidden
+          rounded-3xl
+          bg-white
+          shadow-2xl
         "
       >
+        {/* =================================================
+            HEADER
+        ================================================= */}
+
         <div
           className="
-            flex h-full w-full
-            flex-col
-            bg-white
-            sm:h-[92vh]
-            sm:max-w-4xl
-            sm:rounded-3xl
-            sm:shadow-2xl
+            flex
+            items-center
+            justify-between
+            border-b
+            border-gray-100
+            px-4
+            py-3
+            sm:px-6
           "
         >
-          {/* HEADER */}
-
-          <header
+          <div
             className="
-              flex shrink-0
+              flex
               items-center
-              justify-between
-              border-b
-              border-gray-100
-              px-4 py-4
-              sm:px-6
+              gap-3
             "
           >
-            {/* Back */}
+            <div
+              className="
+                flex
+                h-9
+                w-9
+                items-center
+                justify-center
+                rounded-xl
+                bg-green-50
+                text-green-600
+              "
+            >
+              <CheckSquare
+                size={18}
+              />
+            </div>
+
+            <div>
+              <p
+                className="
+                  text-sm
+                  font-semibold
+                  text-gray-900
+                "
+              >
+                Note Editor
+              </p>
+
+              <p
+                className="
+                  text-[11px]
+                  text-gray-400
+                "
+              >
+                Write and save manually
+              </p>
+            </div>
+          </div>
+
+          <div
+            className="
+              flex
+              items-center
+              gap-1
+            "
+          >
+            {/* PIN */}
 
             <button
               type="button"
-              onClick={onClose}
+              onClick={
+                handleTogglePin
+              }
+              className={`
+                rounded-xl
+                p-2
+                transition
+                ${
+                  pinned
+                    ? "bg-green-50 text-green-600"
+                    : "text-gray-400 hover:bg-gray-100"
+                }
+              `}
+              title={
+                pinned
+                  ? "Unpin note"
+                  : "Pin note"
+              }
+            >
+              {pinned ? (
+                <Pin size={18} />
+              ) : (
+                <PinOff
+                  size={18}
+                />
+              )}
+            </button>
+
+            {/* CLOSE */}
+
+            <button
+              type="button"
+              onClick={
+                onClose
+              }
+              className="
+                rounded-xl
+                p-2
+                text-gray-400
+                transition
+                hover:bg-gray-100
+                hover:text-gray-700
+              "
+              title="Close"
+            >
+              <X size={19} />
+            </button>
+          </div>
+        </div>
+
+        {/* =================================================
+            EDITOR
+        ================================================= */}
+
+        <div
+          className="
+            flex-1
+            overflow-y-auto
+            px-4
+            py-5
+            sm:px-6
+            sm:py-6
+          "
+        >
+          {/* TITLE */}
+
+          <input
+            type="text"
+            value={title}
+            onChange={(
+              event,
+            ) =>
+              handleTitleChange(
+                event.target
+                  .value,
+              )
+            }
+            placeholder="Note title..."
+            className="
+              w-full
+              border-0
+              bg-transparent
+              text-2xl
+              font-bold
+              text-gray-900
+              outline-none
+              placeholder:text-gray-300
+              sm:text-3xl
+            "
+          />
+
+          {/* BLOCKS */}
+
+          <div
+            className="
+              mt-6
+              space-y-3
+            "
+          >
+            {blocks.map(
+              (
+                block,
+                index,
+              ) => (
+                <div
+                  key={
+                    block.id
+                  }
+                  className="
+                    group
+                    flex
+                    items-start
+                    gap-3
+                    rounded-2xl
+                    border
+                    border-gray-100
+                    bg-gray-50/70
+                    p-3
+                    transition
+                    focus-within:border-green-200
+                    focus-within:bg-white
+                  "
+                >
+                  {/* CHECKBOX */}
+
+                  {block.type ===
+                    "checklist" && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleToggleCheckbox(
+                          block.id,
+                        )
+                      }
+                      className={`
+                        mt-1
+                        flex
+                        h-5
+                        w-5
+                        shrink-0
+                        items-center
+                        justify-center
+                        rounded-md
+                        border
+                        transition
+                        ${
+                          block.checked
+                            ? "border-green-600 bg-green-600 text-white"
+                            : "border-gray-300 bg-white text-transparent"
+                        }
+                      `}
+                    >
+                      <Check
+                        size={14}
+                      />
+                    </button>
+                  )}
+
+                  {/* TEXT */}
+
+                  <textarea
+                    value={
+                      block.text
+                    }
+                    onChange={(
+                      event,
+                    ) =>
+                      handleBlockTextChange(
+                        block.id,
+                        event.target
+                          .value,
+                      )
+                    }
+                    placeholder={
+                      block.type ===
+                      "checklist"
+                        ? "Write checklist item..."
+                        : index ===
+                            0
+                          ? "Start writing..."
+                          : "Write something..."
+                    }
+                    rows={Math.max(
+                      1,
+                      Math.min(
+                        8,
+                        block.text.split(
+                          "\n",
+                        ).length,
+                      ),
+                    )}
+                    className={`
+                      min-h-[28px]
+                      flex-1
+                      resize-none
+                      border-0
+                      bg-transparent
+                      text-sm
+                      leading-6
+                      outline-none
+                      placeholder:text-gray-400
+                      ${
+                        block.checked
+                          ? "text-gray-400 line-through"
+                          : "text-gray-700"
+                      }
+                    `}
+                  />
+
+                  {/* DELETE BLOCK */}
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleDeleteBlock(
+                        block.id,
+                      )
+                    }
+                    className="
+                      shrink-0
+                      rounded-lg
+                      p-1.5
+                      text-gray-300
+                      transition
+                      hover:bg-red-50
+                      hover:text-red-500
+                      sm:opacity-0
+                      sm:group-hover:opacity-100
+                    "
+                    title="Remove block"
+                  >
+                    <X
+                      size={15}
+                    />
+                  </button>
+                </div>
+              ),
+            )}
+          </div>
+
+          {/* =================================================
+              ADD OPTIONS
+          ================================================= */}
+
+          <div
+            className="
+              mt-5
+              flex
+              flex-wrap
+              gap-2
+            "
+          >
+            <button
+              type="button"
+              onClick={
+                handleAddText
+              }
               className="
                 inline-flex
                 items-center
                 gap-2
                 rounded-xl
-                px-3 py-2
+                border
+                border-gray-200
+                bg-white
+                px-3
+                py-2
+                text-xs
+                font-medium
+                text-gray-600
+                transition
+                hover:border-green-200
+                hover:bg-green-50
+                hover:text-green-600
+              "
+            >
+              <Plus size={15} />
+              Paragraph
+            </button>
+
+            <button
+              type="button"
+              onClick={
+                handleAddChecklist
+              }
+              className="
+                inline-flex
+                items-center
+                gap-2
+                rounded-xl
+                border
+                border-gray-200
+                bg-white
+                px-3
+                py-2
+                text-xs
+                font-medium
+                text-gray-600
+                transition
+                hover:border-orange-200
+                hover:bg-orange-50
+                hover:text-orange-600
+              "
+            >
+              <CheckSquare
+                size={15}
+              />
+              Checkbox
+            </button>
+          </div>
+        </div>
+
+        {/* =================================================
+            FOOTER
+        ================================================= */}
+
+        <div
+          className="
+            flex
+            flex-col-reverse
+            gap-3
+            border-t
+            border-gray-100
+            bg-gray-50/70
+            px-4
+            py-3
+            sm:flex-row
+            sm:items-center
+            sm:justify-between
+            sm:px-6
+          "
+        >
+          {/* DELETE */}
+
+          <button
+            type="button"
+            onClick={
+              handleDelete
+            }
+            disabled={
+              deleting ||
+              saving
+            }
+            className="
+              inline-flex
+              items-center
+              justify-center
+              gap-2
+              rounded-xl
+              px-3
+              py-2.5
+              text-sm
+              font-medium
+              text-red-500
+              transition
+              hover:bg-red-50
+              disabled:cursor-not-allowed
+              disabled:opacity-50
+            "
+          >
+            <Trash2 size={16} />
+
+            {deleting
+              ? "Deleting..."
+              : "Delete"}
+          </button>
+
+          {/* RIGHT ACTIONS */}
+
+          <div
+            className="
+              flex
+              w-full
+              gap-2
+              sm:w-auto
+            "
+          >
+            <button
+              type="button"
+              onClick={
+                onClose
+              }
+              disabled={
+                saving ||
+                deleting
+              }
+              className="
+                flex-1
+                rounded-xl
+                border
+                border-gray-200
+                bg-white
+                px-4
+                py-2.5
                 text-sm
                 font-medium
                 text-gray-600
                 transition
                 hover:bg-gray-100
+                disabled:opacity-50
+                sm:flex-none
               "
             >
-              <ArrowLeft
-                size={18}
-              />
-
-              <span className="hidden sm:inline">
-                Back
-              </span>
+              Close
             </button>
 
-            {/* SAVE STATUS */}
-
-            <div
+            <button
+              type="button"
+              onClick={
+                handleSave
+              }
+              disabled={
+                saving ||
+                deleting
+              }
               className="
-                flex
+                inline-flex
+                flex-1
                 items-center
-                gap-3
-              "
-            >
-              {dirty &&
-                !saving && (
-                  <span
-                    className="
-                      text-xs
-                      text-amber-500
-                    "
-                  >
-                    Unsaved
-                  </span>
-                )}
-
-              {saving && (
-                <span
-                  className="
-                    text-xs
-                    text-gray-400
-                  "
-                >
-                  Saving...
-                </span>
-              )}
-
-              {!saving &&
-                saved && (
-                  <span
-                    className="
-                      inline-flex
-                      items-center
-                      gap-1
-                      text-xs
-                      text-green-600
-                    "
-                  >
-                    <Check
-                      size={14}
-                    />
-
-                    Saved
-                  </span>
-                )}
-
-              {!saving &&
-                saveError && (
-                  <span
-                    className="
-                      text-xs
-                      text-red-500
-                    "
-                  >
-                    Save failed
-                  </span>
-                )}
-
-              {/* SAVE BUTTON */}
-
-              <button
-                type="button"
-                onClick={() =>
-                  void handleSave()
-                }
-                disabled={
-                  saving ||
-                  !dirty
-                }
-                className="
-                  inline-flex
-                  items-center
-                  gap-2
-                  rounded-xl
-                  bg-green-600
-                  px-4 py-2
-                  text-sm
-                  font-semibold
-                  text-white
-                  transition
-                  hover:bg-green-700
-                  disabled:cursor-not-allowed
-                  disabled:bg-gray-200
-                  disabled:text-gray-400
-                "
-              >
-                <Save
-                  size={16}
-                />
-
-                {saving
-                  ? "Saving..."
-                  : "Save"}
-              </button>
-
-              {/* CLOSE */}
-
-              <button
-                type="button"
-                onClick={onClose}
-                className="
-                  rounded-xl
-                  p-2
-                  text-gray-400
-                  transition
-                  hover:bg-gray-100
-                  hover:text-gray-700
-                "
-              >
-                <X size={19} />
-              </button>
-            </div>
-          </header>
-
-          {/* EDITOR */}
-
-          <main
-            className="
-              flex-1
-              overflow-y-auto
-            "
-          >
-            <div
-              className="
-                mx-auto
-                max-w-3xl
+                justify-center
+                gap-2
+                rounded-xl
+                bg-green-600
                 px-5
-                py-7
-                sm:px-8
-                sm:py-9
+                py-2.5
+                text-sm
+                font-semibold
+                text-white
+                shadow-sm
+                transition
+                hover:bg-green-700
+                disabled:cursor-not-allowed
+                disabled:opacity-60
+                sm:flex-none
               "
             >
-              {/* TYPE */}
+              <Save size={16} />
 
-              <div className="mb-4">
-                <span
-                  className="
-                    inline-flex
-                    items-center
-                    gap-2
-                    rounded-full
-                    bg-green-50
-                    px-3 py-1.5
-                    text-xs
-                    font-medium
-                    text-green-700
-                  "
-                >
-                  <FileText
-                    size={14}
-                  />
-
-                  Note
-                </span>
-              </div>
-
-              {/* TITLE */}
-
-              <input
-                type="text"
-                value={title}
-                onChange={(event) =>
-                  handleTitleChange(
-                    event.target
-                      .value,
-                  )
-                }
-                placeholder="Note title"
-                autoFocus
-                className="
-                  w-full
-                  border-0
-                  bg-transparent
-                  text-3xl
-                  font-bold
-                  leading-tight
-                  text-gray-900
-                  outline-none
-                  placeholder:text-gray-300
-                  sm:text-4xl
-                "
-              />
-
-              {/* BLOCKS */}
-
-              <div
-                className="
-                  mt-6
-                  space-y-0
-                "
-              >
-                {blocks.map(
-                  (block) => {
-                    const isChecklist =
-                      block.type ===
-                      "checklist";
-
-                    return (
-                      <div
-                        key={block.id}
-                        className="
-                          group
-                          flex
-                          items-start
-                          gap-2
-                          rounded-xl
-                          px-2
-                          py-0.5
-                          transition
-                          hover:bg-gray-50
-                        "
-                      >
-                        {/* DRAG */}
-
-                        <div
-                          className="
-                            mt-1.5
-                            shrink-0
-                            text-gray-200
-                            opacity-0
-                            transition
-                            group-hover:opacity-100
-                          "
-                        >
-                          <GripVertical
-                            size={16}
-                          />
-                        </div>
-
-                        {/* CHECKBOX */}
-
-                        {isChecklist && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              toggleBlock(
-                                block.id,
-                              )
-                            }
-                            className={`
-                              mt-1.5
-                              flex h-5 w-5
-                              shrink-0
-                              items-center
-                              justify-center
-                              rounded-md
-                              border
-                              transition
-                              ${
-                                block.completed
-                                  ? "border-green-500 bg-green-500 text-white"
-                                  : "border-gray-300 bg-white hover:border-green-400"
-                              }
-                            `}
-                          >
-                            {block.completed && (
-                              <Check
-                                size={13}
-                              />
-                            )}
-                          </button>
-                        )}
-
-                        {/* TEXT */}
-
-                        <textarea
-                          value={
-                            block.text
-                          }
-                          onChange={(
-                            event,
-                          ) => {
-                            updateBlock(
-                              block.id,
-                              event.target
-                                .value,
-                            );
-                          }}
-                          placeholder={
-                            isChecklist
-                              ? "Checklist item..."
-                              : "Write something..."
-                          }
-                          rows={1}
-                          className={`
-                            min-h-[32px]
-                            flex-1
-                            resize-none
-                            border-0
-                            bg-transparent
-                            px-1
-                            py-0.5
-                            text-[15px]
-                            leading-6
-                            outline-none
-                            placeholder:text-gray-300
-                            ${
-                              block.completed
-                                ? "text-gray-400 line-through"
-                                : "text-gray-700"
-                            }
-                          `}
-                          onInput={(
-                            event,
-                          ) => {
-                            const textarea =
-                              event.currentTarget;
-
-                            textarea.style.height =
-                              "auto";
-
-                            textarea.style.height =
-                              `${textarea.scrollHeight}px`;
-                          }}
-                        />
-
-                        {/* DELETE */}
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            deleteBlock(
-                              block.id,
-                            )
-                          }
-                          className="
-                            mt-1
-                            shrink-0
-                            rounded-lg
-                            p-1.5
-                            text-gray-200
-                            opacity-0
-                            transition
-                            group-hover:opacity-100
-                            hover:bg-red-50
-                            hover:text-red-500
-                          "
-                        >
-                          <Trash2
-                            size={15}
-                          />
-                        </button>
-                      </div>
-                    );
-                  },
-                )}
-              </div>
-
-              {/* ADD */}
-
-              <div
-                className="
-                  mt-5
-                  border-t
-                  border-gray-100
-                  pt-4
-                "
-              >
-                <div
-                  className="
-                    flex
-                    flex-wrap
-                    items-center
-                    gap-2
-                  "
-                >
-                  <span
-                    className="
-                      mr-1
-                      text-xs
-                      font-medium
-                      text-gray-400
-                    "
-                  >
-                    Add
-                  </span>
-
-                  {/* PARAGRAPH */}
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      addBlock(
-                        "text",
-                      )
-                    }
-                    className="
-                      inline-flex
-                      items-center
-                      gap-2
-                      rounded-xl
-                      border
-                      border-gray-200
-                      bg-white
-                      px-3 py-2
-                      text-xs
-                      font-medium
-                      text-gray-600
-                      transition
-                      hover:border-green-200
-                      hover:bg-green-50
-                      hover:text-green-700
-                    "
-                  >
-                    <Type
-                      size={15}
-                    />
-
-                    Paragraph
-                  </button>
-
-                  {/* CHECKLIST */}
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      addBlock(
-                        "checklist",
-                      )
-                    }
-                    className="
-                      inline-flex
-                      items-center
-                      gap-2
-                      rounded-xl
-                      border
-                      border-gray-200
-                      bg-white
-                      px-3 py-2
-                      text-xs
-                      font-medium
-                      text-gray-600
-                      transition
-                      hover:border-green-200
-                      hover:bg-green-50
-                      hover:text-green-700
-                    "
-                  >
-                    <CheckSquare
-                      size={15}
-                    />
-
-                    Checklist
-                  </button>
-                </div>
-              </div>
-
-              {/* SAVE INFO */}
-
-              <div
-                className="
-                  mt-6
-                  flex
-                  items-center
-                  gap-2
-                  text-xs
-                  text-gray-400
-                "
-              >
-                <Save size={14} />
-
-                Click Save to save
-                your changes.
-              </div>
-            </div>
-          </main>
-
-          {/* FOOTER */}
-
-          <footer
-            className="
-              shrink-0
-              border-t
-              border-gray-100
-              px-5 py-3
-              text-xs
-              text-gray-400
-              sm:px-6
-            "
-          >
-            {blocks.length}{" "}
-            {blocks.length === 1
-              ? "block"
-              : "blocks"}{" "}
-            · Manual save
-          </footer>
+              {saving
+                ? "Saving..."
+                : "Save Note"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
