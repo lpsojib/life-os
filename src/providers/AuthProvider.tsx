@@ -1,6 +1,10 @@
 "use client";
 
-import { ReactNode, useEffect } from "react";
+import {
+  ReactNode,
+  useEffect,
+} from "react";
+
 import {
   usePathname,
   useRouter,
@@ -20,7 +24,12 @@ const PUBLIC_ROUTES = [
   "/register",
 ];
 
-function isPublicRoute(pathname: string) {
+const AUTH_KEY =
+  "life-os-authenticated";
+
+function isPublicRoute(
+  pathname: string
+) {
   return PUBLIC_ROUTES.some(
     (route) =>
       pathname === route ||
@@ -43,8 +52,7 @@ export default function AuthProvider({
   );
 
   /**
-   * Firebase listener background-এ চলবে।
-   * App startup আটকে রাখবে না।
+   * Firebase listener background-এ শুরু হবে।
    */
   useEffect(() => {
     initializeAuthListener();
@@ -55,48 +63,60 @@ export default function AuthProvider({
       return;
     }
 
-    const publicRoute =
-      isPublicRoute(pathname);
-
     /**
-     * আগে login করা user-এর local session
+     * আগের login session আছে কি না।
      */
     const hasLocalSession =
       typeof window !== "undefined" &&
       localStorage.getItem(
-        "life-os-authenticated"
+        AUTH_KEY
       ) === "true";
 
-    /**
-     * Logged in
-     */
-    if (user && publicRoute) {
-      router.replace("/dashboard");
-      return;
-    }
+    const publicRoute =
+      isPublicRoute(pathname);
 
     /**
-     * Offline কিন্তু আগে login করা ছিল
+     * --------------------------------
+     * 1. আগে login করা ছিল
+     * --------------------------------
      *
-     * Firebase-এর user object এখনো না থাকলেও
-     * Dashboard থেকে বের করব না।
+     * Firebase user এখন null হলেও
+     * redirect করব না।
+     *
+     * Explicit logout না করা পর্যন্ত
+     * Dashboard-এ থাকতে পারবে।
      */
-    if (
-      !user &&
-      hasLocalSession &&
-      !navigator.onLine
-    ) {
+    if (hasLocalSession) {
+      /**
+       * Login/Register page-এ থাকলে
+       * Dashboard-এ পাঠাও।
+       */
+      if (publicRoute) {
+        router.replace("/dashboard");
+      }
+
       return;
     }
 
     /**
-     * সত্যিই logged out
+     * --------------------------------
+     * 2. Firebase user আছে
+     * --------------------------------
      */
-    if (
-      !user &&
-      !hasLocalSession &&
-      !publicRoute
-    ) {
+    if (user) {
+      if (publicRoute) {
+        router.replace("/dashboard");
+      }
+
+      return;
+    }
+
+    /**
+     * --------------------------------
+     * 3. Login session নেই
+     * --------------------------------
+     */
+    if (!publicRoute) {
       router.replace("/login");
     }
   }, [
@@ -107,9 +127,10 @@ export default function AuthProvider({
   ]);
 
   /**
-   * এখানে আর loading screen নেই।
+   * IMPORTANT:
    *
-   * Firebase-এর জন্য app আটকে থাকবে না।
+   * Firebase loading-এর জন্য
+   * পুরো UI block করা হচ্ছে না।
    */
   return <>{children}</>;
 }

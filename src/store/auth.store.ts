@@ -23,73 +23,57 @@ interface AuthState {
   logout: () => Promise<void>;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
-  user: null,
+export const useAuthStore = create<AuthState>(
+  (set) => ({
+    user: null,
 
-  /**
-   * Startup-এ loading false রাখা হচ্ছে।
-   *
-   * কারণ Firebase-এর জন্য পুরো app আটকে থাকবে না।
-   */
-  loading: false,
+    /**
+     * App startup Firebase-এর জন্য অপেক্ষা করবে না।
+     */
+    loading: false,
 
-  /**
-   * App শুরুতেই usable থাকবে।
-   */
-  initialized: true,
+    initialized: true,
 
-  setUser: (user) => {
-    set({
-      user,
-    });
-  },
+    setUser: (user) => {
+      set({ user });
+    },
 
-  setLoading: (loading) => {
-    set({
-      loading,
-    });
-  },
+    setLoading: (loading) => {
+      set({ loading });
+    },
 
-  setInitialized: (initialized) => {
-    set({
-      initialized,
-    });
-  },
+    setInitialized: (initialized) => {
+      set({ initialized });
+    },
 
-  logout: async () => {
-    try {
+    logout: async () => {
       /**
-       * Local login flag আগে remove করি।
-       *
-       * এতে offline অবস্থাতেও logout করার পর
-       * পরেরবার app খুললে Dashboard-এ ঢুকবে না।
+       * IMPORTANT:
+       * Explicit logout হলেই শুধু local session
+       * delete হবে।
        */
       if (typeof window !== "undefined") {
         localStorage.removeItem(AUTH_KEY);
       }
 
-      await signOut(auth);
+      try {
+        await signOut(auth);
+      } catch (error) {
+        console.warn(
+          "Firebase logout:",
+          error
+        );
+      }
 
       set({
         user: null,
         loading: false,
         initialized: true,
       });
-    } catch (error) {
-      console.error("Logout error:", error);
+    },
+  })
+);
 
-      /**
-       * Firebase offline হলেও local logout state
-       * বজায় থাকবে।
-       */
-      set({
-        user: null,
-        loading: false,
-        initialized: true,
-      });
-    }
-  },
-}));
 
 /**
  * Firebase listener একবারই চালু হবে।
@@ -103,68 +87,45 @@ export function initializeAuthListener() {
 
   authListenerStarted = true;
 
-  onAuthStateChanged(auth, (firebaseUser) => {
-    if (firebaseUser) {
+  onAuthStateChanged(
+    auth,
+    (firebaseUser) => {
       /**
        * Firebase user পাওয়া গেছে।
        */
-      if (typeof window !== "undefined") {
-        localStorage.setItem(
-          AUTH_KEY,
-          "true"
-        );
+      if (firebaseUser) {
+        if (typeof window !== "undefined") {
+          localStorage.setItem(
+            AUTH_KEY,
+            "true"
+          );
+        }
+
+        useAuthStore.setState({
+          user: firebaseUser,
+          loading: false,
+          initialized: true,
+        });
+
+        return;
       }
 
-      useAuthStore.setState({
-        user: firebaseUser,
-        loading: false,
-        initialized: true,
-      });
-
-      return;
-    }
-
-    /**
-     * Firebase user নেই।
-     *
-     * কিন্তু offline অবস্থায় Firebase যদি session
-     * restore করতে না পারে, local login flag
-     * যেন সঙ্গে সঙ্গে remove না হয়ে যায়।
-     */
-    const hasLocalSession =
-      typeof window !== "undefined" &&
-      localStorage.getItem(AUTH_KEY) === "true";
-
-    const isOffline =
-      typeof navigator !== "undefined" &&
-      !navigator.onLine;
-
-    if (hasLocalSession && isOffline) {
       /**
-       * Offline অবস্থায় আগের login ধরে রাখি।
+       * IMPORTANT:
        *
-       * user object Firebase পরে online হলে restore করবে।
+       * Firebase null দিলেই local session
+       * delete করা যাবে না।
+       *
+       * কারণ offline অবস্থায় Firebase সাময়িকভাবে
+       * null দিতে পারে।
+       *
+       * Explicit logout ছাড়া session থাকবে।
        */
       useAuthStore.setState({
         user: null,
         loading: false,
         initialized: true,
       });
-
-      return;
     }
-
-    /**
-     * সত্যিই logged out হলে local flag remove।
-     */
-    if (typeof window !== "undefined") {
-      localStorage.removeItem(AUTH_KEY);
-    }
-
-    useAuthStore.setState({
-      user: null,
-      loading: false,
-      initialized: true,
-    });
-  });
+  );
 }

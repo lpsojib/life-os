@@ -5,59 +5,42 @@ import { useEffect } from "react";
 export default function PWARegister() {
   useEffect(() => {
     if (
-      typeof window === "undefined" ||
       !("serviceWorker" in navigator)
     ) {
       return;
     }
 
-    let mounted = true;
-
-    const register = async () => {
-      try {
-        const registration =
-          await navigator.serviceWorker.register(
-            "/sw.js",
-            {
-              scope: "/",
-            }
-          );
-
-        if (!mounted) {
-          return;
-        }
-
+    /**
+     * Service Worker registration
+     * background-এ হবে।
+     *
+     * App startup block করবে না।
+     */
+    navigator.serviceWorker
+      .register("/sw.js", {
+        scope: "/",
+      })
+      .then((registration) => {
         console.log(
           "Life OS Service Worker registered:",
           registration.scope
         );
 
         /**
-         * নতুন Service Worker থাকলে update check
+         * Update check background-এ।
+         *
+         * await করা হচ্ছে না।
          */
-        await registration.update();
-
-        /**
-         * Service Worker ready হওয়ার জন্য অপেক্ষা
-         */
-        await navigator.serviceWorker.ready;
-
-        console.log(
-          "Life OS Service Worker ready"
+        registration.update().catch(
+          () => {}
         );
-      } catch (error) {
-        console.error(
-          "Life OS Service Worker error:",
+      })
+      .catch((error) => {
+        console.warn(
+          "Life OS Service Worker:",
           error
         );
-      }
-    };
-
-    register();
-
-    return () => {
-      mounted = false;
-    };
+      });
   }, []);
 
   return null;
