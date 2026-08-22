@@ -717,35 +717,38 @@ export default function NoteEditor({
               max-w-3xl
             "
           >
-            {/* TITLE */}
+           {/* TITLE */}
 
-            <input
-              type="text"
-              value={title}
-              onChange={(
-                event,
-              ) =>
-                handleTitleChange(
-                  event.target
-                    .value,
-                )
-              }
-              placeholder="Title"
-              className="
-                w-full
-                border-0
-                bg-transparent
-                p-0
-                text-3xl
-                font-bold
-                leading-tight
-                tracking-tight
-                text-gray-900
-                outline-none
-                placeholder:text-gray-300
-                sm:text-4xl
-              "
-            />
+            <div className="mt-1">
+              <input
+                type="text"
+                value={title}
+                onChange={(event) =>
+                  handleTitleChange(event.target.value)
+                }
+                placeholder="Write a title"
+                className="
+                  w-full
+                  rounded-xl
+                  border
+                  border-gray-200
+                  bg-white
+                  px-4
+                  py-3
+                  text-2xl
+                  font-semibold
+                  tracking-tight
+                  text-gray-900
+                  outline-none
+                  transition
+                  focus:border-green-500
+                  focus:ring-2
+                  focus:ring-green-100
+                  placeholder:text-gray-300
+                  sm:text-3xl
+                "
+              />
+            </div>
 
             {/* CONTENT */}
 
