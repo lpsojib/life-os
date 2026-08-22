@@ -1,11 +1,11 @@
 "use client";
 
 import {
+  addDoc,
   collection,
   deleteDoc,
   doc,
   getDocs,
-  setDoc,
   updateDoc,
 } from "firebase/firestore";
 
@@ -16,15 +16,7 @@ import {
   NoteBlock,
 } from "../types/notebook.types";
 
-/* =========================================================
-   CONSTANTS
-========================================================= */
-
-const COLLECTION_NAME = "notes";
-
-/* =========================================================
-   HELPERS
-========================================================= */
+const NOTES_COLLECTION = "notes";
 
 function getUserNotesCollection() {
   const user = auth.currentUser;
@@ -37,25 +29,7 @@ function getUserNotesCollection() {
     db,
     "users",
     user.uid,
-    COLLECTION_NAME,
-  );
-}
-
-function getUserNoteDocument(
-  noteId: string,
-) {
-  const user = auth.currentUser;
-
-  if (!user) {
-    throw new Error("User is not authenticated.");
-  }
-
-  return doc(
-    db,
-    "users",
-    user.uid,
-    COLLECTION_NAME,
-    noteId,
+    NOTES_COLLECTION,
   );
 }
 
@@ -64,385 +38,71 @@ function now() {
 }
 
 function createId() {
-  return crypto.randomUUID();
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
+    return crypto.randomUUID();
+  }
+
+  return `${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2)}`;
 }
 
 function normalizeBlocks(
-  blocks: unknown,
+  blocks?: NoteBlock[],
 ): NoteBlock[] {
-  if (!Array.isArray(blocks)) {
+  if (
+    !Array.isArray(blocks) ||
+    blocks.length === 0
+  ) {
     return [];
   }
 
-  return blocks
-    .filter(
-      (block): block is Record<string, unknown> =>
-        Boolean(
-          block &&
-          typeof block === "object",
-        ),
-    )
-    .map((block) => {
-      const type =
-        block.type === "checklist"
-          ? "checklist"
-          : "text";
-
+  return blocks.map((block) => {
+    if (block.type === "checklist") {
       return {
-        id:
-          typeof block.id === "string"
-            ? block.id
-            : createId(),
-
-        type,
-
+        id: block.id || createId(),
+        type: "checklist",
         text:
           typeof block.text === "string"
             ? block.text
             : "",
-
-        ...(type === "checklist"
-          ? {
-              checked:
-                Boolean(
-                  block.checked,
-                ),
-            }
-          : {}),
+        checked: Boolean(block.checked),
       };
-    });
-}
+    }
 
-/* =========================================================
-   CREATE NOTE
-========================================================= */
-
-export async function addNote(
-  title = "",
-): Promise<Note> {
-  const id = createId();
-  const timestamp = now();
-
-  const note: Note = {
-    id,
-
-    title,
-
-    type: "text",
-
-    content: "",
-
-    blocks: [
-      {
-        id: createId(),
-        type: "text",
-        text: "",
-      },
-    ],
-
-    checklist: [],
-
-    pinned: false,
-
-    createdAt: timestamp,
-
-    updatedAt: timestamp,
-  };
-
-  /*
-   * Firebase save.
-   *
-   * IMPORTANT:
-   * No serverTimestamp().
-   */
-
-  const ref =
-    getUserNoteDocument(id);
-
-  await setDoc(ref, {
-    ...note,
-    syncStatus: "synced",
+    return {
+      id: block.id || createId(),
+      type: "text",
+      text:
+        typeof block.text === "string"
+          ? block.text
+          : "",
+    };
   });
-
-  return note;
 }
 
-/* =========================================================
-   GET NOTES
-========================================================= */
-
-export async function getNotes(): Promise<
-  Note[]
-> {
-  const snapshot =
-    await getDocs(
-      getUserNotesCollection(),
-    );
-
-  return snapshot.docs.map(
-    (item) => {
-      const data =
-        item.data();
-
-      return {
-        id: item.id,
-
-        title:
-          typeof data.title ===
-          "string"
-            ? data.title
-            : "",
-
-        type:
-          data.type === "checklist"
-            ? "checklist"
-            : "text",
-
-        content:
-          typeof data.content ===
-          "string"
-            ? data.content
-            : "",
-
-        blocks:
-          normalizeBlocks(
-            data.blocks,
-          ),
-
-        checklist:
-          Array.isArray(
-            data.checklist,
-          )
-            ? data.checklist
-            : [],
-
-        pinned:
-          Boolean(data.pinned),
-
-        createdAt:
-          typeof data.createdAt ===
-          "string"
-            ? data.createdAt
-            : now(),
-
-        updatedAt:
-          typeof data.updatedAt ===
-          "string"
-            ? data.updatedAt
-            : now(),
-      };
-    },
-  );
-}
-
-/* =========================================================
-   SAVE NOTE
-========================================================= */
-
-export async function saveNote(
-  note: Note,
-): Promise<Note> {
-  const updatedNote: Note = {
-    ...note,
-
-    title:
-      note.title ?? "",
-
-    type:
-      note.type ?? "text",
-
-    content:
-      note.content ?? "",
-
-    blocks:
-      normalizeBlocks(
-        note.blocks,
-      ),
-
-    checklist:
-      Array.isArray(
-        note.checklist,
-      )
-        ? note.checklist
-        : [],
-
-    pinned:
-      Boolean(note.pinned),
-
-    updatedAt: now(),
-  };
-
-  const ref =
-    getUserNoteDocument(
-      updatedNote.id,
-    );
-
-  /*
-   * IMPORTANT:
-   * Firebase receives normal values only.
-   * No serverTimestamp().
-   */
-
-  await setDoc(
-    ref,
-    {
-      id:
-        updatedNote.id,
-
-      title:
-        updatedNote.title,
-
-      type:
-        updatedNote.type,
-
-      content:
-        updatedNote.content,
-
-      blocks:
-        updatedNote.blocks,
-
-      checklist:
-        updatedNote.checklist,
-
-      pinned:
-        updatedNote.pinned,
-
-      createdAt:
-        updatedNote.createdAt,
-
-      updatedAt:
-        updatedNote.updatedAt,
-
-      syncStatus:
-        "synced",
-    },
-    {
-      merge: true,
-    },
-  );
-
-  return updatedNote;
-}
-
-/* =========================================================
-   UPDATE NOTE
-========================================================= */
-
-export async function updateNote(
-  noteId: string,
+function normalizeNote(
   data: Partial<Note>,
-): Promise<void> {
-  const ref =
-    getUserNoteDocument(
-      noteId,
-    );
+  id: string,
+): Note {
+  const createdAt =
+    typeof data.createdAt === "string"
+      ? data.createdAt
+      : now();
 
-  const updateData: Record<
-    string,
-    unknown
-  > = {
-    ...data,
-    updatedAt: now(),
-    syncStatus: "synced",
-  };
-
-  if (data.blocks) {
-    updateData.blocks =
-      normalizeBlocks(
-        data.blocks,
-      );
-  }
-
-  await updateDoc(
-    ref,
-    updateData,
-  );
-}
-
-/* =========================================================
-   DELETE NOTE
-========================================================= */
-
-export async function deleteNote(
-  noteId: string,
-): Promise<void> {
-  const ref =
-    getUserNoteDocument(
-      noteId,
-    );
-
-  await deleteDoc(ref);
-}
-
-/* =========================================================
-   TOGGLE PIN
-========================================================= */
-
-export async function toggleNotePin(
-  note: Note,
-): Promise<Note> {
-  const updatedNote: Note = {
-    ...note,
-
-    pinned:
-      !note.pinned,
-
-    updatedAt: now(),
-  };
-
-  const ref =
-    getUserNoteDocument(
-      note.id,
-    );
-
-  await updateDoc(
-    ref,
-    {
-      pinned:
-        updatedNote.pinned,
-
-      updatedAt:
-        updatedNote.updatedAt,
-
-      syncStatus:
-        "synced",
-    },
-  );
-
-  return updatedNote;
-}
-
-/* =========================================================
-   GET SINGLE NOTE
-========================================================= */
-
-export async function getNote(
-  noteId: string,
-): Promise<Note | null> {
-  const snapshot =
-    await getDocs(
-      getUserNotesCollection(),
-    );
-
-  const found =
-    snapshot.docs.find(
-      (item) =>
-        item.id === noteId,
-    );
-
-  if (!found) {
-    return null;
-  }
-
-  const data =
-    found.data();
+  const updatedAt =
+    typeof data.updatedAt === "string"
+      ? data.updatedAt
+      : createdAt;
 
   return {
-    id: found.id,
+    id,
 
     title:
-      typeof data.title ===
-      "string"
+      typeof data.title === "string"
         ? data.title
         : "",
 
@@ -452,36 +112,177 @@ export async function getNote(
         : "text",
 
     content:
-      typeof data.content ===
-      "string"
+      typeof data.content === "string"
         ? data.content
         : "",
 
-    blocks:
-      normalizeBlocks(
-        data.blocks,
+    blocks: normalizeBlocks(
+      data.blocks,
+    ),
+
+    checklist: Array.isArray(
+      data.checklist,
+    )
+      ? data.checklist
+      : [],
+
+    pinned: Boolean(data.pinned),
+
+    createdAt,
+    updatedAt,
+  };
+}
+
+/* =========================================================
+   GET NOTES
+========================================================= */
+
+export async function getNotes(): Promise<Note[]> {
+  const snapshot =
+    await getDocs(
+      getUserNotesCollection(),
+    );
+
+  const notes = snapshot.docs.map(
+    (item) =>
+      normalizeNote(
+        item.data() as Partial<Note>,
+        item.id,
       ),
+  );
 
-    checklist:
-      Array.isArray(
-        data.checklist,
-      )
-        ? data.checklist
-        : [],
+  notes.sort(
+    (a, b) =>
+      new Date(b.updatedAt).getTime() -
+      new Date(a.updatedAt).getTime(),
+  );
 
-    pinned:
-      Boolean(data.pinned),
+  return notes;
+}
 
-    createdAt:
-      typeof data.createdAt ===
-      "string"
-        ? data.createdAt
-        : now(),
+/* =========================================================
+   ADD NOTE
+========================================================= */
 
-    updatedAt:
-      typeof data.updatedAt ===
-      "string"
-        ? data.updatedAt
-        : now(),
+export async function addNote(
+  title = "",
+): Promise<Note> {
+  const timestamp = now();
+
+  const noteData: Omit<
+    Note,
+    "id"
+  > = {
+    title,
+    type: "text",
+    content: "",
+    blocks: [],
+    checklist: [],
+    pinned: false,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+
+  const reference =
+    await addDoc(
+      getUserNotesCollection(),
+      noteData,
+    );
+
+  return {
+    id: reference.id,
+    ...noteData,
+  };
+}
+
+/* =========================================================
+   SAVE NOTE
+========================================================= */
+
+export async function saveNote(
+  note: Note,
+): Promise<Note> {
+  const updatedAt = now();
+
+  const updatedNote: Note = {
+    ...note,
+    title:
+      typeof note.title === "string"
+        ? note.title
+        : "",
+    blocks: normalizeBlocks(
+      note.blocks,
+    ),
+    pinned: Boolean(note.pinned),
+    updatedAt,
+  };
+
+  const reference = doc(
+    getUserNotesCollection(),
+    note.id,
+  );
+
+  await updateDoc(
+    reference,
+    {
+      title: updatedNote.title,
+      type: updatedNote.type,
+      content:
+        updatedNote.content ?? "",
+      blocks: updatedNote.blocks,
+      checklist:
+        updatedNote.checklist ?? [],
+      pinned: updatedNote.pinned,
+      updatedAt,
+    },
+  );
+
+  return updatedNote;
+}
+
+/* =========================================================
+   DELETE NOTE
+========================================================= */
+
+export async function deleteNote(
+  noteId: string,
+): Promise<void> {
+  const reference = doc(
+    getUserNotesCollection(),
+    noteId,
+  );
+
+  await deleteDoc(reference);
+}
+
+/* =========================================================
+   TOGGLE PIN
+========================================================= */
+
+export async function toggleNotePin(
+  note: Note,
+): Promise<Note> {
+  const updatedAt = now();
+  const pinned = !Boolean(
+    note.pinned,
+  );
+
+  const reference = doc(
+    getUserNotesCollection(),
+    note.id,
+  );
+
+  await updateDoc(
+    reference,
+    {
+      pinned,
+      updatedAt,
+    },
+  );
+
+  return {
+    ...note,
+    pinned,
+    updatedAt,
   };
 }
