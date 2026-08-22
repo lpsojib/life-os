@@ -67,7 +67,6 @@ export default function Header({
         <div
           className="
             hidden
-            lg:flex
             items-center
             rounded-xl
             border
@@ -75,6 +74,7 @@ export default function Header({
             bg-gray-50
             px-3
             py-2
+            lg:flex
             md:w-56
             xl:w-64
           "
@@ -114,27 +114,27 @@ export default function Header({
           justify-center
         "
       >
+        {/* Logo size is bigger,
+            header height remains h-16 */}
         <div
           className="
             flex
-            h-11
-            w-11
+            h-14
+            w-14
             items-center
             justify-center
-            rounded-xl
-            bg-white
-            p-1
+            bg-transparent
           "
         >
           <Image
             src="/logo.png"
             alt="Life OS"
-            width={44}
-            height={44}
+            width={56}
+            height={56}
             priority
             className="
-              h-full
-              w-full
+              h-14
+              w-14
               object-contain
             "
           />
