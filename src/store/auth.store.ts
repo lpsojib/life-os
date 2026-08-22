@@ -1,9 +1,15 @@
 "use client";
 
 import { create } from "zustand";
-import { onAuthStateChanged, signOut, User } from "firebase/auth";
+import {
+  onAuthStateChanged,
+  signOut,
+  User,
+} from "firebase/auth";
 
 import { auth } from "@/lib/firebase";
+
+const AUTH_KEY = "life-os-authenticated";
 
 interface AuthState {
   user: User | null;
@@ -13,13 +19,24 @@ interface AuthState {
   setUser: (user: User | null) => void;
   setLoading: (loading: boolean) => void;
   setInitialized: (initialized: boolean) => void;
+
   logout: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
-  loading: true,
-  initialized: false,
+
+  /**
+   * Startup-এ loading false রাখা হচ্ছে।
+   *
+   * কারণ Firebase-এর জন্য পুরো app আটকে থাকবে না।
+   */
+  loading: false,
+
+  /**
+   * App শুরুতেই usable থাকবে।
+   */
+  initialized: true,
 
   setUser: (user) => {
     set({
@@ -41,11 +58,17 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   logout: async () => {
     try {
-      await signOut(auth);
-
+      /**
+       * Local login flag আগে remove করি।
+       *
+       * এতে offline অবস্থাতেও logout করার পর
+       * পরেরবার app খুললে Dashboard-এ ঢুকবে না।
+       */
       if (typeof window !== "undefined") {
-        localStorage.removeItem("life-os-authenticated");
+        localStorage.removeItem(AUTH_KEY);
       }
+
+      await signOut(auth);
 
       set({
         user: null,
@@ -54,15 +77,22 @@ export const useAuthStore = create<AuthState>((set) => ({
       });
     } catch (error) {
       console.error("Logout error:", error);
+
+      /**
+       * Firebase offline হলেও local logout state
+       * বজায় থাকবে।
+       */
+      set({
+        user: null,
+        loading: false,
+        initialized: true,
+      });
     }
   },
 }));
 
 /**
- * Firebase auth listener
- *
- * IMPORTANT:
- * এই listener একবারই initialize হবে।
+ * Firebase listener একবারই চালু হবে।
  */
 let authListenerStarted = false;
 
@@ -75,9 +105,12 @@ export function initializeAuthListener() {
 
   onAuthStateChanged(auth, (firebaseUser) => {
     if (firebaseUser) {
+      /**
+       * Firebase user পাওয়া গেছে।
+       */
       if (typeof window !== "undefined") {
         localStorage.setItem(
-          "life-os-authenticated",
+          AUTH_KEY,
           "true"
         );
       }
@@ -87,18 +120,51 @@ export function initializeAuthListener() {
         loading: false,
         initialized: true,
       });
-    } else {
-      if (typeof window !== "undefined") {
-        localStorage.removeItem(
-          "life-os-authenticated"
-        );
-      }
 
+      return;
+    }
+
+    /**
+     * Firebase user নেই।
+     *
+     * কিন্তু offline অবস্থায় Firebase যদি session
+     * restore করতে না পারে, local login flag
+     * যেন সঙ্গে সঙ্গে remove না হয়ে যায়।
+     */
+    const hasLocalSession =
+      typeof window !== "undefined" &&
+      localStorage.getItem(AUTH_KEY) === "true";
+
+    const isOffline =
+      typeof navigator !== "undefined" &&
+      !navigator.onLine;
+
+    if (hasLocalSession && isOffline) {
+      /**
+       * Offline অবস্থায় আগের login ধরে রাখি।
+       *
+       * user object Firebase পরে online হলে restore করবে।
+       */
       useAuthStore.setState({
         user: null,
         loading: false,
         initialized: true,
       });
+
+      return;
     }
+
+    /**
+     * সত্যিই logged out হলে local flag remove।
+     */
+    if (typeof window !== "undefined") {
+      localStorage.removeItem(AUTH_KEY);
+    }
+
+    useAuthStore.setState({
+      user: null,
+      loading: false,
+      initialized: true,
+    });
   });
 }

@@ -1,7 +1,15 @@
 "use client";
 
-import { ReactNode, useEffect } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import {
+  ReactNode,
+  useEffect,
+  useState,
+} from "react";
+
+import {
+  usePathname,
+  useRouter,
+} from "next/navigation";
 
 import {
   initializeAuthListener,
@@ -16,6 +24,9 @@ const PUBLIC_ROUTES = [
   "/login",
   "/register",
 ];
+
+const AUTH_KEY =
+  "life-os-authenticated";
 
 function isPublicRoute(pathname: string) {
   return PUBLIC_ROUTES.some(
@@ -44,30 +55,134 @@ export default function AuthProvider({
   );
 
   /**
-   * Firebase listener only once
+   * Local cached login state।
+   *
+   * App open হওয়ার সময় এটা Firebase-এর
+   * জন্য অপেক্ষা করবে না।
+   */
+  const [hasLocalSession, setHasLocalSession] =
+    useState(false);
+
+  const [offline, setOffline] =
+    useState(false);
+
+  /**
+   * Browser-এর local login session
+   * immediately read করি।
+   */
+  useEffect(() => {
+    const checkSession = () => {
+      const saved =
+        localStorage.getItem(AUTH_KEY) ===
+        "true";
+
+      setHasLocalSession(saved);
+      setOffline(!navigator.onLine);
+    };
+
+    checkSession();
+
+    const handleOnline = () => {
+      setOffline(false);
+    };
+
+    const handleOffline = () => {
+      setOffline(true);
+    };
+
+    window.addEventListener(
+      "online",
+      handleOnline
+    );
+
+    window.addEventListener(
+      "offline",
+      handleOffline
+    );
+
+    return () => {
+      window.removeEventListener(
+        "online",
+        handleOnline
+      );
+
+      window.removeEventListener(
+        "offline",
+        handleOffline
+      );
+    };
+  }, []);
+
+  /**
+   * Firebase listener।
+   *
+   * এটা background-এ চলবে।
    */
   useEffect(() => {
     initializeAuthListener();
   }, []);
 
-  const publicRoute = isPublicRoute(pathname);
+  const publicRoute =
+    isPublicRoute(pathname);
 
   /**
-   * Authentication redirect
+   * Local session থাকলে offline অবস্থায়
+   * protected page থেকে Login-এ পাঠাব না।
    */
+  const locallyAuthenticated =
+    hasLocalSession && offline;
+
   useEffect(() => {
+    /**
+     * Firebase initialization-এর জন্য
+     * আর পুরো app block করব না।
+     */
     if (!initialized || loading) {
       return;
     }
 
-    // User logged out → protected route
-    if (!user && !publicRoute) {
+    /**
+     * Offline + previous login
+     *
+     * → current page-এ থাকতে দাও।
+     */
+    if (
+      locallyAuthenticated &&
+      !publicRoute
+    ) {
+      return;
+    }
+
+    /**
+     * Firebase user আছে
+     * → Login/Register থেকে Dashboard
+     */
+    if (user && publicRoute) {
+      router.replace("/dashboard");
+      return;
+    }
+
+    /**
+     * Firebase user নেই + local session নেই
+     * → protected page থেকে Login
+     */
+    if (
+      !user &&
+      !locallyAuthenticated &&
+      !publicRoute
+    ) {
       router.replace("/login");
       return;
     }
 
-    // Already logged in → login/register
-    if (user && publicRoute) {
+    /**
+     * Logged-in user login page-এ গেলে
+     * Dashboard।
+     */
+    if (
+      user &&
+      publicRoute
+    ) {
       router.replace("/dashboard");
     }
   }, [
@@ -75,39 +190,15 @@ export default function AuthProvider({
     loading,
     initialized,
     publicRoute,
+    locallyAuthenticated,
     router,
   ]);
 
   /**
-   * Splash screen
+   * আর Firebase auth-এর জন্য
+   * Logo দেখিয়ে অনেকক্ষণ অপেক্ষা করব না।
    *
-   * Firebase auth initialize হওয়া পর্যন্ত
-   * LP logo দেখাবে।
+   * App immediately render হবে।
    */
-  if (!initialized || loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
-        <div className="flex flex-col items-center">
-
-          {/* LP Logo */}
-          <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-black shadow-xl">
-            <span className="text-3xl font-black tracking-tight text-white">
-              LP
-            </span>
-          </div>
-
-          <h1 className="mt-4 text-xl font-bold tracking-tight text-gray-900">
-            Life OS
-          </h1>
-
-          <div className="mt-4 h-1 w-16 overflow-hidden rounded-full bg-gray-200">
-            <div className="h-full w-1/2 animate-pulse rounded-full bg-black" />
-          </div>
-
-        </div>
-      </div>
-    );
-  }
-
   return <>{children}</>;
 }
