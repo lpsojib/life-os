@@ -3,7 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 
 import AuthProvider from "../providers/AuthProvider";
 import AppShell from "../components/layout/AppShell";
-import PWARegister from "@/components/PWARegister";
+
 
 import "./globals.css";
 
@@ -20,7 +20,6 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Life OS",
   description: "Your personal Life OS",
-  manifest: "/manifest.webmanifest",
 };
 
 export default function RootLayout({
@@ -34,8 +33,6 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full bg-gray-50">
-        <PWARegister />
-
         <AuthProvider>
           <AppShell>{children}</AppShell>
         </AuthProvider>
