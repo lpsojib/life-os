@@ -846,7 +846,7 @@ export default function NoteEditor({
                         }
                         rows={1}
                         className={`
-                          min-h-[42px]
+                          min-h-[36px]
                           flex-1
                           resize-none
                           overflow-hidden

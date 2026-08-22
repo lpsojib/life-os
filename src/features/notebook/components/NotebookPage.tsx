@@ -22,13 +22,9 @@ import {
   toggleNotePin,
 } from "../services/notebook.service";
 
-import {
-  useNotes,
-} from "../hooks/useNotes";
+import { useNotes } from "../hooks/useNotes";
 
-import {
-  Note,
-} from "../types/notebook.types";
+import { Note } from "../types/notebook.types";
 
 import NoteEditor from "./NoteEditor";
 
@@ -108,7 +104,9 @@ export default function NotebookPage() {
           note.checklist.length > 0
         );
 
-      /* FILTER */
+      /* =====================================================
+         FILTER
+      ===================================================== */
 
       if (
         activeFilter === "paragraph" &&
@@ -138,7 +136,9 @@ export default function NotebookPage() {
         return false;
       }
 
-      /* SEARCH */
+      /* =====================================================
+         SEARCH
+      ===================================================== */
 
       if (!query) {
         return true;
@@ -278,19 +278,26 @@ export default function NotebookPage() {
     setCreating(true);
 
     try {
+      /*
+       * IMPORTANT:
+       * Empty title.
+       *
+       * No "Untitled Note".
+       */
+
       const note =
-        await addNote(
-          "Untitled Note",
-        );
+        await addNote("");
 
       /*
        * Open immediately.
        */
+
       setEditingNote(note);
 
       /*
-       * Reload local store.
+       * Refresh local notes.
        */
+
       await refresh();
     } catch (error) {
       console.error(
@@ -310,8 +317,12 @@ export default function NotebookPage() {
     note: Note,
   ) {
     /*
-     * Editor UI stays instant.
+     * Keep editor state instant.
+     *
+     * We intentionally do not
+     * refresh Firebase here.
      */
+
     setEditingNote(note);
   }
 
@@ -323,10 +334,18 @@ export default function NotebookPage() {
     note: Note,
   ) {
     try {
+      /*
+       * Local-first save.
+       */
+
       const saved =
         await saveNote(note);
 
       setEditingNote(saved);
+
+      /*
+       * Reload local store.
+       */
 
       await refresh();
     } catch (error) {
@@ -353,16 +372,28 @@ export default function NotebookPage() {
       return;
     }
 
+    /*
+     * Remove from UI immediately.
+     */
+
     setDeletingId(noteId);
+
+    /*
+     * Close editor immediately.
+     */
+
+    if (
+      editingNote?.id === noteId
+    ) {
+      setEditingNote(null);
+    }
 
     try {
       await deleteNote(noteId);
 
-      if (
-        editingNote?.id === noteId
-      ) {
-        setEditingNote(null);
-      }
+      /*
+       * Refresh local store.
+       */
 
       await refresh();
     } catch (error) {
@@ -462,6 +493,7 @@ export default function NotebookPage() {
 
         <div className="mt-6 rounded-2xl border border-gray-200 bg-white p-3 shadow-sm">
           <div className="flex items-center gap-3 px-1">
+
             <Search
               size={19}
               className="shrink-0 text-gray-400"
@@ -485,6 +517,7 @@ export default function NotebookPage() {
                 placeholder:text-gray-400
               "
             />
+
           </div>
         </div>
 
@@ -511,8 +544,7 @@ export default function NotebookPage() {
 
             <FilterButton
               active={
-                activeFilter ===
-                "paragraph"
+                activeFilter === "paragraph"
               }
               onClick={() =>
                 setActiveFilter(
@@ -528,8 +560,7 @@ export default function NotebookPage() {
 
             <FilterButton
               active={
-                activeFilter ===
-                "checkbox"
+                activeFilter === "checkbox"
               }
               onClick={() =>
                 setActiveFilter(
@@ -559,8 +590,7 @@ export default function NotebookPage() {
 
             <FilterButton
               active={
-                activeFilter ===
-                "pinned"
+                activeFilter === "pinned"
               }
               onClick={() =>
                 setActiveFilter(
@@ -582,6 +612,7 @@ export default function NotebookPage() {
         ================================================= */}
 
         <div className="mt-6 flex items-center justify-between">
+
           <div>
             <h2 className="font-semibold text-gray-800">
               {getFilterName(
@@ -602,6 +633,7 @@ export default function NotebookPage() {
               Loading...
             </span>
           )}
+
         </div>
 
         {/* =================================================
@@ -624,6 +656,7 @@ export default function NotebookPage() {
           />
         ) : (
           <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+
             {filteredNotes.map(
               (note) => (
                 <NoteCard
@@ -648,8 +681,10 @@ export default function NotebookPage() {
                 />
               ),
             )}
+
           </div>
         )}
+
       </div>
 
       {/* =================================================
@@ -754,6 +789,7 @@ function EmptyState({
 }) {
   return (
     <div className="mt-5 rounded-2xl border border-dashed border-gray-200 bg-white p-12 text-center">
+
       <FileText
         size={40}
         className="mx-auto text-gray-300"
@@ -789,6 +825,7 @@ function EmptyState({
         <Plus size={17} />
         Create Note
       </button>
+
     </div>
   );
 }
@@ -824,7 +861,8 @@ function NoteCard({
           block.text.trim().length > 0,
       )
       .map(
-        (block) => block.text,
+        (block) =>
+          block.text,
       );
 
   const checklistParts =
@@ -836,7 +874,8 @@ function NoteCard({
           block.text.trim().length > 0,
       )
       .map(
-        (block) => block.text,
+        (block) =>
+          block.text,
       );
 
   const hasParagraph =
@@ -866,7 +905,9 @@ function NoteCard({
   return (
     <div className="group relative overflow-hidden rounded-2xl border border-gray-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
 
-      {/* PIN */}
+      {/* =================================================
+          PIN
+      ================================================= */}
 
       <button
         type="button"
@@ -893,17 +934,19 @@ function NoteCard({
         <Pin size={17} />
       </button>
 
-      {/* OPEN */}
+      {/* =================================================
+          OPEN
+      ================================================= */}
 
       <button
         type="button"
         onClick={onOpen}
         className="w-full text-left"
       >
-        <h3 className="pr-10 font-semibold text-gray-900">
-          {note.title ||
-            "Untitled Note"}
-        </h3>
+
+        <h4 className="min-h-6 pr-10 font-semibold text-gray-900">
+          {note.title}
+        </h4>
 
         <p className="mt-3 line-clamp-4 text-sm leading-6 text-gray-500">
           {preview}
@@ -931,9 +974,12 @@ function NoteCard({
             )}
 
         </div>
+
       </button>
 
-      {/* FOOTER */}
+      {/* =================================================
+          FOOTER
+      ================================================= */}
 
       <div className="mt-5 flex items-center justify-between border-t border-gray-100 pt-3">
 
@@ -971,6 +1017,7 @@ function NoteCard({
         </button>
 
       </div>
+
     </div>
   );
 }
