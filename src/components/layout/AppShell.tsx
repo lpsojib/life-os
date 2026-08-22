@@ -10,10 +10,15 @@ interface AppShellProps {
   children: ReactNode;
 }
 
-const PUBLIC_ROUTES = [
-  "/login",
-  "/register",
-];
+const PUBLIC_ROUTES = ["/login", "/register"];
+
+function isPublicRoute(pathname: string) {
+  return PUBLIC_ROUTES.some(
+    (route) =>
+      pathname === route ||
+      pathname.startsWith(`${route}/`)
+  );
+}
 
 export default function AppShell({
   children,
@@ -21,27 +26,18 @@ export default function AppShell({
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const isPublicRoute = PUBLIC_ROUTES.some(
-    (route) =>
-      pathname === route ||
-      pathname.startsWith(`${route}/`)
-  );
-
-  // Login/Register → শুধু page
-  if (isPublicRoute) {
+  if (isPublicRoute(pathname)) {
     return <>{children}</>;
   }
 
   return (
     <div className="min-h-screen bg-gray-50">
-
       <Sidebar
         isOpen={menuOpen}
         onClose={() => setMenuOpen(false)}
       />
 
       <div className="md:ml-64">
-
         <Header
           onMenuClick={() => setMenuOpen(true)}
         />
@@ -51,7 +47,6 @@ export default function AppShell({
             {children}
           </div>
         </main>
-
       </div>
     </div>
   );
