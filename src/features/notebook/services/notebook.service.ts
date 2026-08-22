@@ -32,10 +32,16 @@ const NOTE_COLLECTION = "notebook";
 /* TYPES */
 /* ================================================= */
 
+interface OfflineNoteData {
+  userId: string;
+  note?: Note;
+  operation: "upsert" | "delete";
+}
+
 interface OfflineRecord {
   id: string;
   collection: string;
-  data: unknown;
+  data: OfflineNoteData;
   updatedAt: number;
   syncStatus: "pending" | "synced";
 }
@@ -48,7 +54,9 @@ function getNotesCollection() {
   const user = auth.currentUser;
 
   if (!user) {
-    throw new Error("User is not authenticated.");
+    throw new Error(
+      "User is not authenticated.",
+    );
   }
 
   return collection(
@@ -64,56 +72,65 @@ function getNotesCollection() {
 /* ================================================= */
 
 function openOfflineDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    if (typeof window === "undefined") {
-      reject(
-        new Error(
-          "IndexedDB is only available in the browser.",
-        ),
-      );
-
-      return;
-    }
-
-    const request = indexedDB.open(
-      DB_NAME,
-      DB_VERSION,
-    );
-
-    request.onupgradeneeded = () => {
-      const database = request.result;
-
+  return new Promise(
+    (resolve, reject) => {
       if (
-        !database.objectStoreNames.contains(
-          STORE_NAME,
-        )
+        typeof window ===
+        "undefined"
       ) {
-        database.createObjectStore(
-          STORE_NAME,
-          {
-            keyPath: "id",
-          },
-        );
-      }
-    };
-
-    request.onsuccess = () => {
-      resolve(request.result);
-    };
-
-    request.onerror = () => {
-      reject(
-        request.error ??
+        reject(
           new Error(
-            "Failed to open offline database.",
+            "IndexedDB is only available in the browser.",
           ),
-      );
-    };
-  });
+        );
+
+        return;
+      }
+
+      const request =
+        indexedDB.open(
+          DB_NAME,
+          DB_VERSION,
+        );
+
+      request.onupgradeneeded = () => {
+        const database =
+          request.result;
+
+        if (
+          !database.objectStoreNames.contains(
+            STORE_NAME,
+          )
+        ) {
+          database.createObjectStore(
+            STORE_NAME,
+            {
+              keyPath: "id",
+            },
+          );
+        }
+      };
+
+      request.onsuccess = () => {
+        resolve(
+          request.result,
+        );
+      };
+
+      request.onerror = () => {
+        reject(
+          request.error ??
+            new Error(
+              "Failed to open offline database.",
+            ),
+        );
+      };
+    },
+  );
 }
 
 /* ================================================= */
-/* OFFLINE HELPERS */
+/* GET OFFLINE RECORDS */
 /* ================================================= */
 
 async function getOfflineRecords(): Promise<
@@ -164,6 +181,10 @@ async function getOfflineRecords(): Promise<
   );
 }
 
+/* ================================================= */
+/* SAVE OFFLINE RECORD */
+/* ================================================= */
+
 async function saveOfflineRecord(
   record: OfflineRecord,
 ): Promise<void> {
@@ -193,13 +214,17 @@ async function saveOfflineRecord(
         reject(
           transaction.error ??
             new Error(
-              "Failed to save offline note.",
+              "Failed to save offline record.",
             ),
         );
       };
     },
   );
 }
+
+/* ================================================= */
+/* DELETE OFFLINE RECORD */
+/* ================================================= */
 
 async function deleteOfflineRecord(
   id: string,
@@ -230,7 +255,7 @@ async function deleteOfflineRecord(
         reject(
           transaction.error ??
             new Error(
-              "Failed to delete offline note.",
+              "Failed to delete offline record.",
             ),
         );
       };
@@ -239,13 +264,13 @@ async function deleteOfflineRecord(
 }
 
 /* ================================================= */
-/* NOTE ID */
+/* OFFLINE NOTE ID */
 /* ================================================= */
 
 function getOfflineNoteId(
   userId: string,
   noteId: string,
-) {
+): string {
   return `notebook:${userId}:${noteId}`;
 }
 
@@ -258,18 +283,27 @@ function timestampToISOString(
 ): string {
   if (
     timestamp &&
-    typeof timestamp === "object" &&
+    typeof timestamp ===
+      "object" &&
     "toDate" in timestamp &&
-    typeof timestamp.toDate ===
-      "function"
+    typeof (
+      timestamp as {
+        toDate?: unknown;
+      }
+    ).toDate === "function"
   ) {
-    return timestamp
+    return (
+      timestamp as {
+        toDate: () => Date;
+      }
+    )
       .toDate()
       .toISOString();
   }
 
   if (
-    typeof timestamp === "string"
+    typeof timestamp ===
+    "string"
   ) {
     return timestamp;
   }
@@ -286,6 +320,8 @@ function normalizeNote(
 ): Note {
   return {
     ...note,
+
+    id: note.id,
 
     title:
       note.title?.trim() ||
@@ -325,7 +361,7 @@ async function saveLocalNote(
   syncStatus:
     | "pending"
     | "synced" = "pending",
-) {
+): Promise<void> {
   const user = auth.currentUser;
 
   if (!user) {
@@ -348,13 +384,55 @@ async function saveLocalNote(
 
     data: {
       userId: user.uid,
+
       note: normalized,
+
       operation: "upsert",
     },
 
     updatedAt: Date.now(),
 
     syncStatus,
+  });
+}
+
+/* ================================================= */
+/* SAVE LOCAL DELETE */
+/* ================================================= */
+
+async function saveLocalDelete(
+  noteId: string,
+): Promise<void> {
+  const user = auth.currentUser;
+
+  if (!user) {
+    throw new Error(
+      "User is not authenticated.",
+    );
+  }
+
+  await saveOfflineRecord({
+    id: getOfflineNoteId(
+      user.uid,
+      noteId,
+    ),
+
+    collection:
+      NOTE_COLLECTION,
+
+    data: {
+      userId: user.uid,
+
+      note: {
+        id: noteId,
+      } as Note,
+
+      operation: "delete",
+    },
+
+    updatedAt: Date.now(),
+
+    syncStatus: "pending",
   });
 }
 
@@ -378,14 +456,11 @@ async function getLocalNotes(): Promise<
 
   for (const record of records) {
     const data =
-      record.data as {
-        userId?: string;
-        note?: Note;
-        operation?: string;
-      };
+      record.data;
 
     if (
-      data.userId !== user.uid
+      data.userId !==
+      user.uid
     ) {
       continue;
     }
@@ -420,6 +495,52 @@ async function getLocalNotes(): Promise<
 }
 
 /* ================================================= */
+/* GET LOCAL NOTE */
+/* ================================================= */
+
+async function getLocalNote(
+  noteId: string,
+): Promise<Note | null> {
+  const user = auth.currentUser;
+
+  if (!user) {
+    return null;
+  }
+
+  const records =
+    await getOfflineRecords();
+
+  const record =
+    records.find(
+      (item) =>
+        item.id ===
+        getOfflineNoteId(
+          user.uid,
+          noteId,
+        ),
+    );
+
+  if (!record) {
+    return null;
+  }
+
+  if (
+    record.data.operation ===
+    "delete"
+  ) {
+    return null;
+  }
+
+  if (!record.data.note) {
+    return null;
+  }
+
+  return normalizeNote(
+    record.data.note,
+  );
+}
+
+/* ================================================= */
 /* SYNC ONE NOTE */
 /* ================================================= */
 
@@ -433,17 +554,18 @@ async function syncNote(
   }
 
   const data =
-    record.data as {
-      userId?: string;
-      note?: Note;
-      operation?: string;
-    };
+    record.data;
 
   if (
-    data.userId !== user.uid
+    data.userId !==
+    user.uid
   ) {
     return;
   }
+
+  /* ------------------------------------------------ */
+  /* DELETE */
+  /* ------------------------------------------------ */
 
   if (
     data.operation ===
@@ -453,16 +575,21 @@ async function syncNote(
       data.note?.id;
 
     if (!noteId) {
+      await deleteOfflineRecord(
+        record.id,
+      );
+
       return;
     }
 
-    const noteRef = doc(
-      db,
-      "users",
-      user.uid,
-      "notes",
-      noteId,
-    );
+    const noteRef =
+      doc(
+        db,
+        "users",
+        user.uid,
+        "notes",
+        noteId,
+      );
 
     await deleteDoc(
       noteRef,
@@ -475,36 +602,60 @@ async function syncNote(
     return;
   }
 
+  /* ------------------------------------------------ */
+  /* UPSERT */
+  /* ------------------------------------------------ */
+
   if (!data.note) {
+    await deleteOfflineRecord(
+      record.id,
+    );
+
     return;
   }
 
   const note =
-    normalizeNote(data.note);
+    normalizeNote(
+      data.note,
+    );
 
-  const noteRef = doc(
-    db,
-    "users",
-    user.uid,
-    "notes",
-    note.id,
-  );
+  const noteRef =
+    doc(
+      db,
+      "users",
+      user.uid,
+      "notes",
+      note.id,
+    );
 
   await setDoc(
     noteRef,
     {
-      title: note.title,
-      type: note.type,
-      content: note.content,
-      blocks: note.blocks,
-      checklist: note.checklist,
-      pinned: note.pinned,
+      title:
+        note.title,
+
+      type:
+        note.type,
+
+      content:
+        note.content,
+
+      blocks:
+        note.blocks,
+
+      checklist:
+        note.checklist,
+
+      pinned:
+        note.pinned,
+
       createdAt:
         note.createdAt
           ? new Date(
               note.createdAt,
             )
           : serverTimestamp(),
+
       updatedAt:
         serverTimestamp(),
     },
@@ -513,17 +664,22 @@ async function syncNote(
     },
   );
 
+  /*
+   * Keep the local record as synced.
+   */
   await saveOfflineRecord({
     ...record,
-    syncStatus: "synced",
+
+    syncStatus:
+      "synced",
   });
 }
 
 /* ================================================= */
-/* SYNC ALL NOTES */
+/* SYNC PENDING NOTES */
 /* ================================================= */
 
-export async function syncPendingNotes() {
+export async function syncPendingNotes(): Promise<void> {
   if (
     typeof window ===
     "undefined"
@@ -535,7 +691,8 @@ export async function syncPendingNotes() {
     return;
   }
 
-  const user = auth.currentUser;
+  const user =
+    auth.currentUser;
 
   if (!user) {
     return;
@@ -545,21 +702,29 @@ export async function syncPendingNotes() {
     await getOfflineRecords();
 
   const pending =
-    records.filter(
-      (record) =>
-        record.syncStatus ===
-          "pending" &&
-        (
-          record.data as {
-            userId?: string;
-          }
-        ).userId ===
-          user.uid,
-    );
+    records
+      .filter(
+        (record) =>
+          record.collection ===
+            NOTE_COLLECTION &&
+          record.syncStatus ===
+            "pending" &&
+          record.data.userId ===
+            user.uid,
+      )
+      .sort(
+        (a, b) =>
+          a.updatedAt -
+          b.updatedAt,
+      );
 
-  for (const record of pending) {
+  for (
+    const record of pending
+  ) {
     try {
-      await syncNote(record);
+      await syncNote(
+        record,
+      );
     } catch (error) {
       console.error(
         "Note sync failed:",
@@ -576,7 +741,8 @@ export async function syncPendingNotes() {
 export async function getNotes(): Promise<
   Note[]
 > {
-  const user = auth.currentUser;
+  const user =
+    auth.currentUser;
 
   if (!user) {
     throw new Error(
@@ -585,27 +751,37 @@ export async function getNotes(): Promise<
   }
 
   /*
-   * First return local notes.
-   * This makes Notebook usable offline.
+   * First get local notes.
    */
   const localNotes =
     await getLocalNotes();
 
   /*
-   * Try Firebase only when online.
+   * Offline:
+   * immediately return local data.
    */
   if (
-    typeof navigator !==
-      "undefined" &&
-    navigator.onLine
+    typeof navigator ===
+      "undefined" ||
+    !navigator.onLine
   ) {
-    try {
-      await syncPendingNotes();
+    return localNotes;
+  }
 
-      const notesRef =
-        getNotesCollection();
+  try {
+    /*
+     * Sync pending local changes first.
+     */
+    await syncPendingNotes();
 
-      const q = query(
+    /*
+     * Get Firebase notes.
+     */
+    const notesRef =
+      getNotesCollection();
+
+    const q =
+      query(
         notesRef,
         orderBy(
           "updatedAt",
@@ -613,83 +789,111 @@ export async function getNotes(): Promise<
         ),
       );
 
-      const snapshot =
-        await getDocs(q);
+    const snapshot =
+      await getDocs(q);
 
-      const firebaseNotes =
-        snapshot.docs.map(
-          (noteDoc) => {
-            const data =
-              noteDoc.data();
+    const firebaseNotes =
+      snapshot.docs.map(
+        (noteDoc) => {
+          const data =
+            noteDoc.data();
 
-            return normalizeNote({
-              id: noteDoc.id,
+          return normalizeNote({
+            id:
+              noteDoc.id,
 
-              title:
-                data.title ??
-                "",
+            title:
+              data.title ?? "",
 
-              type:
-                (data.type ??
-                  "text") as NoteType,
+            type:
+              (data.type ??
+                "text") as NoteType,
 
-              content:
-                data.content ??
-                "",
+            content:
+              data.content ??
+              "",
 
-              blocks:
-                data.blocks ??
-                [],
+            blocks:
+              data.blocks ??
+              [],
 
-              checklist:
-                data.checklist ??
-                [],
+            checklist:
+              data.checklist ??
+              [],
 
-              pinned:
-                data.pinned ??
-                false,
+            pinned:
+              Boolean(
+                data.pinned,
+              ),
 
-              createdAt:
-                timestampToISOString(
-                  data.createdAt,
-                ),
+            createdAt:
+              timestampToISOString(
+                data.createdAt,
+              ),
 
-              updatedAt:
-                timestampToISOString(
-                  data.updatedAt,
-                ),
-            });
-          },
-        );
-
-      /*
-       * Save Firebase notes locally.
-       */
-      for (
-        const note of firebaseNotes
-      ) {
-        await saveLocalNote(
-          note,
-          "synced",
-        );
-      }
-
-      /*
-       * Load local again so pending
-       * offline changes are preserved.
-       */
-      return getLocalNotes();
-    } catch (error) {
-      console.warn(
-        "Firebase unavailable. Using offline notes.",
-        error,
+            updatedAt:
+              timestampToISOString(
+                data.updatedAt,
+              ),
+          });
+        },
       );
 
-      return localNotes;
-    }
-  }
+    /*
+     * Get local records again after
+     * Firebase sync.
+     */
+    const latestLocal =
+      await getOfflineRecords();
 
-  return localNotes;
+    /*
+     * Save Firebase notes locally only
+     * when there is no pending local edit.
+     */
+    for (
+      const firebaseNote of
+        firebaseNotes
+    ) {
+      const localRecord =
+        latestLocal.find(
+          (record) =>
+            record.id ===
+            getOfflineNoteId(
+              user.uid,
+              firebaseNote.id,
+            ),
+        );
+
+      /*
+       * Never overwrite a pending
+       * offline/local edit.
+       */
+      if (
+        localRecord &&
+        localRecord.syncStatus ===
+          "pending"
+      ) {
+        continue;
+      }
+
+      await saveLocalNote(
+        firebaseNote,
+        "synced",
+      );
+    }
+
+    /*
+     * Return local version.
+     */
+    return getLocalNotes();
+  } catch (error) {
+    console.warn(
+      "Firebase unavailable. Using offline notes.",
+      error,
+    );
+
+    return localNotes;
+  }
 }
 
 /* ================================================= */
@@ -701,7 +905,8 @@ export async function addNote(
   type: NoteType = "text",
   content = "",
 ): Promise<string> {
-  const user = auth.currentUser;
+  const user =
+    auth.currentUser;
 
   if (!user) {
     throw new Error(
@@ -746,8 +951,9 @@ export async function addNote(
   );
 
   /*
-   * Firebase sync in background.
-   * Do NOT wait for it.
+   * Firebase background sync.
+   *
+   * Don't await.
    */
   if (
     typeof navigator !==
@@ -774,8 +980,9 @@ export async function updateNote(
         "updatedAt"
     >
   >,
-) {
-  const user = auth.currentUser;
+): Promise<Note> {
+  const user =
+    auth.currentUser;
 
   if (!user) {
     throw new Error(
@@ -783,32 +990,86 @@ export async function updateNote(
     );
   }
 
-  const localNotes =
-    await getLocalNotes();
+  /*
+   * Try to find existing local note.
+   *
+   * It is OK if it doesn't exist.
+   */
+  let existing:
+    | Note
+    | null = null;
 
-  const existing =
-    localNotes.find(
-      (note) =>
-        note.id === noteId,
-    );
-
-  if (!existing) {
-    throw new Error(
-      "Note not found.",
+  try {
+    existing =
+      await getLocalNote(
+        noteId,
+      );
+  } catch (error) {
+    console.warn(
+      "Could not read existing local note:",
+      error,
     );
   }
 
+  const now =
+    new Date().toISOString();
+
+  /*
+   * If local note doesn't exist,
+   * create a base note.
+   *
+   * IMPORTANT:
+   * This prevents "Note not found"
+   * from breaking Auto Save.
+   */
+  const baseNote: Note =
+    existing ?? {
+      id: noteId,
+
+      title:
+        "Untitled Note",
+
+      type:
+        "text",
+
+      content: "",
+
+      blocks: [],
+
+      checklist: [],
+
+      pinned: false,
+
+      createdAt: now,
+
+      updatedAt: now,
+    };
+
+  /*
+   * Merge current editor data.
+   */
   const updatedNote =
     normalizeNote({
-      ...existing,
+      ...baseNote,
+
       ...data,
+
       id: noteId,
-      updatedAt:
-        new Date().toISOString(),
+
+      createdAt:
+        baseNote.createdAt ||
+        now,
+
+      updatedAt: now,
     });
 
   /*
+   * =================================================
    * LOCAL FIRST
+   * =================================================
+   *
+   * This finishes quickly and does not wait
+   * for Firebase.
    */
   await saveLocalNote(
     updatedNote,
@@ -816,7 +1077,9 @@ export async function updateNote(
   );
 
   /*
-   * Firebase in background
+   * =================================================
+   * FIREBASE BACKGROUND SYNC
+   * =================================================
    */
   if (
     typeof navigator !==
@@ -825,6 +1088,8 @@ export async function updateNote(
   ) {
     void syncPendingNotes();
   }
+
+  return updatedNote;
 }
 
 /* ================================================= */
@@ -833,8 +1098,9 @@ export async function updateNote(
 
 export async function deleteNote(
   noteId: string,
-) {
-  const user = auth.currentUser;
+): Promise<void> {
+  const user =
+    auth.currentUser;
 
   if (!user) {
     throw new Error(
@@ -842,38 +1108,15 @@ export async function deleteNote(
     );
   }
 
-  const deleteId =
-    getOfflineNoteId(
-      user.uid,
-      noteId,
-    );
-
   /*
-   * Keep delete operation locally.
+   * Local delete operation.
    */
-  await saveOfflineRecord({
-    id: deleteId,
-
-    collection:
-      NOTE_COLLECTION,
-
-    data: {
-      userId: user.uid,
-
-      note: {
-        id: noteId,
-      },
-
-      operation: "delete",
-    },
-
-    updatedAt: Date.now(),
-
-    syncStatus: "pending",
-  });
+  await saveLocalDelete(
+    noteId,
+  );
 
   /*
-   * Firebase in background.
+   * Firebase background delete.
    */
   if (
     typeof navigator !==
@@ -891,8 +1134,8 @@ export async function deleteNote(
 export async function toggleNotePin(
   noteId: string,
   pinned: boolean,
-) {
-  await updateNote(
+): Promise<Note> {
+  return updateNote(
     noteId,
     {
       pinned,
@@ -901,7 +1144,7 @@ export async function toggleNotePin(
 }
 
 /* ================================================= */
-/* ONLINE SYNC LISTENERS */
+/* ONLINE SYNC LISTENER */
 /* ================================================= */
 
 if (
