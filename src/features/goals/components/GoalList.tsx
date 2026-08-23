@@ -13,8 +13,10 @@ import {
 import { auth } from "@/lib/firebase";
 
 import {
-  getGoals,
   deleteGoal,
+  getGoals,
+  refreshGoalTasksFromFirebase,
+  refreshGoalsFromFirebase,
 } from "../services/goal.service";
 
 import { Goal } from "../types/goal.types";
@@ -37,43 +39,77 @@ export default function GoalList({
   const [error, setError] =
     useState("");
 
-  const loadGoals =
-    useCallback(
-      async (
-        showLoading = false
-      ) => {
-        try {
-          if (showLoading) {
-            setLoading(true);
-          }
+  /* =========================================================
+     LOAD GOALS
+  ========================================================= */
 
-          setError("");
-
-          const data =
-            await getGoals();
-
-          setGoals(data);
-        } catch (error) {
-          console.error(
-            "Load goals error:",
-            error
-          );
-
-          setError(
-            "লক্ষ্যগুলো লোড করা যায়নি।"
-          );
-        } finally {
-          if (showLoading) {
-            setLoading(false);
-          }
+  const loadGoals = useCallback(
+    async (
+      showLoading = false,
+      syncFromFirebase = false
+    ) => {
+      try {
+        if (showLoading) {
+          setLoading(true);
         }
-      },
-      []
-    );
 
-  /*
-   * Authentication
-   */
+        setError("");
+
+        /*
+         * Online হলে প্রথমে Firebase থেকে
+         * permanent data নিয়ে আসবো।
+         *
+         * এর ফলে IndexedDB / Site Data clear
+         * হয়ে গেলেও পুরোনো Goal ফিরে আসবে।
+         */
+        if (
+          syncFromFirebase &&
+          typeof window !== "undefined" &&
+          navigator.onLine &&
+          auth.currentUser
+        ) {
+          await refreshGoalsFromFirebase(
+            false
+          );
+
+          await refreshGoalTasksFromFirebase(
+            false
+          );
+        }
+
+        /*
+         * Firebase sync-এর পরে local IndexedDB
+         * থেকে UI-এর জন্য Goal পড়বো।
+         *
+         * Offline হলে সরাসরি এখান থেকেই
+         * Goal পাওয়া যাবে।
+         */
+        const data =
+          await getGoals();
+
+        setGoals(data);
+      } catch (error) {
+        console.error(
+          "Load goals error:",
+          error
+        );
+
+        setError(
+          "লক্ষ্যগুলো লোড করা যায়নি।"
+        );
+      } finally {
+        if (showLoading) {
+          setLoading(false);
+        }
+      }
+    },
+    []
+  );
+
+  /* =========================================================
+     AUTHENTICATION
+  ========================================================= */
+
   useEffect(() => {
     const unsubscribe =
       onAuthStateChanged(
@@ -85,21 +121,38 @@ export default function GoalList({
             setError(
               "লক্ষ্য দেখতে আগে লগইন করুন।"
             );
+
             return;
           }
 
-          void loadGoals(true);
+          /*
+           * User authenticated হওয়ার পরে:
+           *
+           * Firebase
+           *    ↓
+           * IndexedDB
+           *    ↓
+           * Goal List
+           */
+          void loadGoals(
+            true,
+            true
+          );
         }
       );
 
     return () => {
       unsubscribe();
     };
-  }, [loadGoals, refreshKey]);
+  }, [
+    loadGoals,
+    refreshKey,
+  ]);
 
-  /*
-   * Goal changed locally.
-   */
+  /* =========================================================
+     GOAL CHANGE EVENT
+  ========================================================= */
+
   useEffect(() => {
     const handleChange =
       () => {
@@ -139,9 +192,10 @@ export default function GoalList({
     };
   }, [loadGoals]);
 
-  /*
-   * Delete from card.
-   */
+  /* =========================================================
+     DELETE GOAL
+  ========================================================= */
+
   const handleDeleteGoal =
     async (
       goalId: string
@@ -150,7 +204,7 @@ export default function GoalList({
         setError("");
 
         /*
-         * Remove UI immediately.
+         * UI থেকে সঙ্গে সঙ্গে Goal সরিয়ে দিচ্ছি।
          */
         setGoals(
           (current) =>
@@ -162,8 +216,11 @@ export default function GoalList({
         );
 
         /*
-         * Local delete + background
-         * Firebase queue.
+         * IndexedDB থেকে delete হবে।
+         *
+         * Online হলে Firebase থেকেও delete হবে।
+         *
+         * Offline হলে queue-তে থাকবে।
          */
         await deleteGoal(
           goalId
@@ -178,9 +235,19 @@ export default function GoalList({
           "লক্ষ্যটি মুছে ফেলা যায়নি।"
         );
 
-        await loadGoals(false);
+        /*
+         * Error হলে আবার local data load।
+         */
+        await loadGoals(
+          false,
+          false
+        );
       }
     };
+
+  /* =========================================================
+     LOADING
+  ========================================================= */
 
   if (
     loading &&
@@ -195,6 +262,10 @@ export default function GoalList({
     );
   }
 
+  /* =========================================================
+     ERROR
+  ========================================================= */
+
   if (error) {
     return (
       <div className="rounded-2xl bg-red-50 px-4 py-4 text-center text-sm font-medium text-red-600">
@@ -202,6 +273,10 @@ export default function GoalList({
       </div>
     );
   }
+
+  /* =========================================================
+     EMPTY
+  ========================================================= */
 
   if (goals.length === 0) {
     return (
@@ -241,17 +316,23 @@ export default function GoalList({
     );
   }
 
+  /* =========================================================
+     GOAL LIST
+  ========================================================= */
+
   return (
     <div className="space-y-4">
-      {goals.map((goal) => (
-        <GoalCard
-          key={goal.id}
-          goal={goal}
-          onDelete={
-            handleDeleteGoal
-          }
-        />
-      ))}
+      {goals.map(
+        (goal) => (
+          <GoalCard
+            key={goal.id}
+            goal={goal}
+            onDelete={
+              handleDeleteGoal
+            }
+          />
+        )
+      )}
     </div>
   );
 }
