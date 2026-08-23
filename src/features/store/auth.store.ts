@@ -1,18 +1,106 @@
+"use client";
+
+import {
+  onAuthStateChanged,
+  type User,
+} from "firebase/auth";
+
+import { auth } from "@/lib/firebase";
+
 import { create } from "zustand";
-import { User } from "firebase/auth";
 
 interface AuthState {
   user: User | null;
+
   loading: boolean;
 
-  setUser: (user: User | null) => void;
-  setLoading: (loading: boolean) => void;
+  initialized: boolean;
+
+  setUser: (
+    user: User | null
+  ) => void;
+
+  setLoading: (
+    loading: boolean
+  ) => void;
+
+  setInitialized: (
+    initialized: boolean
+  ) => void;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
-  user: null,
-  loading: true,
+export const useAuthStore =
+  create<AuthState>((set) => ({
+    user: null,
 
-  setUser: (user) => set({ user }),
-  setLoading: (loading) => set({ loading }),
-}));
+    loading: true,
+
+    initialized: false,
+
+    setUser: (user) =>
+      set({
+        user,
+      }),
+
+    setLoading: (loading) =>
+      set({
+        loading,
+      }),
+
+    setInitialized: (initialized) =>
+      set({
+        initialized,
+      }),
+  }));
+
+/* =========================================================
+   AUTH LISTENER
+   ========================================================= */
+
+let authListenerStarted = false;
+
+export const initializeAuthListener =
+  (): void => {
+    /*
+     * Listener একবারই initialize হবে।
+     */
+    if (authListenerStarted) {
+      return;
+    }
+
+    authListenerStarted = true;
+
+    const {
+      setUser,
+      setLoading,
+      setInitialized,
+    } =
+      useAuthStore.getState();
+
+    setLoading(true);
+
+    setInitialized(false);
+
+    onAuthStateChanged(
+      auth,
+      (firebaseUser) => {
+        setUser(firebaseUser);
+
+        setLoading(false);
+
+        setInitialized(true);
+      },
+      (error) => {
+        console.error(
+          "Firebase auth listener error:",
+          error
+        );
+
+        setUser(null);
+
+        setLoading(false);
+
+        setInitialized(true);
+      }
+    );
+  };
