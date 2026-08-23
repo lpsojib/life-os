@@ -4,196 +4,290 @@ import {
   CheckSquare,
   Pin,
   PinOff,
-  Trash2,
+  FileText,
+  MoreVertical,
 } from "lucide-react";
 
 import { Note } from "../types/notebook.types";
 
 interface NoteCardProps {
   note: Note;
-
-  onOpen: () => void;
-
-  onDelete: () => void;
-
-  onPin: () => void;
+  onClick?: () => void;
+  onTogglePin?: () => void;
 }
 
 export default function NoteCard({
   note,
-  onOpen,
-  onDelete,
-  onPin,
+  onClick,
+  onTogglePin,
 }: NoteCardProps) {
-  const blocks =
-    Array.isArray(note.blocks)
-      ? note.blocks
-      : [];
+  const blocks = Array.isArray(note.blocks)
+    ? note.blocks
+    : [];
 
-  const textBlocks =
-    blocks.filter(
-      (block) =>
-        block.type ===
-          "text" &&
-        block.text.trim(),
-    );
+  const textBlocks = blocks.filter(
+    (block) =>
+      block.type === "text" &&
+      Boolean(block.text?.trim()),
+  );
 
-  const checklistBlocks =
-    blocks.filter(
-      (block) =>
-        block.type ===
-          "checklist" &&
-        block.text.trim(),
-    );
+  const checklistBlocks = blocks.filter(
+    (block) =>
+      block.type === "checklist" &&
+      Boolean(block.text?.trim()),
+  );
 
-  const hasParagraph =
-    textBlocks.length > 0 ||
-    Boolean(
-      note.content?.trim(),
-    );
+  const hasText = textBlocks.length > 0;
 
   const hasCheckbox =
-    checklistBlocks.length > 0 ||
-    Boolean(
-      note.checklist?.length,
-    );
+    checklistBlocks.length > 0;
 
-  const preview =
-    textBlocks
-      .map(
-        (block) =>
-          block.text,
-      )
-      .join(" ") ||
-    note.content?.trim() ||
-    checklistBlocks
-      .map(
-        (block) =>
-          block.text,
-      )
-      .join(" ") ||
-    "No content";
+  const totalChecklist =
+    checklistBlocks.length;
 
-  let typeLabel =
-    "Empty";
+  const completedChecklist =
+    checklistBlocks.filter(
+      (block) => block.checked === true,
+    ).length;
 
-  if (
-    hasParagraph &&
-    hasCheckbox
+  const previewBlocks = blocks
+    .filter((block) =>
+      Boolean(block.text?.trim()),
+    )
+    .slice(0, 4);
+
+  function handlePinClick(
+    event: React.MouseEvent<HTMLButtonElement>,
   ) {
-    typeLabel = "Both";
-  } else if (hasParagraph) {
-    typeLabel = "Paragraph";
-  } else if (hasCheckbox) {
-    typeLabel = "Checkbox";
+    event.stopPropagation();
+    onTogglePin?.();
   }
 
   return (
-    <div
+    <article
+      onClick={onClick}
       className="
         group
         relative
+        cursor-pointer
+        overflow-hidden
         rounded-2xl
         border
         border-gray-200
         bg-white
         p-5
         shadow-sm
-        transition
+        transition-all
+        duration-200
         hover:-translate-y-0.5
-        hover:shadow-lg
+        hover:border-gray-300
+        hover:shadow-md
       "
     >
-      <button
-        type="button"
-        onClick={onPin}
-        className="
-          absolute
-          right-3
-          top-3
-          rounded-xl
-          p-2
-          text-gray-400
-          transition
-          hover:bg-gray-100
-        "
-      >
-        {note.pinned ? (
-          <Pin
-            size={17}
-            className="text-green-600"
-          />
-        ) : (
-          <PinOff size={17} />
-        )}
-      </button>
+      {/* =========================================
+          TOP
+      ========================================= */}
 
-      <button
-        type="button"
-        onClick={onOpen}
-        className="w-full text-left"
-      >
-        <div className="pr-9">
-          <h3
-            className="
-              truncate
-              text-base
-              font-semibold
-              text-gray-900
-            "
-          >
-            {note.title ||
-              "Untitled Note"}
-          </h3>
-
-          <p
-            className="
-              mt-2
-              line-clamp-3
-              min-h-[60px]
-              text-sm
-              leading-5
-              text-gray-500
-            "
-          >
-            {preview}
-          </p>
-        </div>
-
-        <div className="mt-4 flex gap-2">
-          {typeLabel ===
-            "Paragraph" && (
-            <span className="rounded-lg bg-blue-50 px-2.5 py-1 text-[11px] font-medium text-blue-600">
-              Paragraph
-            </span>
-          )}
-
-          {typeLabel ===
-            "Checkbox" && (
-            <span className="inline-flex items-center gap-1 rounded-lg bg-orange-50 px-2.5 py-1 text-[11px] font-medium text-orange-600">
-              <CheckSquare size={12} />
-              Checkbox
-            </span>
-          )}
-
-          {typeLabel ===
-            "Both" && (
-            <span className="rounded-lg bg-purple-50 px-2.5 py-1 text-[11px] font-medium text-purple-600">
-              Both
-            </span>
-          )}
-
-          {note.pinned && (
-            <span className="rounded-lg bg-green-50 px-2.5 py-1 text-[11px] font-medium text-green-600">
-              Pinned
-            </span>
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          {note.title?.trim() ? (
+            <h3
+              className="
+                line-clamp-2
+                text-base
+                font-semibold
+                leading-6
+                text-gray-900
+              "
+            >
+              {note.title}
+            </h3>
+          ) : (
+            <h3
+              className="
+                text-base
+                font-semibold
+                leading-6
+                text-gray-400
+              "
+            >
+              Untitled Note
+            </h3>
           )}
         </div>
-      </button>
+
+        <div className="flex shrink-0 items-center gap-1">
+          {note.pinned ? (
+            <button
+              type="button"
+              onClick={handlePinClick}
+              title="Unpin note"
+              className="
+                rounded-lg
+                border
+                border-green-200
+                bg-green-50
+                p-2
+                text-green-600
+                transition
+                hover:border-green-300
+                hover:bg-green-100
+              "
+            >
+              <Pin size={15} />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handlePinClick}
+              title="Pin note"
+              className="
+                rounded-lg
+                border
+                border-gray-200
+                bg-white
+                p-2
+                text-gray-400
+                opacity-0
+                transition
+                group-hover:opacity-100
+                hover:border-gray-300
+                hover:bg-gray-50
+                hover:text-gray-700
+              "
+            >
+              <PinOff size={15} />
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+            }}
+            className="
+              rounded-lg
+              border
+              border-gray-200
+              bg-white
+              p-2
+              text-gray-400
+              opacity-0
+              transition
+              group-hover:opacity-100
+              hover:border-gray-300
+              hover:bg-gray-50
+              hover:text-gray-700
+            "
+            title="More"
+          >
+            <MoreVertical size={15} />
+          </button>
+        </div>
+      </div>
+
+      {/* =========================================
+          CONTENT PREVIEW
+      ========================================= */}
+
+      {previewBlocks.length > 0 ? (
+        <div className="space-y-2.5">
+          {previewBlocks.map((block) => {
+            const isChecklist =
+              block.type === "checklist";
+
+            return (
+              <div
+                key={block.id}
+                className="
+                  flex
+                  min-w-0
+                  items-start
+                  gap-2.5
+                "
+              >
+                {isChecklist ? (
+                  <span
+                    className={`
+                      mt-1
+                      flex
+                      h-4
+                      w-4
+                      shrink-0
+                      items-center
+                      justify-center
+                      rounded-[4px]
+                      border
+                      ${
+                        block.checked
+                          ? "border-green-500 bg-green-500 text-white"
+                          : "border-gray-300 bg-white"
+                      }
+                    `}
+                  >
+                    {block.checked ? (
+                      <CheckSquare
+                        size={11}
+                        strokeWidth={3}
+                      />
+                    ) : null}
+                  </span>
+                ) : (
+                  <span
+                    className="
+                      mt-2
+                      h-1.5
+                      w-1.5
+                      shrink-0
+                      rounded-full
+                      bg-gray-300
+                    "
+                  />
+                )}
+
+                <p
+                  className={`
+                    line-clamp-2
+                    min-w-0
+                    flex-1
+                    text-[15px]
+                    leading-6
+                    ${
+                      block.checked
+                        ? "text-gray-400 line-through"
+                        : "text-gray-600"
+                    }
+                  `}
+                >
+                  {block.text}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div
+          className="
+            flex
+            items-center
+            gap-2
+            py-3
+            text-sm
+            text-gray-400
+          "
+        >
+          <FileText size={16} />
+          <span>Empty note</span>
+        </div>
+      )}
+
+      {/* =========================================
+          FOOTER
+      ========================================= */}
 
       <div
         className="
-          mt-4
+          mt-5
           flex
           items-center
           justify-between
@@ -202,51 +296,62 @@ export default function NoteCard({
           pt-3
         "
       >
-        <span className="text-[11px] text-gray-400">
-          {formatDate(
-            note.updatedAt,
-          )}
-        </span>
+        <div className="flex items-center gap-2">
+          {hasText ? (
+            <span
+              className="
+                rounded-lg
+                border
+                border-gray-200
+                bg-gray-50
+                px-2.5
+                py-1
+                text-xs
+                font-medium
+                text-gray-500
+              "
+            >
+              Paragraph
+            </span>
+          ) : null}
 
-        <button
-          type="button"
-          onClick={onDelete}
-          className="
-            rounded-lg
-            p-2
-            text-gray-400
-            transition
-            hover:bg-red-50
-            hover:text-red-500
-          "
-        >
-          <Trash2 size={16} />
-        </button>
+          {hasCheckbox ? (
+            <span
+              className="
+                rounded-lg
+                border
+                border-gray-200
+                bg-gray-50
+                px-2.5
+                py-1
+                text-xs
+                font-medium
+                text-gray-500
+              "
+            >
+              {completedChecklist}/
+              {totalChecklist}{" "}
+              Checklist
+            </span>
+          ) : null}
+        </div>
+
+        {note.pinned ? (
+          <span
+            className="
+              flex
+              items-center
+              gap-1
+              text-xs
+              font-medium
+              text-green-600
+            "
+          >
+            <Pin size={12} />
+            Pinned
+          </span>
+        ) : null}
       </div>
-    </div>
-  );
-}
-
-function formatDate(
-  value: string,
-) {
-  const date =
-    new Date(value);
-
-  if (
-    Number.isNaN(
-      date.getTime(),
-    )
-  ) {
-    return "";
-  }
-
-  return date.toLocaleDateString(
-    "en-US",
-    {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    },
+    </article>
   );
 }
