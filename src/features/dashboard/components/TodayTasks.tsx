@@ -4,7 +4,6 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from "react";
 
@@ -24,6 +23,8 @@ import { Task } from "@/features/tasks/types/task.types";
 import DashboardCard from "./DashboardCard";
 import DashboardSectionTitle from "./DashboardSectionTitle";
 
+import { useAuthStore } from "@/store/auth.store";
+
 /* =========================================================
    COLORS
 ========================================================= */
@@ -41,7 +42,6 @@ const COLORS = {
   tealSoft: "#E3EFEA",
 
   clay: "#B15A38",
-  claySoft: "#F6E4D8",
 
   gold: "#B4842A",
 };
@@ -99,18 +99,12 @@ function TaskCheckbox({
         justify-center
         flex-shrink-0
         rounded-full
-        transition-all
-        duration-200
       "
       style={{
         width: 22,
         height: 22,
-
         border: `2px solid ${COLORS.line}`,
-
         background: COLORS.card,
-
-        opacity: loading ? 0.65 : 1,
       }}
     >
       {loading && (
@@ -129,39 +123,33 @@ function TaskCheckbox({
 ========================================================= */
 
 export default function TodayTasks() {
-  const [tasks, setTasks] = useState<Task[]>([]);
+  /* =======================================================
+     AUTH
+  ======================================================= */
 
-  /*
-   * শুধু প্রথমবার data load হওয়ার জন্য।
-   *
-   * পরের refresh-এ এই loading আর true হবে না।
-   */
-  const [initialLoading, setInitialLoading] =
+  const user = useAuthStore(
+    (state) => state.user
+  );
+
+  const initialized = useAuthStore(
+    (state) => state.initialized
+  );
+
+  /* =======================================================
+     STATE
+  ======================================================= */
+
+  const [tasks, setTasks] =
+    useState<Task[]>([]);
+
+  const [loading, setLoading] =
     useState(true);
-
-  /*
-   * Background refresh indicator।
-   */
-  const [refreshing, setRefreshing] =
-    useState(false);
 
   const [completingTaskId, setCompletingTaskId] =
     useState<string | null>(null);
 
   const [error, setError] =
     useState<string | null>(null);
-
-  /*
-   * Component unmount হওয়ার পরে
-   * state update আটকানোর জন্য।
-   */
-  const mountedRef = useRef(false);
-
-  /*
-   * একই সময়ে অনেক refresh request
-   * চলা আটকানোর জন্য।
-   */
-  const loadingRef = useRef(false);
 
   /* =======================================================
      TODAY
@@ -177,39 +165,36 @@ export default function TodayTasks() {
   ======================================================= */
 
   const loadTasks = useCallback(
-    async (isInitial = false) => {
+    async () => {
       /*
-       * একই সময়ে duplicate request চলতে দেব না।
+       * Auth এখনো initialize হয়নি।
+       *
+       * এই অবস্থায় fetch করব না।
        */
-      if (loadingRef.current) {
+      if (!initialized) {
         return;
       }
 
-      loadingRef.current = true;
+      /*
+       * User নেই।
+       *
+       * এখানে state synchronously update না করে
+       * async callback-এর ভিতরে update করছি।
+       */
+      if (!user) {
+        await Promise.resolve();
 
-      if (!isInitial) {
-        setRefreshing(true);
+        setTasks([]);
+        setLoading(false);
+        setError(null);
+
+        return;
       }
 
       try {
         const result = await getTasks();
 
-        /*
-         * Component আর mounted না থাকলে
-         * state update করব না।
-         */
-        if (!mountedRef.current) {
-          return;
-        }
-
-        /*
-         * নতুন data পেলেই replace করব।
-         *
-         * getTasks() local/offline data ব্যবহার করলে
-         * এখানেই দ্রুত update হবে।
-         */
         setTasks(result);
-
         setError(null);
       } catch (err) {
         console.error(
@@ -218,68 +203,108 @@ export default function TodayTasks() {
         );
 
         /*
-         * Existing task থাকলে সেগুলো রেখে দেব।
-         *
-         * Refresh fail করলেও dashboard blank হবে না।
+         * আগে data থাকলে সেটা রেখে দেব।
+         * শুধু error দেখাব।
          */
-        if (
-          mountedRef.current &&
-          tasks.length === 0
-        ) {
-          setError(
-            "টাস্ক লোড করা যায়নি।"
-          );
-        }
+        setError(
+          "টাস্ক লোড করা যায়নি।"
+        );
       } finally {
-        loadingRef.current = false;
-
-        if (mountedRef.current) {
-          setInitialLoading(false);
-          setRefreshing(false);
-        }
+        setLoading(false);
       }
     },
-    [tasks.length]
+    [initialized, user]
   );
 
   /* =======================================================
-     COMPONENT MOUNT
+     INITIAL LOAD
   ======================================================= */
 
   useEffect(() => {
-    mountedRef.current = true;
+    let cancelled = false;
 
     /*
-     * Initial task load.
+     * Effect body থেকে সরাসরি state update না করে
+     * async callback-এর মাধ্যমে load করছি।
      */
-    void loadTasks(true);
+    const run = async () => {
+      if (!initialized) {
+        return;
+      }
+
+      if (!user) {
+        await Promise.resolve();
+
+        if (cancelled) {
+          return;
+        }
+
+        setTasks([]);
+        setLoading(false);
+        setError(null);
+
+        return;
+      }
+
+      try {
+        const result = await getTasks();
+
+        if (cancelled) {
+          return;
+        }
+
+        setTasks(result);
+        setError(null);
+      } catch (err) {
+        if (cancelled) {
+          return;
+        }
+
+        console.error(
+          "Initial dashboard task load failed:",
+          err
+        );
+
+        setError(
+          "টাস্ক লোড করা যায়নি।"
+        );
+      } finally {
+        if (cancelled) {
+          return;
+        }
+
+        setLoading(false);
+      }
+    };
+
+    void run();
 
     return () => {
-      mountedRef.current = false;
+      cancelled = true;
     };
-  }, [loadTasks]);
+  }, [initialized, user]);
 
   /* =======================================================
      TASK CHANGE EVENT
   ======================================================= */
 
   useEffect(() => {
-    let timer: ReturnType<
-      typeof setTimeout
-    > | null = null;
+    if (!initialized || !user) {
+      return;
+    }
+
+    let timer:
+      | ReturnType<typeof setTimeout>
+      | null = null;
 
     const handleTaskChanged = () => {
-      /*
-       * একসাথে add/update/delete/complete
-       * event অনেকবার এলে শুধু একটি refresh হবে।
-       */
       if (timer) {
         clearTimeout(timer);
       }
 
       timer = setTimeout(() => {
-        void loadTasks(false);
-      }, 100);
+        void loadTasks();
+      }, 50);
     };
 
     window.addEventListener(
@@ -289,6 +314,11 @@ export default function TodayTasks() {
 
     window.addEventListener(
       "life-os-task-synced",
+      handleTaskChanged
+    );
+
+    window.addEventListener(
+      "life-os-dashboard-refresh",
       handleTaskChanged
     );
 
@@ -306,21 +336,25 @@ export default function TodayTasks() {
         "life-os-task-synced",
         handleTaskChanged
       );
+
+      window.removeEventListener(
+        "life-os-dashboard-refresh",
+        handleTaskChanged
+      );
     };
-  }, [loadTasks]);
+  }, [initialized, user, loadTasks]);
 
   /* =======================================================
      ONLINE EVENT
   ======================================================= */
 
   useEffect(() => {
+    if (!initialized || !user) {
+      return;
+    }
+
     const handleOnline = () => {
-      /*
-       * Internet আসলে background refresh।
-       *
-       * Existing task screen-এ থাকবে।
-       */
-      void loadTasks(false);
+      void loadTasks();
     };
 
     window.addEventListener(
@@ -334,7 +368,7 @@ export default function TodayTasks() {
         handleOnline
       );
     };
-  }, [loadTasks]);
+  }, [initialized, user, loadTasks]);
 
   /* =======================================================
      COMPLETE TASK
@@ -343,32 +377,25 @@ export default function TodayTasks() {
   const handleCompleteTask = async (
     taskId: string
   ) => {
-    /*
-     * একসাথে দুইটা task complete করতে দেব না।
-     */
     if (completingTaskId !== null) {
       return;
     }
 
     /*
-     * Complete করার আগের list।
+     * আগের task list রেখে দিচ্ছি।
      *
-     * যদি service fail করে,
-     * task আবার ফিরিয়ে দেব।
+     * Complete fail করলে restore করব।
      */
     const previousTasks = tasks;
 
     try {
       setCompletingTaskId(taskId);
-
       setError(null);
 
       /*
-       * =====================================================
-       * INSTANT UI UPDATE
-       * =====================================================
+       * UI থেকে সঙ্গে সঙ্গে task remove।
        *
-       * User click করার সাথে সাথে task disappear করবে।
+       * তাই click করার পর task আর থাকবে না।
        */
       setTasks((currentTasks) =>
         currentTasks.filter(
@@ -377,21 +404,12 @@ export default function TodayTasks() {
       );
 
       /*
-       * Actual task completion।
-       *
-       * তোমার existing task service:
-       *
-       * - local update
-       * - Firebase sync
-       * - repeat task handling
-       *
-       * এগুলো handle করবে।
+       * Actual completion.
        */
       await completeTask(taskId);
 
       /*
-       * OverviewSection এই event শুনে
-       * task count update করবে।
+       * OverviewSection update হবে।
        */
       window.dispatchEvent(
         new CustomEvent(
@@ -400,7 +418,8 @@ export default function TodayTasks() {
       );
 
       /*
-       * অন্য dashboard component-এর জন্য।
+       * অন্যান্য dashboard component-ও
+       * refresh করতে পারবে।
        */
       window.dispatchEvent(
         new CustomEvent(
@@ -414,20 +433,15 @@ export default function TodayTasks() {
       );
 
       /*
-       * Completion fail করলে
-       * আগের task list restore।
+       * Completion fail হলে task ফিরিয়ে দাও।
        */
-      if (mountedRef.current) {
-        setTasks(previousTasks);
+      setTasks(previousTasks);
 
-        setError(
-          "টাস্ক সম্পন্ন করা যায়নি।"
-        );
-      }
+      setError(
+        "টাস্ক সম্পন্ন করা যায়নি।"
+      );
     } finally {
-      if (mountedRef.current) {
-        setCompletingTaskId(null);
-      }
+      setCompletingTaskId(null);
     }
   };
 
@@ -439,42 +453,48 @@ export default function TodayTasks() {
     return tasks
       .filter((task) => {
         /*
-         * Daily task:
-         * আজকের task হিসেবে দেখাবে।
+         * Completed task dashboard-এ দেখাব না।
+         */
+        if (task.status === "completed") {
+          return false;
+        }
+
+        /*
+         * Daily task।
          */
         if (task.status === "daily") {
           return true;
         }
 
         /*
-         * Pending task:
+         * Pending task।
          *
-         * activeDate আজ বা তার আগের হলে
-         * Dashboard-এ দেখাবে।
+         * activeDate থাকলে সেটা ব্যবহার করবে।
          */
         if (
           task.status === "pending" &&
           task.activeDate
         ) {
-          return task.activeDate <= today;
+          return (
+            task.activeDate <= today
+          );
         }
 
         /*
-         * Completed task Dashboard-এ
-         * দেখানো হবে না।
+         * activeDate না থাকলে dueDate ব্যবহার।
          */
+        if (
+          task.status === "pending" &&
+          task.dueDate
+        ) {
+          return (
+            task.dueDate <= today
+          );
+        }
+
         return false;
       })
       .sort((a, b) => {
-        /*
-         * Priority:
-         *
-         * জরুরি
-         * ↓
-         * মাঝারি
-         * ↓
-         * কম
-         */
         const priorityDifference =
           priorityOrder[a.priority] -
           priorityOrder[b.priority];
@@ -485,9 +505,6 @@ export default function TodayTasks() {
           return priorityDifference;
         }
 
-        /*
-         * Same priority হলে order অনুযায়ী।
-         */
         return (
           (a.order ?? 0) -
           (b.order ?? 0)
@@ -496,7 +513,7 @@ export default function TodayTasks() {
   }, [tasks, today]);
 
   /* =======================================================
-     HAS TASKS
+     EMPTY
   ======================================================= */
 
   const hasTasks =
@@ -516,7 +533,7 @@ export default function TodayTasks() {
         icon={CheckSquare}
         title="আজকের টাস্ক"
         subtitle={
-          initialLoading
+          loading
             ? "টাস্ক লোড হচ্ছে..."
             : hasTasks
             ? `${todayTasks.length}টি টাস্ক বাকি`
@@ -525,41 +542,10 @@ export default function TodayTasks() {
       />
 
       {/* ===================================================
-          BACKGROUND REFRESH
-      =================================================== */}
-
-      {!initialLoading &&
-        refreshing && (
-          <div
-            className="
-              flex
-              items-center
-              justify-center
-              gap-2
-              mb-3
-              text-xs
-            "
-            style={{
-              color:
-                COLORS.mutedSoft,
-            }}
-          >
-            <Loader2
-              size={13}
-              className="animate-spin"
-            />
-
-            <span>
-              আপডেট হচ্ছে...
-            </span>
-          </div>
-        )}
-
-      {/* ===================================================
           INITIAL LOADING
       =================================================== */}
 
-      {initialLoading && (
+      {loading && (
         <div
           className="
             flex
@@ -570,8 +556,7 @@ export default function TodayTasks() {
             text-sm
           "
           style={{
-            color:
-              COLORS.mutedSoft,
+            color: COLORS.mutedSoft,
           }}
         >
           <Loader2
@@ -589,32 +574,29 @@ export default function TodayTasks() {
           ERROR
       =================================================== */}
 
-      {!initialLoading &&
-        error && (
-          <div
-            className="
-              rounded-xl
-              px-3.5
-              py-3
-              text-sm
-              mb-3
-            "
-            style={{
-              background:
-                COLORS.claySoft,
-              color:
-                COLORS.clay,
-            }}
-          >
-            {error}
-          </div>
-        )}
+      {!loading && error && (
+        <div
+          className="
+            rounded-xl
+            px-3.5
+            py-3
+            text-sm
+            mb-3
+          "
+          style={{
+            background: "#F6E4D8",
+            color: COLORS.clay,
+          }}
+        >
+          {error}
+        </div>
+      )}
 
       {/* ===================================================
           EMPTY STATE
       =================================================== */}
 
-      {!initialLoading &&
+      {!loading &&
         !error &&
         !hasTasks && (
           <div
@@ -652,8 +634,7 @@ export default function TodayTasks() {
             <p
               className="text-sm font-medium"
               style={{
-                color:
-                  COLORS.ink,
+                color: COLORS.ink,
               }}
             >
               আজকের সব টাস্ক সম্পন্ন 🎉
@@ -675,138 +656,125 @@ export default function TodayTasks() {
           TASK LIST
       =================================================== */}
 
-      {!initialLoading &&
+      {!loading &&
         !error &&
         hasTasks && (
           <div className="flex flex-col gap-2.5">
-            {todayTasks.map(
-              (task) => {
-                const isCompleting =
-                  completingTaskId ===
-                  task.id;
+            {todayTasks.map((task) => {
+              const isCompleting =
+                completingTaskId ===
+                task.id;
 
-                return (
-                  <button
-                    key={task.id}
-                    type="button"
-                    disabled={
-                      completingTaskId !==
-                        null &&
-                      !isCompleting
+              return (
+                <button
+                  key={task.id}
+                  type="button"
+                  disabled={
+                    completingTaskId !==
+                      null &&
+                    !isCompleting
+                  }
+                  onClick={() =>
+                    void handleCompleteTask(
+                      task.id
+                    )
+                  }
+                  className="
+                    w-full
+                    flex
+                    items-center
+                    gap-3
+                    text-left
+                    rounded-xl
+                    px-3.5
+                    py-3
+                    transition-all
+                    duration-200
+                    hover:-translate-y-[1px]
+                    active:scale-[0.99]
+                  "
+                  style={{
+                    background:
+                      COLORS.paper,
+
+                    border:
+                      `1px solid ${COLORS.line}`,
+
+                    opacity:
+                      isCompleting
+                        ? 0.65
+                        : 1,
+                  }}
+                >
+                  {/* CHECKBOX */}
+
+                  <TaskCheckbox
+                    loading={
+                      isCompleting
                     }
-                    onClick={() =>
-                      handleCompleteTask(
-                        task.id
-                      )
-                    }
-                    className="
-                      w-full
-                      flex
-                      items-center
-                      gap-3
-                      text-left
-                      rounded-xl
-                      px-3.5
-                      py-3
-                      transition-all
-                      duration-200
-                      hover:-translate-y-[1px]
-                      active:scale-[0.99]
-                    "
-                    style={{
-                      background:
-                        COLORS.paper,
+                  />
 
-                      border:
-                        `1px solid ${COLORS.line}`,
+                  {/* TASK CONTENT */}
 
-                      opacity:
-                        isCompleting
-                          ? 0.6
-                          : 1,
-                    }}
-                  >
-                    {/* ===================================
-                        CHECKBOX
-                    =================================== */}
+                  <div className="flex-1 min-w-0">
+                    <div
+                      className="text-sm font-medium"
+                      style={{
+                        color:
+                          COLORS.ink,
 
-                    <TaskCheckbox
-                      loading={
-                        isCompleting
-                      }
-                    />
+                        overflowWrap:
+                          "anywhere",
+                      }}
+                    >
+                      {task.title}
+                    </div>
 
-                    {/* ===================================
-                        TASK CONTENT
-                    =================================== */}
-
-                    <div className="flex-1 min-w-0">
+                    {task.description && (
                       <div
                         className="
-                          text-sm
-                          font-medium
+                          text-xs
+                          mt-1
+                          line-clamp-1
                         "
                         style={{
                           color:
-                            COLORS.ink,
-
-                          overflowWrap:
-                            "anywhere",
+                            COLORS.muted,
                         }}
                       >
-                        {task.title}
+                        {task.description}
                       </div>
+                    )}
+                  </div>
 
-                      {task.description && (
-                        <div
-                          className="
-                            text-xs
-                            mt-1
-                            line-clamp-1
-                          "
-                          style={{
-                            color:
-                              COLORS.muted,
-                          }}
-                        >
-                          {
-                            task.description
-                          }
-                        </div>
-                      )}
-                    </div>
+                  {/* PRIORITY */}
 
-                    {/* ===================================
-                        PRIORITY TEXT
-                    =================================== */}
-
-                    <span
-                      className="
-                        text-xs
-                        font-semibold
-                        flex-shrink-0
-                      "
-                      style={{
-                        color:
-                          task.priority ===
-                          "high"
-                            ? COLORS.clay
-                            : task.priority ===
-                              "medium"
-                            ? COLORS.gold
-                            : COLORS.teal,
-                      }}
-                    >
-                      {
-                        priorityLabel[
-                          task.priority
-                        ]
-                      }
-                    </span>
-                  </button>
-                );
-              }
-            )}
+                  <span
+                    className="
+                      text-xs
+                      font-semibold
+                      flex-shrink-0
+                    "
+                    style={{
+                      color:
+                        task.priority ===
+                        "high"
+                          ? COLORS.clay
+                          : task.priority ===
+                            "medium"
+                          ? COLORS.gold
+                          : COLORS.teal,
+                    }}
+                  >
+                    {
+                      priorityLabel[
+                        task.priority
+                      ]
+                    }
+                  </span>
+                </button>
+              );
+            })}
           </div>
         )}
     </DashboardCard>
