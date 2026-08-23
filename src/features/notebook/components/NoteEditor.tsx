@@ -29,18 +29,9 @@ import {
 
 interface NoteEditorProps {
   note: Note;
-
-  onChange?: (
-    note: Note,
-  ) => void;
-
-  onSave?: (
-    note: Note,
-  ) => Promise<void> | void;
-
-  onDelete?: () =>
-    Promise<void> | void;
-
+  onChange?: (note: Note) => void;
+  onSave?: (note: Note) => Promise<void> | void;
+  onDelete?: () => Promise<void> | void;
   onClose: () => void;
 }
 
@@ -68,28 +59,20 @@ function createChecklistBlock(): NoteBlock {
 function normalizeBlocks(
   blocks: NoteBlock[] | undefined,
 ): NoteBlock[] {
-  if (
-    !Array.isArray(blocks) ||
-    blocks.length === 0
-  ) {
+  if (!Array.isArray(blocks) || blocks.length === 0) {
     return [createTextBlock()];
   }
 
   return blocks.map((block) => {
-    if (
-      block.type === "checklist"
-    ) {
+    if (block.type === "checklist") {
       return {
         ...block,
         type: "checklist",
         text:
-          typeof block.text ===
-          "string"
+          typeof block.text === "string"
             ? block.text
             : "",
-        checked: Boolean(
-          block.checked,
-        ),
+        checked: Boolean(block.checked),
       };
     }
 
@@ -97,8 +80,7 @@ function normalizeBlocks(
       ...block,
       type: "text",
       text:
-        typeof block.text ===
-        "string"
+        typeof block.text === "string"
           ? block.text
           : "",
     };
@@ -106,24 +88,14 @@ function normalizeBlocks(
 }
 
 /* =========================================================
-   CHECK IF TEXT IS HTML
+   HTML HELPERS
 ========================================================= */
 
-function containsHtml(
-  value: string,
-): boolean {
-  return /<\/?[a-z][\s\S]*>/i.test(
-    value,
-  );
+function containsHtml(value: string): boolean {
+  return /<\/?[a-z][\s\S]*>/i.test(value);
 }
 
-/* =========================================================
-   CONVERT OLD TEXT TO SAFE HTML
-========================================================= */
-
-function textToHtml(
-  value: string,
-): string {
+function textToHtml(value: string): string {
   if (!value) {
     return "";
   }
@@ -150,77 +122,48 @@ export default function NoteEditor({
   onDelete,
   onClose,
 }: NoteEditorProps) {
-  const [title, setTitle] =
-    useState(note.title ?? "");
+  const [title, setTitle] = useState(
+    note.title ?? "",
+  );
 
-  const [blocks, setBlocks] =
-    useState<NoteBlock[]>(() =>
-      normalizeBlocks(
-        note.blocks,
-      ),
-    );
+  const [blocks, setBlocks] = useState<NoteBlock[]>(
+    () => normalizeBlocks(note.blocks),
+  );
 
-  const [pinned, setPinned] =
-    useState(
-      Boolean(note.pinned),
-    );
+  const [pinned, setPinned] = useState(
+    Boolean(note.pinned),
+  );
 
-  const [saving, setSaving] =
-    useState(false);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
-  const [deleting, setDeleting] =
-    useState(false);
+  const editorRefs = useRef<
+    Record<string, HTMLDivElement | null>
+  >({});
 
-  /*
-   * Keep references to each editable
-   * content area.
-   */
-  const editorRefs =
-    useRef<
-      Record<
-        string,
-        HTMLDivElement | null
-      >
-    >({});
-
-  /*
-   * Store current text selection.
-   * This allows Bold button to work
-   * without losing the selected text.
-   */
-  const savedSelection =
-    useRef<Range | null>(null);
+  const savedSelection = useRef<Range | null>(
+    null,
+  );
 
   /* =======================================================
-     SYNC EDITOR CONTENT
+     SYNC EDITOR
   ======================================================= */
 
   useEffect(() => {
     blocks.forEach((block) => {
       const editor =
-        editorRefs.current[
-          block.id
-        ];
+        editorRefs.current[block.id];
 
       if (!editor) {
         return;
       }
 
-      const expected =
-        textToHtml(
-          block.text ?? "",
-        );
+      const expected = textToHtml(
+        block.text ?? "",
+      );
 
-      /*
-       * Don't replace innerHTML while
-       * user is typing.
-       */
-      if (
-        editor.innerHTML !==
-        expected
-      ) {
-        editor.innerHTML =
-          expected;
+      if (editor.innerHTML !== expected) {
+        editor.innerHTML = expected;
       }
     });
   }, [blocks]);
@@ -236,21 +179,12 @@ export default function NoteEditor({
   ): Note {
     return {
       ...note,
-
       title: nextTitle,
-
-      type:
-        note.type ?? "text",
-
+      type: note.type ?? "text",
       blocks: nextBlocks,
-
       pinned: nextPinned,
-
-      createdAt:
-        note.createdAt,
-
-      updatedAt:
-        new Date().toISOString(),
+      createdAt: note.createdAt,
+      updatedAt: new Date().toISOString(),
     };
   }
 
@@ -258,17 +192,14 @@ export default function NoteEditor({
      TITLE
   ======================================================= */
 
-  function handleTitleChange(
-    value: string,
-  ) {
+  function handleTitleChange(value: string) {
     setTitle(value);
 
-    const updated =
-      createUpdatedNote(
-        value,
-        blocks,
-        pinned,
-      );
+    const updated = createUpdatedNote(
+      value,
+      blocks,
+      pinned,
+    );
 
     onChange?.(updated);
   }
@@ -281,27 +212,24 @@ export default function NoteEditor({
     blockId: string,
     element: HTMLDivElement,
   ) {
-    const html =
-      element.innerHTML;
+    const html = element.innerHTML;
 
-    const updatedBlocks =
-      blocks.map((block) =>
-        block.id === blockId
-          ? {
-              ...block,
-              text: html,
-            }
-          : block,
-      );
+    const updatedBlocks = blocks.map((block) =>
+      block.id === blockId
+        ? {
+            ...block,
+            text: html,
+          }
+        : block,
+    );
 
     setBlocks(updatedBlocks);
 
-    const updated =
-      createUpdatedNote(
-        title,
-        updatedBlocks,
-        pinned,
-      );
+    const updated = createUpdatedNote(
+      title,
+      updatedBlocks,
+      pinned,
+    );
 
     onChange?.(updated);
   }
@@ -314,24 +242,22 @@ export default function NoteEditor({
     blockId: string,
     checked: boolean,
   ) {
-    const updatedBlocks =
-      blocks.map((block) =>
-        block.id === blockId
-          ? {
-              ...block,
-              checked,
-            }
-          : block,
-      );
+    const updatedBlocks = blocks.map((block) =>
+      block.id === blockId
+        ? {
+            ...block,
+            checked,
+          }
+        : block,
+    );
 
     setBlocks(updatedBlocks);
 
-    const updated =
-      createUpdatedNote(
-        title,
-        updatedBlocks,
-        pinned,
-      );
+    const updated = createUpdatedNote(
+      title,
+      updatedBlocks,
+      pinned,
+    );
 
     onChange?.(updated);
   }
@@ -341,8 +267,7 @@ export default function NoteEditor({
   ======================================================= */
 
   function addParagraph() {
-    const newBlock =
-      createTextBlock();
+    const newBlock = createTextBlock();
 
     const updatedBlocks = [
       ...blocks,
@@ -351,25 +276,18 @@ export default function NoteEditor({
 
     setBlocks(updatedBlocks);
 
-    const updated =
-      createUpdatedNote(
-        title,
-        updatedBlocks,
-        pinned,
-      );
+    const updated = createUpdatedNote(
+      title,
+      updatedBlocks,
+      pinned,
+    );
 
     onChange?.(updated);
 
-    /*
-     * Focus new paragraph.
-     */
     requestAnimationFrame(() => {
-      const editor =
-        editorRefs.current[
-          newBlock.id
-        ];
-
-      editor?.focus();
+      editorRefs.current[
+        newBlock.id
+      ]?.focus();
     });
   }
 
@@ -388,25 +306,18 @@ export default function NoteEditor({
 
     setBlocks(updatedBlocks);
 
-    const updated =
-      createUpdatedNote(
-        title,
-        updatedBlocks,
-        pinned,
-      );
+    const updated = createUpdatedNote(
+      title,
+      updatedBlocks,
+      pinned,
+    );
 
     onChange?.(updated);
 
-    /*
-     * Focus new checkbox.
-     */
     requestAnimationFrame(() => {
-      const editor =
-        editorRefs.current[
-          newBlock.id
-        ];
-
-      editor?.focus();
+      editorRefs.current[
+        newBlock.id
+      ]?.focus();
     });
   }
 
@@ -414,31 +325,22 @@ export default function NoteEditor({
      REMOVE BLOCK
   ======================================================= */
 
-  function removeBlock(
-    blockId: string,
-  ) {
-    let updatedBlocks =
-      blocks.filter(
-        (block) =>
-          block.id !== blockId,
-      );
+  function removeBlock(blockId: string) {
+    let updatedBlocks = blocks.filter(
+      (block) => block.id !== blockId,
+    );
 
-    if (
-      updatedBlocks.length === 0
-    ) {
-      updatedBlocks = [
-        createTextBlock(),
-      ];
+    if (updatedBlocks.length === 0) {
+      updatedBlocks = [createTextBlock()];
     }
 
     setBlocks(updatedBlocks);
 
-    const updated =
-      createUpdatedNote(
-        title,
-        updatedBlocks,
-        pinned,
-      );
+    const updated = createUpdatedNote(
+      title,
+      updatedBlocks,
+      pinned,
+    );
 
     onChange?.(updated);
   }
@@ -452,40 +354,41 @@ export default function NoteEditor({
 
     setPinned(nextPinned);
 
-    const updated =
-      createUpdatedNote(
-        title,
-        blocks,
-        nextPinned,
-      );
+    const updated = createUpdatedNote(
+      title,
+      blocks,
+      nextPinned,
+    );
 
     onChange?.(updated);
   }
 
   /* =======================================================
-     SAVE SELECTION
+     SAVE CURRENT SELECTION
   ======================================================= */
 
   function saveCurrentSelection() {
-    const selection =
-      window.getSelection();
+    const selection = window.getSelection();
 
-    if (
-      !selection ||
-      selection.rangeCount === 0
-    ) {
+    if (!selection) {
       return;
     }
 
-    const range =
-      selection.getRangeAt(0);
+    if (selection.rangeCount === 0) {
+      return;
+    }
+
+    if (selection.toString().trim().length === 0) {
+      return;
+    }
+
+    const range = selection.getRangeAt(0);
 
     const container =
       range.commonAncestorContainer;
 
     const parentElement =
-      container.nodeType ===
-      Node.ELEMENT_NODE
+      container.nodeType === Node.ELEMENT_NODE
         ? (container as Element)
         : container.parentElement;
 
@@ -498,13 +401,6 @@ export default function NoteEditor({
       return;
     }
 
-    if (
-      selection.toString().trim()
-        .length === 0
-    ) {
-      return;
-    }
-
     savedSelection.current =
       range.cloneRange();
   }
@@ -514,8 +410,7 @@ export default function NoteEditor({
   ======================================================= */
 
   function handleBold() {
-    const selection =
-      window.getSelection();
+    const selection = window.getSelection();
 
     if (!selection) {
       return;
@@ -524,9 +419,7 @@ export default function NoteEditor({
     /*
      * Restore previous selection.
      */
-    if (
-      savedSelection.current
-    ) {
+    if (savedSelection.current) {
       selection.removeAllRanges();
 
       selection.addRange(
@@ -534,38 +427,29 @@ export default function NoteEditor({
       );
     }
 
-    if (
-      selection.rangeCount === 0
-    ) {
+    if (selection.rangeCount === 0) {
       return;
     }
 
     const selectedText =
       selection.toString();
 
-    if (
-      !selectedText.trim()
-    ) {
+    if (!selectedText.trim()) {
       return;
     }
 
     /*
-     * Native browser bold command.
+     * Native browser bold.
      *
-     * This creates real <strong>/<b>
-     * formatting.
-     *
-     * No * or ** will appear.
+     * IMPORTANT:
+     * This creates <strong>/<b>.
+     * It never creates * or **.
      */
     document.execCommand(
       "bold",
       false,
     );
 
-    /*
-     * Find the editor containing
-     * the selection.
-     */
     const range =
       selection.getRangeAt(0);
 
@@ -573,8 +457,7 @@ export default function NoteEditor({
       range.commonAncestorContainer;
 
     const element =
-      container.nodeType ===
-      Node.ELEMENT_NODE
+      container.nodeType === Node.ELEMENT_NODE
         ? (container as Element)
         : container.parentElement;
 
@@ -594,21 +477,34 @@ export default function NoteEditor({
       return;
     }
 
-    /*
-     * Save updated HTML.
-     */
     handleBlockInput(
       blockId,
       editor,
     );
 
-    /*
-     * Keep focus and selection.
-     */
     editor.focus();
 
     savedSelection.current =
       range.cloneRange();
+  }
+
+  /* =======================================================
+     KEYBOARD
+  ======================================================= */
+
+  function handleEditorKeyDown(
+    event: React.KeyboardEvent<HTMLDivElement>,
+  ) {
+    if (
+      (event.ctrlKey || event.metaKey) &&
+      event.key.toLowerCase() === "b"
+    ) {
+      event.preventDefault();
+
+      saveCurrentSelection();
+
+      handleBold();
+    }
   }
 
   /* =======================================================
@@ -623,12 +519,11 @@ export default function NoteEditor({
     setSaving(true);
 
     try {
-      const updated =
-        createUpdatedNote(
-          title,
-          blocks,
-          pinned,
-        );
+      const updated = createUpdatedNote(
+        title,
+        blocks,
+        pinned,
+      );
 
       onChange?.(updated);
 
@@ -656,10 +551,9 @@ export default function NoteEditor({
       return;
     }
 
-    const confirmed =
-      window.confirm(
-        "Are you sure you want to delete this note?",
-      );
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this note?",
+    );
 
     if (!confirmed) {
       return;
@@ -682,30 +576,6 @@ export default function NoteEditor({
       );
     } finally {
       setDeleting(false);
-    }
-  }
-
-  /* =======================================================
-     KEYBOARD
-  ======================================================= */
-
-  function handleEditorKeyDown(
-    event: React.KeyboardEvent<HTMLDivElement>,
-  ) {
-    /*
-     * Ctrl+B / Cmd+B
-     */
-    if (
-      (event.ctrlKey ||
-        event.metaKey) &&
-      event.key.toLowerCase() ===
-        "b"
-    ) {
-      event.preventDefault();
-
-      saveCurrentSelection();
-
-      handleBold();
     }
   }
 
@@ -742,10 +612,7 @@ export default function NoteEditor({
           sm:h-[90vh]
         "
       >
-
-        {/* =================================================
-            HEADER
-        ================================================= */}
+        {/* HEADER */}
 
         <div
           className="
@@ -760,7 +627,6 @@ export default function NoteEditor({
           "
         >
           <div className="flex items-center gap-2">
-
             <button
               type="button"
               onClick={onClose}
@@ -774,7 +640,6 @@ export default function NoteEditor({
                 hover:bg-gray-50
                 hover:text-gray-700
               "
-              title="Close"
             >
               <X size={20} />
             </button>
@@ -790,20 +655,16 @@ export default function NoteEditor({
             >
               Notebook
             </span>
-
           </div>
 
           <div className="flex items-center gap-1.5">
-
             {/* PIN */}
 
             <button
               type="button"
               onClick={togglePin}
               title={
-                pinned
-                  ? "Unpin"
-                  : "Pin"
+                pinned ? "Unpin" : "Pin"
               }
               className={`
                 rounded-xl
@@ -828,9 +689,7 @@ export default function NoteEditor({
 
             <button
               type="button"
-              onClick={
-                handleDelete
-              }
+              onClick={handleDelete}
               disabled={deleting}
               title="Delete"
               className="
@@ -853,9 +712,7 @@ export default function NoteEditor({
 
             <button
               type="button"
-              onClick={
-                handleSave
-              }
+              onClick={handleSave}
               disabled={saving}
               className="
                 ml-1
@@ -886,13 +743,10 @@ export default function NoteEditor({
                   : "Save"}
               </span>
             </button>
-
           </div>
         </div>
 
-        {/* =================================================
-            EDITOR
-        ================================================= */}
+        {/* EDITOR */}
 
         <div
           className="
@@ -905,7 +759,6 @@ export default function NoteEditor({
           "
         >
           <div className="mx-auto max-w-3xl">
-
             {/* TITLE */}
 
             <input
@@ -940,15 +793,13 @@ export default function NoteEditor({
               "
             />
 
-            {/* =================================================
-                CONTENT
-            ================================================= */}
+            {/* CONTENT */}
 
             <div
               className="
-                mt-5
+                mt-6
                 w-full
-                space-y-1
+                space-y-2
               "
             >
               {blocks.map((block) => {
@@ -965,15 +816,11 @@ export default function NoteEditor({
                       w-full
                       items-start
                       gap-2
-                      py-1
                     "
                   >
+                    {/* CHECKBOX */}
 
-                    {/* =================================================
-                        CHECKBOX
-                    ================================================= */}
-
-                    {checklist ? (
+                    {checklist && (
                       <button
                         type="button"
                         aria-label={
@@ -988,7 +835,7 @@ export default function NoteEditor({
                           )
                         }
                         className={`
-                          mt-[7px]
+                          mt-[5px]
                           flex
                           h-5
                           w-5
@@ -1010,25 +857,9 @@ export default function NoteEditor({
                           strokeWidth={3}
                         />
                       </button>
-                    ) : (
-                      /*
-                       * Empty alignment space.
-                       *
-                       * This keeps paragraph text aligned
-                       * with checkbox text.
-                       */
-                      <div
-                        className="
-                          h-5
-                          w-5
-                          shrink-0
-                        "
-                      />
                     )}
 
-                    {/* =================================================
-                        EDITABLE CONTENT
-                    ================================================= */}
+                    {/* TEXT */}
 
                     <div
                       ref={(element) => {
@@ -1069,7 +900,7 @@ export default function NoteEditor({
                       }
                       className={`
                         note-editor-content
-                        min-h-[28px]
+                        min-h-[30px]
                         min-w-0
                         flex-1
                         whitespace-pre-wrap
@@ -1077,11 +908,10 @@ export default function NoteEditor({
                         border-0
                         bg-transparent
                         p-0
-                        text-base
+                        text-[18px]
                         font-normal
-                        leading-7
+                        leading-8
                         outline-none
-                        sm:text-[17px]
                         ${
                           block.checked
                             ? "text-gray-400 line-through"
@@ -1118,19 +948,16 @@ export default function NoteEditor({
                     >
                       <X size={14} />
                     </button>
-
                   </div>
                 );
               })}
             </div>
 
-            {/* =================================================
-                TOOLBAR
-            ================================================= */}
+            {/* TOOLBAR */}
 
             <div
               className="
-                mt-6
+                mt-7
                 flex
                 flex-wrap
                 items-center
@@ -1140,21 +967,18 @@ export default function NoteEditor({
                 pt-4
               "
             >
-
               {/* PARAGRAPH */}
 
               <button
                 type="button"
-                onClick={
-                  addParagraph
-                }
+                onClick={addParagraph}
                 className="
                   inline-flex
                   items-center
                   gap-2
                   rounded-xl
                   border
-                  border-gray-200
+                  border-gray-300
                   bg-white
                   px-3
                   py-2
@@ -1163,14 +987,12 @@ export default function NoteEditor({
                   text-gray-600
                   shadow-sm
                   transition
-                  hover:border-gray-300
+                  hover:border-gray-400
                   hover:bg-gray-50
                   hover:text-gray-900
-                  active:scale-[0.98]
                 "
               >
                 <Plus size={16} />
-
                 <span>
                   Paragraph
                 </span>
@@ -1180,16 +1002,14 @@ export default function NoteEditor({
 
               <button
                 type="button"
-                onClick={
-                  addCheckbox
-                }
+                onClick={addCheckbox}
                 className="
                   inline-flex
                   items-center
                   gap-2
                   rounded-xl
                   border
-                  border-gray-200
+                  border-gray-300
                   bg-white
                   px-3
                   py-2
@@ -1198,14 +1018,12 @@ export default function NoteEditor({
                   text-gray-600
                   shadow-sm
                   transition
-                  hover:border-gray-300
+                  hover:border-gray-400
                   hover:bg-gray-50
                   hover:text-gray-900
-                  active:scale-[0.98]
                 "
               >
                 <Check size={16} />
-
                 <span>
                   Checkbox
                 </span>
@@ -1216,10 +1034,6 @@ export default function NoteEditor({
               <button
                 type="button"
                 onMouseDown={(event) => {
-                  /*
-                   * Prevent the browser from
-                   * removing selected text.
-                   */
                   event.preventDefault();
 
                   saveCurrentSelection();
@@ -1241,25 +1055,19 @@ export default function NoteEditor({
                   text-gray-700
                   shadow-sm
                   transition
-                  hover:border-gray-400
+                  hover:border-gray-500
                   hover:bg-gray-50
                   hover:text-gray-950
                   active:scale-[0.98]
                 "
-                title="Bold selected text"
+                title="Select text and click Bold"
               >
                 <Bold size={16} />
-
-                <span>
-                  Bold
-                </span>
+                <span>Bold</span>
               </button>
-
             </div>
 
-            {/* =================================================
-                HINT
-            ================================================= */}
+            {/* HINT */}
 
             <p
               className="
@@ -1272,13 +1080,10 @@ export default function NoteEditor({
               Select text and click
               Bold, or press Ctrl+B.
             </p>
-
           </div>
         </div>
 
-        {/* =================================================
-            FOOTER
-        ================================================= */}
+        {/* FOOTER */}
 
         <div
           className="
@@ -1307,7 +1112,6 @@ export default function NoteEditor({
               : "blocks"}
           </span>
         </div>
-
       </div>
     </div>
   );
