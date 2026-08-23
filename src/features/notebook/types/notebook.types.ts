@@ -1,15 +1,23 @@
-export type NoteType =
-  | "text"
-  | "checklist";
-
 export type NoteBlockType =
   | "text"
   | "checklist";
 
 export interface NoteBlock {
   id: string;
+
   type: NoteBlockType;
+
+  /**
+   * Normal text বা HTML formatted text.
+   *
+   * Example:
+   * Hello world
+   *
+   * অথবা:
+   * Hello <strong>world</strong>
+   */
   text: string;
+
   checked?: boolean;
 }
 
@@ -18,15 +26,13 @@ export interface Note {
 
   title: string;
 
-  type: NoteType;
+  description?: string;
 
-  content?: string;
+  type?: string;
 
   blocks: NoteBlock[];
 
-  checklist?: NoteBlock[];
-
-  pinned: boolean;
+  pinned?: boolean;
 
   createdAt: string;
 
