@@ -13,17 +13,23 @@ import type { FocusItem } from "../types/focus.types";
 import {
   createDefaultFocusItem,
   getElapsedTime,
+  loadFocusTimer,
   pauseFocus,
   resetFocusTimer,
   saveFocusTimer,
   startFocus,
   subscribeToAuth,
-  subscribeToFocusTimer,
 } from "../services/focus.service";
 
-function formatTime(milliseconds: number) {
+/* =========================================================
+   FORMAT TIME
+   ========================================================= */
+
+function formatTime(
+  milliseconds: number
+): string {
   const totalSeconds = Math.floor(
-    milliseconds / 1000
+    Math.max(0, milliseconds) / 1000
   );
 
   const hours = Math.floor(
@@ -34,24 +40,33 @@ function formatTime(milliseconds: number) {
     (totalSeconds % 3600) / 60
   );
 
-  const seconds =
-    totalSeconds % 60;
+  const seconds = totalSeconds % 60;
 
   return [
     hours.toString().padStart(2, "0"),
-
     minutes.toString().padStart(2, "0"),
-
     seconds.toString().padStart(2, "0"),
   ].join(":");
 }
 
+/* =========================================================
+   FOCUS TIMER
+   ========================================================= */
+
 export default function FocusTimer() {
+  const [user, setUser] =
+    useState<User | null>(null);
+
   const [timer, setTimer] =
     useState<FocusItem | null>(null);
 
-  const [currentTime, setCurrentTime] =
-    useState<number | null>(null);
+  /*
+   * 0 is used as initial value.
+   *
+   * No Date.now() during render.
+   */
+  const [now, setNow] =
+    useState<number>(0);
 
   const [loading, setLoading] =
     useState(true);
@@ -59,186 +74,305 @@ export default function FocusTimer() {
   const [saving, setSaving] =
     useState(false);
 
-  /* =====================================================
-     CURRENT TIME
-     ===================================================== */
+  const [error, setError] =
+    useState<string | null>(null);
+
+  /* =======================================================
+     AUTH + FIRESTORE
+     ======================================================= */
 
   useEffect(() => {
+    let cancelled = false;
+
+    const unsubscribe =
+      subscribeToAuth(
+        async (currentUser) => {
+          if (cancelled) {
+            return;
+          }
+
+          setUser(currentUser);
+          setError(null);
+          setLoading(true);
+
+          /*
+           * Logged out
+           */
+          if (!currentUser) {
+            setTimer(null);
+            setLoading(false);
+            return;
+          }
+
+          try {
+            /*
+             * Load permanent timer
+             * from Firestore.
+             */
+            const savedTimer =
+              await loadFocusTimer(
+                currentUser
+              );
+
+            if (cancelled) {
+              return;
+            }
+
+            /*
+             * Existing timer found.
+             */
+            if (savedTimer) {
+              setTimer(savedTimer);
+              setLoading(false);
+              return;
+            }
+
+            /*
+             * First timer for this account.
+             */
+            const newTimer =
+              createDefaultFocusItem();
+
+            await saveFocusTimer(
+              currentUser,
+              newTimer
+            );
+
+            if (cancelled) {
+              return;
+            }
+
+            setTimer(newTimer);
+          } catch (err) {
+            console.error(
+              "Failed to load Focus Timer:",
+              err
+            );
+
+            if (!cancelled) {
+              setTimer(null);
+
+              setError(
+                "Focus Timer load করতে সমস্যা হয়েছে।"
+              );
+            }
+          } finally {
+            if (!cancelled) {
+              setLoading(false);
+            }
+          }
+        }
+      );
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
+
+  /* =======================================================
+     TIMER CLOCK
+     ======================================================= */
+
+  useEffect(() => {
+    /*
+     * If timer is not running,
+     * there is nothing to subscribe to.
+     *
+     * No setState here.
+     */
     if (!timer?.running) {
       return;
     }
 
-    const updateTime = () => {
-      setCurrentTime(
-        new Date().getTime()
-      );
-    };
-
-    updateTime();
+    /*
+     * Timer is running.
+     *
+     * First update happens asynchronously,
+     * avoiding synchronous setState inside
+     * the effect body.
+     */
+    const firstUpdate =
+      window.setTimeout(() => {
+        setNow(Date.now());
+      }, 0);
 
     const interval =
-      window.setInterval(
-        updateTime,
-        1000
-      );
+      window.setInterval(() => {
+        setNow(Date.now());
+      }, 1000);
 
     return () => {
+      window.clearTimeout(
+        firstUpdate
+      );
+
       window.clearInterval(
         interval
       );
     };
   }, [timer?.running]);
 
-  /* =====================================================
-     AUTH + FIRESTORE
-     ===================================================== */
-
-  useEffect(() => {
-    let unsubscribeTimer:
-      (() => void) | null = null;
-
-    const unsubscribeAuth =
-      subscribeToAuth(
-        (user: User | null) => {
-          setLoading(true);
-
-          if (unsubscribeTimer) {
-            unsubscribeTimer();
-
-            unsubscribeTimer = null;
-          }
-
-          if (!user) {
-            setTimer(null);
-
-            setLoading(false);
-
-            return;
-          }
-
-          unsubscribeTimer =
-            subscribeToFocusTimer(
-              user,
-              (firestoreTimer) => {
-                if (firestoreTimer) {
-                  setTimer(
-                    firestoreTimer
-                  );
-                } else {
-                  const newTimer =
-                    createDefaultFocusItem();
-
-                  setTimer(newTimer);
-
-                  void saveFocusTimer(
-                    newTimer
-                  );
-                }
-
-                setLoading(false);
-              }
-            );
-        }
-      );
-
-    return () => {
-      unsubscribeAuth();
-
-      if (unsubscribeTimer) {
-        unsubscribeTimer();
-      }
-    };
-  }, []);
-
-  /* =====================================================
+  /* =======================================================
      START
-     ===================================================== */
+     ======================================================= */
 
   const handleStart =
     useCallback(async () => {
-      if (!timer || saving) {
+      if (
+        !user ||
+        !timer ||
+        saving
+      ) {
         return;
       }
 
-      const now =
-        new Date().getTime();
+      const startTime =
+        Date.now();
 
-      const updated =
+      const updatedTimer =
         startFocus(
           timer,
-          now
+          startTime
         );
 
-      setTimer(updated);
-
       setSaving(true);
+      setError(null);
 
       try {
         await saveFocusTimer(
-          updated
+          user,
+          updatedTimer
+        );
+
+        setTimer(
+          updatedTimer
+        );
+
+        /*
+         * This happens from a click
+         * handler, not render/effect.
+         */
+        setNow(startTime);
+      } catch (err) {
+        console.error(
+          "Failed to start timer:",
+          err
+        );
+
+        setError(
+          "Timer start save করা যায়নি।"
         );
       } finally {
         setSaving(false);
       }
-    }, [timer, saving]);
+    }, [
+      user,
+      timer,
+      saving,
+    ]);
 
-  /* =====================================================
+  /* =======================================================
      PAUSE
-     ===================================================== */
+     ======================================================= */
 
   const handlePause =
     useCallback(async () => {
-      if (!timer || saving) {
+      if (
+        !user ||
+        !timer ||
+        saving
+      ) {
         return;
       }
 
-      const now =
-        new Date().getTime();
+      const pauseTime =
+        Date.now();
 
-      const updated =
+      const updatedTimer =
         pauseFocus(
           timer,
-          now
+          pauseTime
         );
 
-      setTimer(updated);
-
       setSaving(true);
+      setError(null);
 
       try {
         await saveFocusTimer(
-          updated
+          user,
+          updatedTimer
+        );
+
+        setTimer(
+          updatedTimer
+        );
+      } catch (err) {
+        console.error(
+          "Failed to pause timer:",
+          err
+        );
+
+        setError(
+          "Timer pause save করা যায়নি।"
         );
       } finally {
         setSaving(false);
       }
-    }, [timer, saving]);
+    }, [
+      user,
+      timer,
+      saving,
+    ]);
 
-  /* =====================================================
+  /* =======================================================
      RESET
-     ===================================================== */
+     ======================================================= */
 
   const handleReset =
     useCallback(async () => {
-      if (saving) {
+      if (
+        !user ||
+        !timer ||
+        saving
+      ) {
         return;
       }
 
       setSaving(true);
+      setError(null);
 
       try {
         const resetTimer =
-          await resetFocusTimer();
+          await resetFocusTimer(
+            user,
+            timer
+          );
 
-        setTimer(resetTimer);
+        setTimer(
+          resetTimer
+        );
+      } catch (err) {
+        console.error(
+          "Failed to reset timer:",
+          err
+        );
+
+        setError(
+          "Timer reset save করা যায়নি।"
+        );
       } finally {
         setSaving(false);
       }
-    }, [saving]);
+    }, [
+      user,
+      timer,
+      saving,
+    ]);
 
-  /* =====================================================
+  /* =======================================================
      LOADING
-     ===================================================== */
+     ======================================================= */
 
   if (loading) {
     return (
@@ -250,13 +384,13 @@ export default function FocusTimer() {
     );
   }
 
-  /* =====================================================
+  /* =======================================================
      NOT LOGGED IN
-     ===================================================== */
+     ======================================================= */
 
-  if (!timer) {
+  if (!user) {
     return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+      <div className="w-full max-w-xl rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm">
         <h2 className="text-lg font-semibold text-slate-900">
           Focus Timer
         </h2>
@@ -268,21 +402,63 @@ export default function FocusTimer() {
     );
   }
 
-  /* =====================================================
-     DISPLAY TIME
-     ===================================================== */
+  /* =======================================================
+     TIMER NOT AVAILABLE
+     ======================================================= */
 
-  const time =
-    currentTime === null
-      ? timer.elapsed
-      : getElapsedTime(
-          timer,
-          currentTime
-        );
+  if (!timer) {
+    return (
+      <div className="w-full max-w-xl rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+        <h2 className="text-lg font-semibold text-slate-900">
+          Focus Timer
+        </h2>
+
+        <p className="mt-3 text-sm text-red-500">
+          {error ??
+            "Focus Timer পাওয়া যায়নি।"}
+        </p>
+      </div>
+    );
+  }
+
+  /* =======================================================
+     DISPLAY TIME
+     ======================================================= */
+
+  /*
+   * When running:
+   *
+   * now > 0
+   *      ↓
+   * calculate live elapsed
+   *
+   * When paused:
+   *
+   * timer.elapsed
+   *      ↓
+   * display saved time
+   */
+  const displayNow =
+    timer.running && now > 0
+      ? now
+      : timer.startedAt ??
+        0;
+
+  const elapsed =
+    getElapsedTime(
+      timer,
+      displayNow
+    );
+
+  /* =======================================================
+     UI
+     ======================================================= */
 
   return (
     <div className="w-full max-w-xl rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
+
       <div className="text-center">
+
         <p className="text-sm font-medium text-slate-500">
           Focus Timer
         </p>
@@ -291,11 +467,24 @@ export default function FocusTimer() {
           {timer.title}
         </h2>
 
+        {/* TIME */}
+
         <div className="mt-8 font-mono text-5xl font-bold tracking-wider text-slate-900">
-          {formatTime(time)}
+          {formatTime(elapsed)}
         </div>
 
+        {/* ERROR */}
+
+        {error && (
+          <p className="mt-4 text-sm text-red-500">
+            {error}
+          </p>
+        )}
+
+        {/* BUTTONS */}
+
         <div className="mt-8 flex items-center justify-center gap-3">
+
           {!timer.running ? (
             <button
               type="button"
@@ -334,13 +523,17 @@ export default function FocusTimer() {
           >
             Reset
           </button>
+
         </div>
+
+        {/* STATUS */}
 
         {timer.running && (
           <p className="mt-5 text-xs font-medium text-green-600">
             Timer is running
           </p>
         )}
+
       </div>
     </div>
   );

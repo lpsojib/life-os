@@ -1,20 +1,25 @@
-import type { FocusItem } from "../types/focus.types";
+import type { User } from "firebase/auth";
+
+import {
+  onAuthStateChanged,
+  type Unsubscribe,
+} from "firebase/auth";
 
 import {
   doc,
   getDoc,
-  onSnapshot,
   setDoc,
 } from "firebase/firestore";
 
-import {
-  onAuthStateChanged,
-  type User,
-} from "firebase/auth";
-
 import { auth, db } from "@/lib/firebase";
 
-const TIMER_DOCUMENT = "main";
+import type { FocusItem } from "../types/focus.types";
+
+/* =========================================================
+   FIRESTORE PATH
+   ========================================================= */
+
+const TIMER_ID = "main";
 
 function getTimerRef(user: User) {
   return doc(
@@ -22,7 +27,7 @@ function getTimerRef(user: User) {
     "users",
     user.uid,
     "focusTimer",
-    TIMER_DOCUMENT
+    TIMER_ID
   );
 }
 
@@ -32,32 +37,41 @@ function getTimerRef(user: User) {
 
 export function createDefaultFocusItem(): FocusItem {
   return {
-    id: TIMER_DOCUMENT,
+    id: TIMER_ID,
     title: "Focus Timer",
     startedAt: null,
     elapsed: 0,
     running: false,
-    createdAt: new Date().getTime(),
+    createdAt: Date.now(),
   };
 }
 
 /* =========================================================
-   LOAD TIMER
+   AUTH LISTENER
    ========================================================= */
 
-export async function loadFocusTimer(): Promise<
-  FocusItem | null
-> {
-  const user = auth.currentUser;
+export function subscribeToAuth(
+  callback: (user: User | null) => void
+): Unsubscribe {
+  return onAuthStateChanged(
+    auth,
+    callback
+  );
+}
 
-  if (!user) {
-    return null;
-  }
+/* =========================================================
+   LOAD TIMER FROM FIRESTORE
+   ========================================================= */
 
+export async function loadFocusTimer(
+  user: User
+): Promise<FocusItem | null> {
   try {
-    const timerRef = getTimerRef(user);
+    const timerRef =
+      getTimerRef(user);
 
-    const snapshot = await getDoc(timerRef);
+    const snapshot =
+      await getDoc(timerRef);
 
     if (!snapshot.exists()) {
       return null;
@@ -66,7 +80,7 @@ export async function loadFocusTimer(): Promise<
     const data = snapshot.data();
 
     return {
-      id: TIMER_DOCUMENT,
+      id: TIMER_ID,
 
       title:
         typeof data.title === "string"
@@ -89,36 +103,34 @@ export async function loadFocusTimer(): Promise<
       createdAt:
         typeof data.createdAt === "number"
           ? data.createdAt
-          : new Date().getTime(),
+          : Date.now(),
     };
   } catch (error) {
     console.error(
-      "Failed to load focus timer:",
+      "FOCUS TIMER LOAD ERROR:",
       error
     );
 
-    return null;
+    throw error;
   }
 }
 
 /* =========================================================
-   SAVE TIMER
+   SAVE TIMER TO FIRESTORE
    ========================================================= */
 
 export async function saveFocusTimer(
+  user: User,
   timer: FocusItem
 ): Promise<void> {
-  const user = auth.currentUser;
-
-  if (!user) {
-    return;
-  }
-
   try {
+    const timerRef =
+      getTimerRef(user);
+
     await setDoc(
-      getTimerRef(user),
+      timerRef,
       {
-        id: TIMER_DOCUMENT,
+        id: TIMER_ID,
         title: timer.title,
         startedAt: timer.startedAt,
         elapsed: timer.elapsed,
@@ -131,115 +143,65 @@ export async function saveFocusTimer(
     );
   } catch (error) {
     console.error(
-      "Failed to save focus timer:",
+      "FOCUS TIMER SAVE ERROR:",
       error
     );
+
+    throw error;
   }
+}
+
+/* =========================================================
+   CREATE TIMER FOR NEW USER
+   ========================================================= */
+
+export async function createFocusTimer(
+  user: User
+): Promise<FocusItem> {
+  const timer =
+    createDefaultFocusItem();
+
+  await saveFocusTimer(
+    user,
+    timer
+  );
+
+  return timer;
 }
 
 /* =========================================================
    RESET TIMER
    ========================================================= */
 
-export async function resetFocusTimer(): Promise<FocusItem> {
-  const existing =
-    await loadFocusTimer();
+export async function resetFocusTimer(
+  user: User,
+  timer: FocusItem
+): Promise<FocusItem> {
+  const resetTimer: FocusItem = {
+    ...timer,
 
-  const timer: FocusItem = {
-    ...(existing ?? createDefaultFocusItem()),
+    running: false,
 
     startedAt: null,
 
     elapsed: 0,
-
-    running: false,
   };
 
-  await saveFocusTimer(timer);
-
-  return timer;
-}
-
-/* =========================================================
-   AUTH READY
-   ========================================================= */
-
-export function subscribeToAuth(
-  callback: (user: User | null) => void
-) {
-  return onAuthStateChanged(
-    auth,
-    callback
+  await saveFocusTimer(
+    user,
+    resetTimer
   );
+
+  return resetTimer;
 }
 
 /* =========================================================
-   REAL-TIME TIMER LISTENER
-   ========================================================= */
-
-export function subscribeToFocusTimer(
-  user: User,
-  callback: (
-    timer: FocusItem | null
-  ) => void
-) {
-  return onSnapshot(
-    getTimerRef(user),
-
-    (snapshot) => {
-      if (!snapshot.exists()) {
-        callback(null);
-        return;
-      }
-
-      const data = snapshot.data();
-
-      const timer: FocusItem = {
-        id: TIMER_DOCUMENT,
-
-        title:
-          typeof data.title === "string"
-            ? data.title
-            : "Focus Timer",
-
-        startedAt:
-          typeof data.startedAt === "number"
-            ? data.startedAt
-            : null,
-
-        elapsed:
-          typeof data.elapsed === "number"
-            ? data.elapsed
-            : 0,
-
-        running:
-          data.running === true,
-
-        createdAt:
-          typeof data.createdAt === "number"
-            ? data.createdAt
-            : new Date().getTime(),
-      };
-
-      callback(timer);
-    },
-
-    (error) => {
-      console.error(
-        "Focus timer listener error:",
-        error
-      );
-    }
-  );
-}
-
-/* =========================================================
-   ELAPSED TIME
+   GET ELAPSED TIME
    ========================================================= */
 
 export function getElapsedTime(
   timer: FocusItem,
-  currentTime: number
+  now: number
 ): number {
   if (
     !timer.running ||
@@ -250,7 +212,7 @@ export function getElapsedTime(
 
   return (
     timer.elapsed +
-    (currentTime - timer.startedAt)
+    (now - timer.startedAt)
   );
 }
 
@@ -260,7 +222,7 @@ export function getElapsedTime(
 
 export function startFocus(
   timer: FocusItem,
-  currentTime: number
+  now: number
 ): FocusItem {
   if (timer.running) {
     return timer;
@@ -271,7 +233,7 @@ export function startFocus(
 
     running: true,
 
-    startedAt: currentTime,
+    startedAt: now,
   };
 }
 
@@ -281,7 +243,7 @@ export function startFocus(
 
 export function pauseFocus(
   timer: FocusItem,
-  currentTime: number
+  now: number
 ): FocusItem {
   if (
     !timer.running ||
@@ -291,7 +253,7 @@ export function pauseFocus(
   }
 
   const additionalTime =
-    currentTime - timer.startedAt;
+    now - timer.startedAt;
 
   return {
     ...timer,
