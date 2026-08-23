@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Check,
   CheckSquare,
@@ -33,10 +33,8 @@ const COLORS = {
   tealSoft: "#E3EFEA",
 
   clay: "#B15A38",
-  claySoft: "#F6E4D8",
 
   gold: "#B4842A",
-  goldSoft: "#F5EACB",
 };
 
 /* =========================================================
@@ -50,44 +48,54 @@ const priorityLabel = {
 } as const;
 
 /* =========================================================
+   PRIORITY ORDER
+========================================================= */
+
+const priorityOrder = {
+  high: 0,
+  medium: 1,
+  low: 2,
+} as const;
+
+/* =========================================================
+   TODAY STRING
+========================================================= */
+
+function getTodayString(): string {
+  const date = new Date();
+
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+/* =========================================================
    TASK CHECKBOX
 ========================================================= */
 
 interface TaskCheckboxProps {
   loading: boolean;
-  onClick: () => void;
 }
 
 function TaskCheckbox({
   loading,
-  onClick,
 }: TaskCheckboxProps) {
   return (
-    <button
-      type="button"
-      disabled={loading}
-      onClick={onClick}
-      aria-label="Complete task"
+    <span
       className="
         flex
         items-center
         justify-center
         flex-shrink-0
         rounded-full
-        transition-all
-        duration-200
-        hover:scale-105
-        active:scale-95
       "
       style={{
         width: 22,
         height: 22,
-
         border: `2px solid ${COLORS.line}`,
-
         background: COLORS.card,
-
-        opacity: loading ? 0.6 : 1,
       }}
     >
       {loading && (
@@ -97,7 +105,7 @@ function TaskCheckbox({
           className="animate-spin"
         />
       )}
-    </button>
+    </span>
   );
 }
 
@@ -108,8 +116,9 @@ function TaskCheckbox({
 export default function TodayTasks() {
   const [tasks, setTasks] = useState<Task[]>([]);
 
-  const [loading, setLoading] =
-    useState(true);
+  const [loading, setLoading] = useState(true);
+
+  const [refreshing, setRefreshing] = useState(false);
 
   const [completingTaskId, setCompletingTaskId] =
     useState<string | null>(null);
@@ -121,48 +130,85 @@ export default function TodayTasks() {
      TODAY
   ======================================================= */
 
-  const today = useMemo(() => {
-    const date = new Date();
-
-    return [
-      date.getFullYear(),
-
-      String(
-        date.getMonth() + 1
-      ).padStart(2, "0"),
-
-      String(
-        date.getDate()
-      ).padStart(2, "0"),
-    ].join("-");
-  }, []);
+  const today = useMemo(
+    () => getTodayString(),
+    []
+  );
 
   /* =======================================================
      LOAD TASKS
   ======================================================= */
 
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadTasks = async () => {
+  const loadTasks = useCallback(
+    async (showLoader = false) => {
       try {
+        if (showLoader) {
+          setRefreshing(true);
+        }
+
         const result = await getTasks();
 
-        if (!cancelled) {
-          setTasks(result);
-          setError(null);
-        }
+        setTasks(result);
+        setError(null);
       } catch (err) {
         console.error(
-          "Failed to load dashboard tasks:",
+          "Dashboard task load failed:",
           err
         );
 
-        if (!cancelled) {
-          setError(
-            "টাস্ক লোড করা যায়নি।"
-          );
+        /*
+         * প্রথমবার data না থাকলে error দেখাব।
+         *
+         * কিন্তু already loaded data থাকলে
+         * শুধু console-এ রাখব।
+         */
+        setTasks((currentTasks) => {
+          if (currentTasks.length === 0) {
+            setError(
+              "টাস্ক লোড করা যায়নি।"
+            );
+          }
+
+          return currentTasks;
+        });
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    []
+  );
+
+  /* =======================================================
+     INITIAL LOAD
+  ======================================================= */
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const startLoad = async () => {
+      try {
+        const result = await getTasks();
+
+        if (cancelled) {
+          return;
         }
+
+        setTasks(result);
+        setError(null);
+      } catch (err) {
+        if (cancelled) {
+          return;
+        }
+
+        console.error(
+          "Initial dashboard task load failed:",
+          err
+        );
+
+        setError(
+          "টাস্ক লোড করা যায়নি।"
+        );
       } finally {
         if (!cancelled) {
           setLoading(false);
@@ -170,7 +216,7 @@ export default function TodayTasks() {
       }
     };
 
-    void loadTasks();
+    void startLoad();
 
     return () => {
       cancelled = true;
@@ -178,22 +224,65 @@ export default function TodayTasks() {
   }, []);
 
   /* =======================================================
-     ONLINE REFRESH
+     TASK UPDATE EVENT
+     
+     Task page বা অন্য component থেকে task change হলে
+     Dashboard নিজে থেকেই refresh হবে।
+  ======================================================= */
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null =
+      null;
+
+    const handleTaskChanged = () => {
+      if (timer) {
+        clearTimeout(timer);
+      }
+
+      /*
+       * Event একই সময়ে একাধিকবার fire করলে
+       * একাধিক Firebase request না পাঠিয়ে
+       * একবার refresh করা হবে।
+       */
+      timer = setTimeout(() => {
+        void loadTasks(false);
+      }, 50);
+    };
+
+    window.addEventListener(
+      "life-os-task-changed",
+      handleTaskChanged
+    );
+
+    window.addEventListener(
+      "life-os-task-synced",
+      handleTaskChanged
+    );
+
+    return () => {
+      if (timer) {
+        clearTimeout(timer);
+      }
+
+      window.removeEventListener(
+        "life-os-task-changed",
+        handleTaskChanged
+      );
+
+      window.removeEventListener(
+        "life-os-task-synced",
+        handleTaskChanged
+      );
+    };
+  }, [loadTasks]);
+
+  /* =======================================================
+     ONLINE
   ======================================================= */
 
   useEffect(() => {
     const handleOnline = () => {
-      void getTasks()
-        .then((result) => {
-          setTasks(result);
-          setError(null);
-        })
-        .catch((err) => {
-          console.error(
-            "Failed to refresh dashboard tasks:",
-            err
-          );
-        });
+      void loadTasks(false);
     };
 
     window.addEventListener(
@@ -207,91 +296,101 @@ export default function TodayTasks() {
         handleOnline
       );
     };
-  }, []);
+  }, [loadTasks]);
 
   /* =======================================================
      COMPLETE TASK
   ======================================================= */
 
-  const handleCompleteTask =
-    async (taskId: string) => {
-      if (completingTaskId) {
-        return;
-      }
+  const handleCompleteTask = async (
+    taskId: string
+  ) => {
+    if (completingTaskId !== null) {
+      return;
+    }
 
-      try {
-        setCompletingTaskId(taskId);
-        setError(null);
+    const previousTasks = tasks;
 
-        /*
-         * Immediately remove the task
-         * from dashboard UI.
-         *
-         * This makes the dashboard
-         * feel instant.
-         */
-        setTasks((currentTasks) =>
-          currentTasks.filter(
-            (task) => task.id !== taskId
-          )
-        );
+    try {
+      setCompletingTaskId(taskId);
+      setError(null);
 
-        /*
-         * Existing service handles:
-         *
-         * 1. Local update
-         * 2. Firebase background sync
-         * 3. Repeat-daily task creation
-         */
-        await completeTask(taskId);
-      } catch (err) {
-        console.error(
-          "Failed to complete task:",
-          err
-        );
+      /*
+       * UI থেকে সঙ্গে সঙ্গে task সরিয়ে দিচ্ছি।
+       *
+       * User click করার সাথে সাথে task চলে যাবে।
+       */
+      setTasks((currentTasks) =>
+        currentTasks.filter(
+          (task) => task.id !== taskId
+        )
+      );
 
-        /*
-         * If completion fails,
-         * reload the task list so
-         * the task comes back.
-         */
-        try {
-          const result = await getTasks();
+      /*
+       * Firebase/local task service
+       */
+      await completeTask(taskId);
 
-          setTasks(result);
-        } catch (reloadError) {
-          console.error(
-            "Failed to restore task list:",
-            reloadError
-          );
-        }
+      /*
+       * IMPORTANT:
+       *
+       * OverviewSection এই event শুনছে।
+       * Task complete হওয়ার পর Overview সঙ্গে সঙ্গে
+       * নতুন count load করবে।
+       */
+      window.dispatchEvent(
+        new CustomEvent(
+          "life-os-task-changed"
+        )
+      );
 
-        setError(
-          "টাস্ক সম্পন্ন করা যায়নি।"
-        );
-      } finally {
-        setCompletingTaskId(null);
-      }
-    };
+      /*
+       * অন্য dashboard component থাকলে
+       * তারাও update করতে পারবে।
+       */
+      window.dispatchEvent(
+        new CustomEvent(
+          "life-os-dashboard-refresh"
+        )
+      );
+    } catch (err) {
+      console.error(
+        "Failed to complete task:",
+        err
+      );
+
+      /*
+       * Complete ব্যর্থ হলে আগের task ফিরিয়ে দাও।
+       */
+      setTasks(previousTasks);
+
+      setError(
+        "টাস্ক সম্পন্ন করা যায়নি।"
+      );
+    } finally {
+      setCompletingTaskId(null);
+    }
+  };
 
   /* =======================================================
-     TODAY'S ACTIVE TASKS
+     TODAY ACTIVE TASKS
   ======================================================= */
 
   const todayTasks = useMemo(() => {
     return tasks
       .filter((task) => {
         /*
-         * Only active daily tasks.
+         * Daily task সবসময় today's task।
          */
         if (task.status === "daily") {
           return true;
         }
 
         /*
-         * Pending task becomes visible
-         * when its active date is today
-         * or earlier.
+         * Pending task:
+         *
+         * activeDate আজ বা তার আগের হলে
+         * Dashboard-এ দেখাবে।
          */
         if (
           task.status === "pending" &&
@@ -301,37 +400,23 @@ export default function TodayTasks() {
         }
 
         /*
-         * Completed tasks are intentionally
-         * NOT shown.
+         * Completed task দেখাব না।
          */
         return false;
       })
       .sort((a, b) => {
-        /*
-         * Priority order:
-         *
-         * high
-         * medium
-         * low
-         */
-
-        const priorityOrder = {
-          high: 0,
-          medium: 1,
-          low: 2,
-        };
-
         const priorityDifference =
           priorityOrder[a.priority] -
           priorityOrder[b.priority];
 
-        if (
-          priorityDifference !== 0
-        ) {
+        if (priorityDifference !== 0) {
           return priorityDifference;
         }
 
-        return a.order - b.order;
+        return (
+          (a.order ?? 0) -
+          (b.order ?? 0)
+        );
       });
   }, [tasks, today]);
 
@@ -356,14 +441,45 @@ export default function TodayTasks() {
         icon={CheckSquare}
         title="আজকের টাস্ক"
         subtitle={
-          hasTasks
+          loading
+            ? "টাস্ক লোড হচ্ছে..."
+            : hasTasks
             ? `${todayTasks.length}টি টাস্ক বাকি`
             : "সব টাস্ক সম্পন্ন"
         }
       />
 
       {/* ===================================================
-          LOADING
+          REFRESHING INDICATOR
+      =================================================== */}
+
+      {!loading && refreshing && (
+        <div
+          className="
+            flex
+            items-center
+            justify-center
+            gap-2
+            mb-3
+            text-xs
+          "
+          style={{
+            color: COLORS.mutedSoft,
+          }}
+        >
+          <Loader2
+            size={13}
+            className="animate-spin"
+          />
+
+          <span>
+            আপডেট হচ্ছে...
+          </span>
+        </div>
+      )}
+
+      {/* ===================================================
+          INITIAL LOADING
       =================================================== */}
 
       {loading && (
@@ -405,11 +521,8 @@ export default function TodayTasks() {
             mb-3
           "
           style={{
-            background:
-              COLORS.claySoft,
-
-            color:
-              COLORS.clay,
+            background: "#F6E4D8",
+            color: COLORS.clay,
           }}
         >
           {error}
@@ -538,7 +651,6 @@ export default function TodayTasks() {
                     loading={
                       isCompleting
                     }
-                    onClick={() => {}}
                   />
 
                   {/* =================================================
@@ -558,8 +670,6 @@ export default function TodayTasks() {
                     >
                       {task.title}
                     </div>
-
-                    {/* Description */}
 
                     {task.description && (
                       <div
