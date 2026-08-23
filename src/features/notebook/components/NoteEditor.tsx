@@ -34,7 +34,7 @@ interface NoteEditorProps {
 }
 
 /* =========================================================
-   HELPERS
+   BLOCK HELPERS
 ========================================================= */
 
 function createTextBlock(): NoteBlock {
@@ -65,9 +65,7 @@ function normalizeBlocks(
   }
 
   return blocks.map((block) => {
-    if (
-      block.type === "checklist"
-    ) {
+    if (block.type === "checklist") {
       return {
         ...block,
         type: "checklist",
@@ -75,9 +73,7 @@ function normalizeBlocks(
           typeof block.text === "string"
             ? block.text
             : "",
-        checked: Boolean(
-          block.checked,
-        ),
+        checked: Boolean(block.checked),
       };
     }
 
@@ -112,16 +108,13 @@ export default function NoteEditor({
       normalizeBlocks(note.blocks),
     );
 
-  const [pinned, setPinned] =
-    useState(
-      Boolean(note.pinned),
-    );
+  const [pinned, setPinned] = useState(
+    Boolean(note.pinned),
+  );
 
-  const [saving, setSaving] =
-    useState(false);
+  const [saving, setSaving] = useState(false);
 
-  const [deleting, setDeleting] =
-    useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   /* =======================================================
      CREATE UPDATED NOTE
@@ -135,10 +128,6 @@ export default function NoteEditor({
     return {
       ...note,
 
-      /*
-       * Empty title is intentional.
-       * No "Untitled Note".
-       */
       title: nextTitle,
 
       type: note.type ?? "text",
@@ -147,16 +136,14 @@ export default function NoteEditor({
 
       pinned: nextPinned,
 
-      createdAt:
-        note.createdAt,
+      createdAt: note.createdAt,
 
-      updatedAt:
-        new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
   }
 
   /* =======================================================
-     TITLE
+     TITLE CHANGE
   ======================================================= */
 
   function handleTitleChange(
@@ -175,7 +162,7 @@ export default function NoteEditor({
   }
 
   /* =======================================================
-     BLOCK TEXT
+     BLOCK TEXT CHANGE
   ======================================================= */
 
   function handleBlockChange(
@@ -205,7 +192,7 @@ export default function NoteEditor({
   }
 
   /* =======================================================
-     CHECKBOX
+     CHECKBOX CHANGE
   ======================================================= */
 
   function handleCheckboxChange(
@@ -291,9 +278,7 @@ export default function NoteEditor({
           block.id !== blockId,
       );
 
-    if (
-      updatedBlocks.length === 0
-    ) {
+    if (updatedBlocks.length === 0) {
       updatedBlocks = [
         createTextBlock(),
       ];
@@ -356,13 +341,6 @@ export default function NoteEditor({
       } else {
         await saveNote(updated);
       }
-
-      /*
-       * IMPORTANT:
-       * Do NOT call onClose().
-       *
-       * Editor stays open after Save.
-       */
     } catch (error) {
       console.error(
         "Note save failed:",
@@ -465,10 +443,12 @@ export default function NoteEditor({
         <div
           className="
             flex
+            shrink-0
             items-center
             justify-between
             border-b
             border-gray-100
+            bg-white
             px-4
             py-3
             sm:px-6
@@ -496,14 +476,13 @@ export default function NoteEditor({
               className="
                 hidden
                 text-sm
-                font-medium
+                font-semibold
                 text-gray-500
                 sm:block
               "
             >
               Notebook
             </span>
-
           </div>
 
           <div className="flex items-center gap-1">
@@ -540,9 +519,7 @@ export default function NoteEditor({
 
             <button
               type="button"
-              onClick={
-                handleDelete
-              }
+              onClick={handleDelete}
               disabled={deleting}
               title="Delete"
               className="
@@ -552,6 +529,7 @@ export default function NoteEditor({
                 transition
                 hover:bg-red-50
                 hover:text-red-500
+                disabled:cursor-not-allowed
                 disabled:opacity-50
               "
             >
@@ -576,8 +554,10 @@ export default function NoteEditor({
                 text-sm
                 font-semibold
                 text-white
+                shadow-sm
                 transition
                 hover:bg-green-700
+                hover:shadow
                 disabled:cursor-not-allowed
                 disabled:opacity-60
                 sm:px-4
@@ -591,7 +571,6 @@ export default function NoteEditor({
                   : "Save"}
               </span>
             </button>
-
           </div>
         </div>
 
@@ -603,10 +582,11 @@ export default function NoteEditor({
           className="
             flex-1
             overflow-y-auto
+            bg-white
             px-4
-            py-5
+            py-6
             sm:px-10
-            sm:py-7
+            sm:py-8
           "
         >
           <div className="mx-auto max-w-3xl">
@@ -626,253 +606,323 @@ export default function NoteEditor({
               placeholder="Write a title"
               className="
                 w-full
-                rounded-xl
+                rounded-2xl
                 border
                 border-gray-200
-                bg-white
+                bg-gray-50/50
                 px-4
-                py-3
-                text-lg
-                font-semibold
-                leading-6
+                py-3.5
+                text-xl
+                font-bold
+                leading-7
                 tracking-tight
                 text-gray-900
                 outline-none
                 transition
                 focus:border-green-500
-                focus:ring-2
-                focus:ring-green-100
-                placeholder:text-gray-400
-                sm:text-xl
+                focus:bg-white
+                focus:ring-4
+                focus:ring-green-50
+                placeholder:text-gray-300
+                sm:px-5
+                sm:text-2xl
+                sm:leading-8
               "
             />
 
             {/* =================================================
-                CONTENT
+                CONTENT AREA
             ================================================= */}
 
             <div
               className="
-                mt-5
-                space-y-0.5
+                mt-6
+                rounded-2xl
+                border
+                border-gray-100
+                bg-white
+                px-3
+                py-3
+                sm:px-4
               "
             >
-              {blocks.map((block) => {
-                const checklist =
-                  block.type ===
-                  "checklist";
 
-                return (
-                  <div
-                    key={block.id}
-                    className="
-                      group
-                      flex
-                      items-center
-                      gap-2.5
-                      py-0.5
-                    "
-                  >
+              {/* =================================================
+                  BLOCK LIST
 
-                    {/* =================================================
-                        CHECKBOX
-                    ================================================= */}
+                  IMPORTANT:
+                  Every block uses the same 28px left column.
+                  Therefore paragraph and checkbox always stay
+                  perfectly aligned.
+              ================================================= */}
 
-                    {checklist ? (
-                      <button
-                        type="button"
-                        aria-label={
-                          block.checked
-                            ? "Uncheck item"
-                            : "Check item"
-                        }
-                        onClick={() =>
-                          handleCheckboxChange(
-                            block.id,
-                            !block.checked,
-                          )
-                        }
-                        className={`
-                          flex
-                          h-[18px]
-                          w-[18px]
-                          shrink-0
-                          items-center
-                          justify-center
-                          rounded-[4px]
-                          border-2
-                          transition
-                          ${
-                            block.checked
-                              ? "border-green-600 bg-green-600 text-white"
-                              : "border-gray-400 bg-white text-transparent hover:border-green-600"
-                          }
-                        `}
-                      >
-                        <Check
-                          size={12}
-                          strokeWidth={3}
-                        />
-                      </button>
-                    ) : (
-                      <div
-                        className="
-                          h-[18px]
-                          w-[18px]
-                          shrink-0
-                        "
-                      />
-                    )}
+              <div className="space-y-1">
 
-                    {/* =================================================
-                        TEXT
-                    ================================================= */}
+                {blocks.map((block) => {
+                  const checklist =
+                    block.type ===
+                    "checklist";
 
-                    <textarea
-                      value={
-                        block.text ?? ""
-                      }
-                      onChange={(event) => {
-                        handleBlockChange(
-                          block.id,
-                          event.target.value,
-                        );
-
-                        resizeTextarea(
-                          event.currentTarget,
-                        );
-                      }}
-                      onInput={(event) => {
-                        resizeTextarea(
-                          event.currentTarget,
-                        );
-                      }}
-                      placeholder={
-                        checklist
-                          ? "Write a checklist item..."
-                          : "Start writing..."
-                      }
-                      rows={1}
-                      className={`
-                        min-h-[24px]
-                        min-w-0
-                        flex-1
-                        resize-none
-                        overflow-hidden
-                        border-0
-                        bg-transparent
-                        p-0
-                        text-sm
-                        font-normal
-                        leading-5
-                        outline-none
-                        placeholder:text-gray-300
-                        ${
-                          block.checked
-                            ? "text-gray-400 line-through"
-                            : "text-gray-800"
-                        }
-                      `}
-                    />
-
-                    {/* =================================================
-                        REMOVE
-                    ================================================= */}
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        removeBlock(
-                          block.id,
-                        )
-                      }
-                      title="Remove"
+                  return (
+                    <div
+                      key={block.id}
                       className="
-                        shrink-0
-                        rounded-lg
-                        p-1
-                        text-gray-300
-                        opacity-0
+                        group
+                        flex
+                        w-full
+                        items-start
+                        gap-2
+                        rounded-xl
+                        px-1
+                        py-1.5
                         transition
-                        group-hover:opacity-100
-                        hover:bg-red-50
-                        hover:text-red-500
+                        hover:bg-gray-50
                       "
                     >
-                      <X size={14} />
-                    </button>
 
-                  </div>
-                );
-              })}
+                      {/* =================================================
+                          FIXED LEFT ALIGNMENT AREA
+                      ================================================= */}
+
+                      <div
+                        className="
+                          flex
+                          w-6
+                          shrink-0
+                          items-start
+                          justify-center
+                          pt-[3px]
+                        "
+                      >
+                        {checklist ? (
+                          <button
+                            type="button"
+                            aria-label={
+                              block.checked
+                                ? "Uncheck item"
+                                : "Check item"
+                            }
+                            onClick={() =>
+                              handleCheckboxChange(
+                                block.id,
+                                !block.checked,
+                              )
+                            }
+                            className={`
+                              flex
+                              h-[18px]
+                              w-[18px]
+                              shrink-0
+                              items-center
+                              justify-center
+                              rounded-[5px]
+                              border-2
+                              transition
+                              ${
+                                block.checked
+                                  ? "border-green-600 bg-green-600 text-white"
+                                  : "border-gray-300 bg-white text-transparent hover:border-green-500"
+                              }
+                            `}
+                          >
+                            <Check
+                              size={12}
+                              strokeWidth={3}
+                            />
+                          </button>
+                        ) : (
+                          <div
+                            className="
+                              h-[18px]
+                              w-[18px]
+                            "
+                          />
+                        )}
+                      </div>
+
+                      {/* =================================================
+                          TEXT AREA
+
+                          Both paragraph and checkbox use exactly
+                          the same textarea area.
+                      ================================================= */}
+
+                      <textarea
+                        value={
+                          block.text ?? ""
+                        }
+                        onChange={(event) => {
+                          handleBlockChange(
+                            block.id,
+                            event.target.value,
+                          );
+
+                          resizeTextarea(
+                            event.currentTarget,
+                          );
+                        }}
+                        onInput={(event) => {
+                          resizeTextarea(
+                            event.currentTarget,
+                          );
+                        }}
+                        placeholder={
+                          checklist
+                            ? "Write a checklist item..."
+                            : "Start writing..."
+                        }
+                        rows={1}
+                        className={`
+                          min-h-[24px]
+                          min-w-0
+                          flex-1
+                          resize-none
+                          overflow-hidden
+                          border-0
+                          bg-transparent
+                          p-0
+                          text-[15px]
+                          font-normal
+                          leading-6
+                          outline-none
+                          placeholder:text-gray-300
+                          ${
+                            block.checked
+                              ? "text-gray-400 line-through"
+                              : "text-gray-800"
+                          }
+                        `}
+                      />
+
+                      {/* =================================================
+                          REMOVE BUTTON
+                      ================================================= */}
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          removeBlock(
+                            block.id,
+                          )
+                        }
+                        title="Remove block"
+                        className="
+                          mt-0.5
+                          shrink-0
+                          rounded-lg
+                          p-1
+                          text-gray-300
+                          opacity-0
+                          transition
+                          group-hover:opacity-100
+                          hover:bg-red-50
+                          hover:text-red-500
+                          focus:opacity-100
+                        "
+                      >
+                        <X size={14} />
+                      </button>
+
+                    </div>
+                  );
+                })}
+
+              </div>
+
+              {/* =================================================
+                  ADD BLOCK BAR
+              ================================================= */}
+
+              <div
+                className="
+                  mt-3
+                  border-t
+                  border-gray-100
+                  pt-3
+                "
+              >
+                <div
+                  className="
+                    flex
+                    flex-wrap
+                    items-center
+                    gap-2
+                  "
+                >
+
+                  {/* PARAGRAPH */}
+
+                  <button
+                    type="button"
+                    onClick={addParagraph}
+                    className="
+                      inline-flex
+                      items-center
+                      gap-1.5
+                      rounded-xl
+                      border
+                      border-transparent
+                      px-3
+                      py-2
+                      text-sm
+                      font-medium
+                      text-gray-500
+                      transition
+                      hover:border-gray-200
+                      hover:bg-gray-50
+                      hover:text-gray-800
+                    "
+                  >
+                    <Plus size={16} />
+                    Paragraph
+                  </button>
+
+                  {/* CHECKBOX */}
+
+                  <button
+                    type="button"
+                    onClick={addCheckbox}
+                    className="
+                      inline-flex
+                      items-center
+                      gap-1.5
+                      rounded-xl
+                      border
+                      border-transparent
+                      px-3
+                      py-2
+                      text-sm
+                      font-medium
+                      text-gray-500
+                      transition
+                      hover:border-gray-200
+                      hover:bg-gray-50
+                      hover:text-gray-800
+                    "
+                  >
+                    <Plus size={16} />
+                    Checkbox
+                  </button>
+
+                </div>
+              </div>
             </div>
 
             {/* =================================================
-                ADD OPTIONS
+                SMALL HELPER TEXT
             ================================================= */}
 
-            <div
+            <p
               className="
-                mt-5
-                flex
-                flex-wrap
-                items-center
-                gap-2
-                border-t
-                border-gray-100
-                pt-4
+                mt-3
+                px-1
+                text-xs
+                text-gray-400
               "
             >
-
-              <button
-                type="button"
-                onClick={
-                  addParagraph
-                }
-                className="
-                  inline-flex
-                  items-center
-                  gap-2
-                  rounded-xl
-                  px-3
-                  py-2
-                  text-sm
-                  font-medium
-                  text-gray-500
-                  transition
-                  hover:bg-gray-100
-                  hover:text-gray-800
-                "
-              >
-                <Plus size={16} />
-                Paragraph
-              </button>
-
-              <button
-                type="button"
-                onClick={
-                  addCheckbox
-                }
-                className="
-                  inline-flex
-                  items-center
-                  gap-2
-                  rounded-xl
-                  px-3
-                  py-2
-                  text-sm
-                  font-medium
-                  text-gray-500
-                  transition
-                  hover:bg-gray-100
-                  hover:text-gray-800
-                "
-              >
-                <Plus size={16} />
-                Checkbox
-              </button>
-
-            </div>
+              Add paragraphs and checklist
+              items to build your note.
+            </p>
 
           </div>
         </div>
@@ -884,10 +934,12 @@ export default function NoteEditor({
         <div
           className="
             flex
+            shrink-0
             items-center
             justify-between
             border-t
             border-gray-100
+            bg-gray-50/50
             px-5
             py-3
             text-xs
