@@ -8,49 +8,51 @@ import {
 } from "react";
 
 import {
-  BarChart3,
   CheckSquare,
   Flame,
   Loader2,
+  TrendingUp,
 } from "lucide-react";
 
-import DashboardCard from "./DashboardCard";
-import DashboardSectionTitle from "./DashboardSectionTitle";
-
-import { getTasks } from "@/features/tasks/services/task.service";
+import {
+  getTasks,
+} from "@/features/tasks/services/task.service";
 
 import {
   getHabits,
   getHabitCompletions,
 } from "@/features/habits/services/habit.service";
 
-import type { Task } from "@/features/tasks/types/task.types";
+import DashboardCard from "./DashboardCard";
+import DashboardSectionTitle from "./DashboardSectionTitle";
 
 /* =========================================================
    TYPES
 ========================================================= */
 
+type Period = "weekly" | "monthly";
+
+interface ChartDay {
+  key: string;
+  label: string;
+  taskCompleted: number;
+  habitCompleted: number;
+}
+
 interface HabitCompletion {
-  id?: string;
   date: string;
   completed: boolean;
 }
 
-interface HabitData {
+interface ActivityTask {
+  status: string;
+  completedAt: string | null;
+}
+
+interface ActivityHabit {
   id: string;
-  status?: string;
+  status: string;
 }
-
-interface MonthData {
-  key: string;
-  label: string;
-  tasks: number;
-  habits: number;
-  total: number;
-  score: number;
-}
-
-type ViewMode = "monthly" | "yearly";
 
 /* =========================================================
    COLORS
@@ -76,356 +78,349 @@ const COLORS = {
 };
 
 /* =========================================================
-   MONTH NAMES
+   DATE HELPERS
 ========================================================= */
 
-const MONTHS = [
-  "জানু",
-  "ফেব্রু",
-  "মার্চ",
-  "এপ্রিল",
-  "মে",
-  "জুন",
-  "জুলাই",
-  "আগ",
-  "সেপ্টে",
-  "অক্টো",
-  "নভে",
-  "ডিসে",
-];
+function formatDate(date: Date): string {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+}
 
-/* =========================================================
-   HELPERS
-========================================================= */
+function startOfDay(date: Date): Date {
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate()
+  );
+}
 
-function getMonthKey(
-  dateString: string
-): string | null {
-  if (!dateString) {
-    return null;
-  }
+function getDateDaysAgo(days: number): Date {
+  const date = new Date();
 
-  const match =
-    dateString.match(
-      /^(\d{4})-(\d{2})/
-    );
+  date.setDate(
+    date.getDate() - days
+  );
 
-  if (!match) {
-    return null;
-  }
+  return startOfDay(date);
+}
 
-  return `${match[1]}-${match[2]}`;
+function getMonthStart(): Date {
+  const now = new Date();
+
+  return new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    1
+  );
 }
 
 /* =========================================================
-   PRODUCTIVITY CHART
+   DAY LABEL
 ========================================================= */
 
-export default function ProductivityChart() {
-  /* =======================================================
-     STATE
-  ======================================================= */
-
-  const [viewMode, setViewMode] =
-    useState<ViewMode>("monthly");
-
-  const [year, setYear] =
-    useState<number>(
-      () => new Date().getFullYear()
+function getDayLabel(
+  date: Date,
+  period: Period
+): string {
+  if (period === "weekly") {
+    return date.toLocaleDateString(
+      "bn-BD",
+      {
+        weekday: "short",
+      }
     );
+  }
 
-  const [selectedMonth, setSelectedMonth] =
-    useState<number>(
-      () => new Date().getMonth()
-    );
+  return String(
+    date.getDate()
+  );
+}
 
-  const [tasks, setTasks] =
-    useState<Task[]>([]);
+/* =========================================================
+   CREATE CHART DAYS
+========================================================= */
 
-  const [habits, setHabits] =
-    useState<HabitData[]>([]);
+function createChartDays(
+  period: Period
+): ChartDay[] {
+  const today = startOfDay(
+    new Date()
+  );
 
-  const [
-    habitCompletions,
-    setHabitCompletions,
-  ] = useState<
-    Record<
-      string,
-      HabitCompletion[]
+  const days: ChartDay[] = [];
+
+  if (period === "weekly") {
+    /*
+     * Last 7 days
+     */
+    for (
+      let i = 6;
+      i >= 0;
+      i--
+    ) {
+      const date =
+        getDateDaysAgo(i);
+
+      days.push({
+        key: formatDate(date),
+
+        label:
+          getDayLabel(
+            date,
+            period
+          ),
+
+        taskCompleted: 0,
+
+        habitCompleted: 0,
+      });
+    }
+
+    return days;
+  }
+
+  /*
+   * Current month
+   */
+  const monthStart =
+    getMonthStart();
+
+  const dayCount =
+    today.getDate();
+
+  for (
+    let i = 0;
+    i < dayCount;
+    i++
+  ) {
+    const date =
+      new Date(
+        monthStart.getFullYear(),
+        monthStart.getMonth(),
+        i + 1
+      );
+
+    days.push({
+      key: formatDate(date),
+
+      label:
+        getDayLabel(
+          date,
+          period
+        ),
+
+      taskCompleted: 0,
+
+      habitCompleted: 0,
+    });
+  }
+
+  return days;
+}
+
+/* =========================================================
+   SIMPLE BAR
+========================================================= */
+
+interface ActivityBarProps {
+  value: number;
+  max: number;
+  background: string;
+}
+
+function ActivityBar({
+  value,
+  max,
+  background,
+}: ActivityBarProps) {
+  const height =
+    max > 0
+      ? Math.max(
+          8,
+          (value / max) * 100
+        )
+      : 8;
+
+  return (
+    <div
+      className="flex-1 flex items-end justify-center"
+      style={{
+        height: 150,
+      }}
     >
-  >({});
+      <div
+        className="w-full max-w-[22px] rounded-t-md transition-all duration-500"
+        style={{
+          height: `${height}%`,
+          background,
+          opacity:
+            value === 0 ? 0.18 : 1,
+          minHeight: 4,
+        }}
+      />
+    </div>
+  );
+}
+
+/* =========================================================
+   COMPONENT
+========================================================= */
+
+export default function ActivityGraph() {
+  const [period, setPeriod] =
+    useState<Period>(
+      "weekly"
+    );
+
+  const [chartData, setChartData] =
+    useState<ChartDay[]>(() =>
+      createChartDays(
+        "weekly"
+      )
+    );
 
   const [loading, setLoading] =
     useState(true);
 
   const [error, setError] =
-    useState<string | null>(null);
+    useState<string | null>(
+      null
+    );
 
   /* =======================================================
-     LOAD DATA
+     LOAD ACTIVITY
   ======================================================= */
 
-  const loadData =
-    useCallback(async () => {
-      try {
-        setError(null);
+  const loadActivity =
+    useCallback(
+      async (
+        selectedPeriod: Period
+      ) => {
+        try {
+          /*
+           * Do not change state here before
+           * async data is available.
+           */
 
-        const [
-          taskResult,
-          habitResult,
-        ] = await Promise.all([
-          getTasks(),
-          getHabits(),
-        ]);
+          const days =
+            createChartDays(
+              selectedPeriod
+            );
 
-        setTasks(taskResult);
+          const dayMap =
+            new Map<
+              string,
+              ChartDay
+            >();
 
-        /*
-         * Habit service-এর actual result
-         * থেকে প্রয়োজনীয় field নিচ্ছি।
-         */
-        const activeHabits: HabitData[] =
-          habitResult
-            .filter(
+          days.forEach(
+            (day) => {
+              dayMap.set(
+                day.key,
+                {
+                  ...day,
+                }
+              );
+            }
+          );
+
+          /*
+           * ===============================================
+           * TASKS
+           * ===============================================
+           */
+
+          const tasks =
+            (await getTasks()) as ActivityTask[];
+
+          tasks.forEach(
+            (task) => {
+              if (
+                task.status !==
+                  "completed" ||
+                !task.completedAt
+              ) {
+                return;
+              }
+
+              const date =
+                task.completedAt.slice(
+                  0,
+                  10
+                );
+
+              const day =
+                dayMap.get(
+                  date
+                );
+
+              if (!day) {
+                return;
+              }
+
+              day.taskCompleted +=
+                1;
+            }
+          );
+
+          /*
+           * ===============================================
+           * HABITS
+           * ===============================================
+           */
+
+          const habits =
+            (await getHabits()) as ActivityHabit[];
+
+          const activeHabits =
+            habits.filter(
               (habit) =>
                 habit.status ===
                 "active"
-            )
-            .map((habit) => ({
-              id: habit.id,
-              status: habit.status,
-            }));
+            );
 
-        setHabits(
-          activeHabits
-        );
+          /*
+           * Load habit completion
+           * data safely.
+           */
 
-        /* -----------------------------------------------
-           HABIT COMPLETIONS
-        ------------------------------------------------ */
+          const completionResults =
+            await Promise.all(
+              activeHabits.map(
+                async (
+                  habit
+                ) => {
+                  try {
+                    const result =
+                      await getHabitCompletions(
+                        habit.id
+                      );
 
-        const completionEntries =
-          await Promise.all(
-            activeHabits.map(
-              async (habit) => {
-                try {
-                  const completions =
-                    await getHabitCompletions(
-                      habit.id
+                    return result as HabitCompletion[];
+                  } catch (
+                    habitError
+                  ) {
+                    console.error(
+                      "Habit completion load failed:",
+                      habitError
                     );
 
-                  /*
-                   * Service যদি extra field দেয়,
-                   * আমরা শুধু প্রয়োজনীয় field রাখছি।
-                   */
-                  const normalized: HabitCompletion[] =
-                    completions.map(
-                      (completion) => ({
-                        id:
-                          completion.id,
-                        date:
-                          completion.date,
-                        completed:
-                          completion.completed ===
-                          true,
-                      })
-                    );
-
-                  return [
-                    habit.id,
-                    normalized,
-                  ] as const;
-                } catch (completionError) {
-                  console.error(
-                    "Habit completion load failed:",
-                    completionError
-                  );
-
-                  return [
-                    habit.id,
-                    [],
-                  ] as const;
+                    return [];
+                  }
                 }
-              }
-            )
-          );
+              )
+            );
 
-        setHabitCompletions(
-          Object.fromEntries(
-            completionEntries
-          )
-        );
-      } catch (loadError) {
-        console.error(
-          "Productivity data load failed:",
-          loadError
-        );
-
-        setError(
-          "Productivity data লোড করা যায়নি।"
-        );
-      } finally {
-        setLoading(false);
-      }
-    }, []);
-
-  /* =======================================================
-     INITIAL LOAD
-  ======================================================= */
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const startLoad = async () => {
-      await loadData();
-
-      if (cancelled) {
-        return;
-      }
-    };
-
-    void startLoad();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [loadData]);
-
-  /* =======================================================
-     UPDATE EVENTS
-  ======================================================= */
-
-  useEffect(() => {
-    let timer:
-      | ReturnType<typeof setTimeout>
-      | null = null;
-
-    const refresh = () => {
-      if (timer !== null) {
-        clearTimeout(timer);
-      }
-
-      timer = setTimeout(() => {
-        void loadData();
-      }, 100);
-    };
-
-    window.addEventListener(
-      "life-os-task-changed",
-      refresh
-    );
-
-    window.addEventListener(
-      "life-os-task-synced",
-      refresh
-    );
-
-    window.addEventListener(
-      "life-os-habit-changed",
-      refresh
-    );
-
-    window.addEventListener(
-      "life-os-habit-synced",
-      refresh
-    );
-
-    window.addEventListener(
-      "online",
-      refresh
-    );
-
-    return () => {
-      if (timer !== null) {
-        clearTimeout(timer);
-      }
-
-      window.removeEventListener(
-        "life-os-task-changed",
-        refresh
-      );
-
-      window.removeEventListener(
-        "life-os-task-synced",
-        refresh
-      );
-
-      window.removeEventListener(
-        "life-os-habit-changed",
-        refresh
-      );
-
-      window.removeEventListener(
-        "life-os-habit-synced",
-        refresh
-      );
-
-      window.removeEventListener(
-        "online",
-        refresh
-      );
-    };
-  }, [loadData]);
-
-  /* =======================================================
-     MONTHLY DATA
-  ======================================================= */
-
-  const monthlyData =
-    useMemo<MonthData[]>(() => {
-      return MONTHS.map(
-        (label, monthIndex) => {
-          const monthNumber =
-            String(
-              monthIndex + 1
-            ).padStart(2, "0");
-
-          const key =
-            `${year}-${monthNumber}`;
-
-          /* -----------------------------------------------
-             COMPLETED TASKS
-          ------------------------------------------------ */
-
-          const completedTasks =
-            tasks.filter(
-              (task) => {
-                if (
-                  task.status !==
-                  "completed"
-                ) {
-                  return false;
-                }
-
-                if (
-                  !task.completedAt
-                ) {
-                  return false;
-                }
-
-                return (
-                  getMonthKey(
-                    task.completedAt
-                  ) === key
-                );
-              }
-            ).length;
-
-          /* -----------------------------------------------
-             COMPLETED HABITS
-          ------------------------------------------------ */
-
-          let completedHabits = 0;
-
-          Object.values(
-            habitCompletions
-          ).forEach(
+          completionResults.forEach(
             (
-              completions: HabitCompletion[]
+              completions
             ) => {
               completions.forEach(
                 (
-                  completion: HabitCompletion
+                  completion
                 ) => {
                   if (
                     completion.completed !==
@@ -434,126 +429,243 @@ export default function ProductivityChart() {
                     return;
                   }
 
-                  if (
-                    getMonthKey(
+                  const day =
+                    dayMap.get(
                       completion.date
-                    ) === key
-                  ) {
-                    completedHabits +=
-                      1;
+                    );
+
+                  if (!day) {
+                    return;
                   }
+
+                  day.habitCompleted +=
+                    1;
                 }
               );
             }
           );
 
-          /* -----------------------------------------------
-             TOTAL
-          ------------------------------------------------ */
+          /*
+           * Convert Map into array
+           */
+          const finalData =
+            days.map(
+              (day) => {
+                const updated =
+                  dayMap.get(
+                    day.key
+                  );
 
-          const total =
-            completedTasks +
-            completedHabits;
+                return (
+                  updated ?? day
+                );
+              }
+            );
 
           /*
-           * Visual productivity score.
-           *
-           * Maximum reference:
-           * 30 completions / month.
+           * State update happens AFTER
+           * async work is finished.
            */
-          const score =
-            total > 0
-              ? Math.min(
-                  100,
-                  Math.round(
-                    (total / 30) *
-                      100
-                  )
-                )
-              : 0;
 
-          return {
-            key,
-            label,
-            tasks:
-              completedTasks,
-            habits:
-              completedHabits,
-            total,
-            score,
-          };
+          setChartData(
+            finalData
+          );
+
+          setError(null);
+        } catch (loadError) {
+          console.error(
+            "Activity graph load failed:",
+            loadError
+          );
+
+          /*
+           * Don't destroy existing chart
+           * when refresh fails.
+           */
+
+          setError(
+            "অ্যাক্টিভিটি ডাটা লোড করা যায়নি।"
+          );
+        } finally {
+          setLoading(false);
+        }
+      },
+      []
+    );
+
+  /* =======================================================
+     INITIAL LOAD / PERIOD CHANGE
+  ======================================================= */
+
+  useEffect(() => {
+    let cancelled =
+      false;
+
+    const run = async () => {
+      try {
+        await loadActivity(
+          period
+        );
+      } finally {
+        /*
+         * No synchronous setState here.
+         *
+         * If component unmounts,
+         * request result is simply ignored
+         * by the caller lifecycle.
+         */
+        if (cancelled) {
+          return;
+        }
+      }
+    };
+
+    void run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    period,
+    loadActivity,
+  ]);
+
+  /* =======================================================
+     TASK / HABIT UPDATE EVENTS
+  ======================================================= */
+
+  useEffect(() => {
+    let timer:
+      | ReturnType<
+          typeof setTimeout
+        >
+      | null = null;
+
+    const handleUpdate =
+      () => {
+        if (timer) {
+          clearTimeout(
+            timer
+          );
+        }
+
+        timer = setTimeout(
+          () => {
+            void loadActivity(
+              period
+            );
+          },
+          100
+        );
+      };
+
+    window.addEventListener(
+      "life-os-task-changed",
+      handleUpdate
+    );
+
+    window.addEventListener(
+      "life-os-task-synced",
+      handleUpdate
+    );
+
+    window.addEventListener(
+      "life-os-habit-changed",
+      handleUpdate
+    );
+
+    window.addEventListener(
+      "life-os-habit-synced",
+      handleUpdate
+    );
+
+    window.addEventListener(
+      "online",
+      handleUpdate
+    );
+
+    return () => {
+      if (timer) {
+        clearTimeout(
+          timer
+        );
+      }
+
+      window.removeEventListener(
+        "life-os-task-changed",
+        handleUpdate
+      );
+
+      window.removeEventListener(
+        "life-os-task-synced",
+        handleUpdate
+      );
+
+      window.removeEventListener(
+        "life-os-habit-changed",
+        handleUpdate
+      );
+
+      window.removeEventListener(
+        "life-os-habit-synced",
+        handleUpdate
+      );
+
+      window.removeEventListener(
+        "online",
+        handleUpdate
+      );
+    };
+  }, [
+    period,
+    loadActivity,
+  ]);
+
+  /* =======================================================
+     TOTALS
+  ======================================================= */
+
+  const totals =
+    useMemo(() => {
+      return chartData.reduce(
+        (total, day) => {
+          total.tasks +=
+            day.taskCompleted;
+
+          total.habits +=
+            day.habitCompleted;
+
+          return total;
+        },
+        {
+          tasks: 0,
+          habits: 0,
         }
       );
-    }, [
-      tasks,
-      habitCompletions,
-      year,
-    ]);
+    }, [chartData]);
 
   /* =======================================================
-     SELECTED MONTH
+     MAX VALUE
   ======================================================= */
 
-  const selectedMonthData =
-    monthlyData[
-      selectedMonth
-    ];
-
-  /* =======================================================
-     YEAR TOTALS
-  ======================================================= */
-
-  const yearlyTotals =
+  const maxValue =
     useMemo(() => {
-      const taskTotal =
-        monthlyData.reduce(
-          (sum, item) =>
-            sum + item.tasks,
-          0
+      const values =
+        chartData.flatMap(
+          (day) => [
+            day.taskCompleted,
+            day.habitCompleted,
+          ]
         );
 
-      const habitTotal =
-        monthlyData.reduce(
-          (sum, item) =>
-            sum + item.habits,
-          0
+      const max =
+        Math.max(
+          ...values,
+          1
         );
 
-      return {
-        tasks: taskTotal,
-        habits: habitTotal,
-        total:
-          taskTotal +
-          habitTotal,
-      };
-    }, [monthlyData]);
-
-  /* =======================================================
-     CHART MAX
-  ======================================================= */
-
-  const chartMax =
-    Math.max(
-      10,
-      ...monthlyData.map(
-        (item) =>
-          item.total
-      )
-    );
-
-  /* =======================================================
-     YEAR CHANGE
-  ======================================================= */
-
-  const changeYear = (
-    direction: number
-  ) => {
-    setYear(
-      (currentYear) =>
-        currentYear +
-        direction
-    );
-  };
+      return max;
+    }, [chartData]);
 
   /* =======================================================
      UI
@@ -567,20 +679,19 @@ export default function ProductivityChart() {
 
       <div className="flex items-start justify-between gap-3">
         <DashboardSectionTitle
-          icon={BarChart3}
-          title="প্রোডাক্টিভিটি"
+          icon={TrendingUp}
+          title="অ্যাক্টিভিটি"
           subtitle={
-            viewMode ===
-            "monthly"
-              ? `${MONTHS[selectedMonth]} ${year}`
-              : `${year} সালের সম্পূর্ণ হিসাব`
+            period ===
+            "weekly"
+              ? "গত ৭ দিনের কাজের হিসাব"
+              : "এই মাসের কাজের হিসাব"
           }
         />
 
-        {/* VIEW TOGGLE */}
-
+        {/* Period switch */}
         <div
-          className="flex rounded-xl p-1 flex-shrink-0"
+          className="flex items-center rounded-xl p-1 flex-shrink-0"
           style={{
             background:
               COLORS.paper,
@@ -591,20 +702,45 @@ export default function ProductivityChart() {
           <button
             type="button"
             onClick={() =>
-              setViewMode(
+              setPeriod(
+                "weekly"
+              )
+            }
+            className="px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all"
+            style={{
+              background:
+                period ===
+                "weekly"
+                  ? COLORS.card
+                  : "transparent",
+
+              color:
+                period ===
+                "weekly"
+                  ? COLORS.teal
+                  : COLORS.muted,
+            }}
+          >
+            সপ্তাহ
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              setPeriod(
                 "monthly"
               )
             }
-            className="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold"
+            className="px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all"
             style={{
               background:
-                viewMode ===
+                period ===
                 "monthly"
                   ? COLORS.card
                   : "transparent",
 
               color:
-                viewMode ===
+                period ===
                 "monthly"
                   ? COLORS.teal
                   : COLORS.muted,
@@ -612,41 +748,126 @@ export default function ProductivityChart() {
           >
             মাস
           </button>
-
-          <button
-            type="button"
-            onClick={() =>
-              setViewMode(
-                "yearly"
-              )
-            }
-            className="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold"
-            style={{
-              background:
-                viewMode ===
-                "yearly"
-                  ? COLORS.card
-                  : "transparent",
-
-              color:
-                viewMode ===
-                "yearly"
-                  ? COLORS.teal
-                  : COLORS.muted,
-            }}
-          >
-            বছর
-          </button>
         </div>
       </div>
+
+      {/* ===================================================
+          SUMMARY
+      =================================================== */}
+
+      <div className="grid grid-cols-2 gap-3 mb-5">
+        <div
+          className="rounded-xl px-3 py-2.5 flex items-center gap-2.5"
+          style={{
+            background:
+              COLORS.tealSoft,
+          }}
+        >
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center"
+            style={{
+              background:
+                COLORS.card,
+            }}
+          >
+            <CheckSquare
+              size={15}
+              color={COLORS.teal}
+            />
+          </div>
+
+          <div>
+            <div
+              className="text-sm font-semibold"
+              style={{
+                color:
+                  COLORS.teal,
+              }}
+            >
+              {totals.tasks}
+            </div>
+
+            <div
+              className="text-[10px]"
+              style={{
+                color:
+                  COLORS.muted,
+              }}
+            >
+              সম্পন্ন টাস্ক
+            </div>
+          </div>
+        </div>
+
+        <div
+          className="rounded-xl px-3 py-2.5 flex items-center gap-2.5"
+          style={{
+            background:
+              COLORS.goldSoft,
+          }}
+        >
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center"
+            style={{
+              background:
+                COLORS.card,
+            }}
+          >
+            <Flame
+              size={15}
+              color={COLORS.gold}
+            />
+          </div>
+
+          <div>
+            <div
+              className="text-sm font-semibold"
+              style={{
+                color:
+                  COLORS.gold,
+              }}
+            >
+              {totals.habits}
+            </div>
+
+            <div
+              className="text-[10px]"
+              style={{
+                color:
+                  COLORS.muted,
+              }}
+            >
+              সম্পন্ন অভ্যাস
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ===================================================
+          ERROR
+      =================================================== */}
+
+      {error && (
+        <div
+          className="rounded-xl px-3 py-2.5 mb-3 text-xs"
+          style={{
+            background:
+              COLORS.claySoft,
+            color:
+              COLORS.clay,
+          }}
+        >
+          {error}
+        </div>
+      )}
 
       {/* ===================================================
           LOADING
       =================================================== */}
 
-      {loading && (
+      {loading ? (
         <div
-          className="flex items-center justify-center gap-2 py-10 text-sm"
+          className="flex items-center justify-center gap-2 py-10"
           style={{
             color:
               COLORS.mutedSoft,
@@ -657,485 +878,147 @@ export default function ProductivityChart() {
             className="animate-spin"
           />
 
-          <span>
-            ডাটা বিশ্লেষণ হচ্ছে...
+          <span className="text-sm">
+            অ্যাক্টিভিটি লোড হচ্ছে...
           </span>
         </div>
-      )}
+      ) : (
+        <>
+          {/* =============================================
+              CHART
+          ============================================= */}
 
-      {/* ===================================================
-          ERROR
-      =================================================== */}
-
-      {!loading &&
-        error && (
           <div
-            className="rounded-xl px-3 py-3 text-sm"
+            className="rounded-2xl p-3.5"
             style={{
               background:
-                COLORS.claySoft,
-              color:
-                COLORS.clay,
+                COLORS.paper,
+              border:
+                `1px solid ${COLORS.line}`,
             }}
           >
-            {error}
-          </div>
-        )}
+            {/* Legend */}
 
-      {/* ===================================================
-          CONTENT
-      =================================================== */}
-
-      {!loading &&
-        !error && (
-          <>
-            {/* =============================================
-                SUMMARY
-            ============================================== */}
-
-            <div className="grid grid-cols-3 gap-2.5 mb-5">
-              {/* TASKS */}
-
-              <div
-                className="rounded-xl p-3"
-                style={{
-                  background:
-                    COLORS.tealSoft,
-                }}
-              >
-                <div className="flex items-center gap-1.5 mb-1">
-                  <CheckSquare
-                    size={13}
-                    color={
-                      COLORS.teal
-                    }
-                  />
-
-                  <span
-                    className="text-[10px] font-semibold"
-                    style={{
-                      color:
-                        COLORS.muted,
-                    }}
-                  >
-                    Tasks
-                  </span>
-                </div>
-
-                <div
-                  className="text-lg font-semibold"
-                  style={{
-                    color:
-                      COLORS.teal,
-                    fontFamily:
-                      "'IBM Plex Mono', monospace",
-                  }}
-                >
-                  {viewMode ===
-                  "monthly"
-                    ? selectedMonthData?.tasks ??
-                      0
-                    : yearlyTotals.tasks}
-                </div>
-              </div>
-
-              {/* HABITS */}
-
-              <div
-                className="rounded-xl p-3"
-                style={{
-                  background:
-                    COLORS.goldSoft,
-                }}
-              >
-                <div className="flex items-center gap-1.5 mb-1">
-                  <Flame
-                    size={13}
-                    color={
-                      COLORS.gold
-                    }
-                  />
-
-                  <span
-                    className="text-[10px] font-semibold"
-                    style={{
-                      color:
-                        COLORS.muted,
-                    }}
-                  >
-                    Habits
-                  </span>
-                </div>
-
-                <div
-                  className="text-lg font-semibold"
-                  style={{
-                    color:
-                      COLORS.gold,
-                    fontFamily:
-                      "'IBM Plex Mono', monospace",
-                  }}
-                >
-                  {viewMode ===
-                  "monthly"
-                    ? selectedMonthData?.habits ??
-                      0
-                    : yearlyTotals.habits}
-                </div>
-              </div>
-
-              {/* TOTAL */}
-
-              <div
-                className="rounded-xl p-3"
-                style={{
-                  background:
-                    COLORS.claySoft,
-                }}
-              >
-                <div className="flex items-center gap-1.5 mb-1">
-                  <BarChart3
-                    size={13}
-                    color={
-                      COLORS.clay
-                    }
-                  />
-
-                  <span
-                    className="text-[10px] font-semibold"
-                    style={{
-                      color:
-                        COLORS.muted,
-                    }}
-                  >
-                    Total
-                  </span>
-                </div>
-
-                <div
-                  className="text-lg font-semibold"
-                  style={{
-                    color:
-                      COLORS.clay,
-                    fontFamily:
-                      "'IBM Plex Mono', monospace",
-                  }}
-                >
-                  {viewMode ===
-                  "monthly"
-                    ? selectedMonthData?.total ??
-                      0
-                    : yearlyTotals.total}
-                </div>
-              </div>
-            </div>
-
-            {/* =============================================
-                YEAR SELECTOR
-            ============================================== */}
-
-            <div className="flex items-center justify-between mb-4">
-              <button
-                type="button"
-                onClick={() =>
-                  changeYear(-1)
-                }
-                className="px-3 py-1.5 rounded-lg text-xs font-semibold"
-                style={{
-                  background:
-                    COLORS.paper,
-                  color:
-                    COLORS.muted,
-                  border:
-                    `1px solid ${COLORS.line}`,
-                }}
-              >
-                ← {year - 1}
-              </button>
-
-              <div
-                className="text-sm font-semibold"
-                style={{
-                  color:
-                    COLORS.ink,
-                  fontFamily:
-                    "'IBM Plex Mono', monospace",
-                }}
-              >
-                {year}
-              </div>
-
-              <button
-                type="button"
-                onClick={() =>
-                  changeYear(1)
-                }
-                className="px-3 py-1.5 rounded-lg text-xs font-semibold"
-                style={{
-                  background:
-                    COLORS.paper,
-                  color:
-                    COLORS.muted,
-                  border:
-                    `1px solid ${COLORS.line}`,
-                }}
-              >
-                {year + 1} →
-              </button>
-            </div>
-
-            {/* =============================================
-                GRAPH
-            ============================================== */}
-
-            <div
-              className="rounded-2xl p-4"
-              style={{
-                background:
-                  COLORS.paper,
-                border:
-                  `1px solid ${COLORS.line}`,
-              }}
-            >
-              <div className="flex items-center justify-between mb-5">
-                <div>
-                  <div
-                    className="text-sm font-semibold"
-                    style={{
-                      color:
-                        COLORS.ink,
-                    }}
-                  >
-                    {viewMode ===
-                    "monthly"
-                      ? "মাসিক অগ্রগতি"
-                      : "বার্ষিক অগ্রগতি"}
-                  </div>
-
-                  <div
-                    className="text-[10px] mt-1"
-                    style={{
-                      color:
-                        COLORS.mutedSoft,
-                    }}
-                  >
-                    Task + Habit completion
-                  </div>
-                </div>
-
-                <div className="flex gap-3 text-[10px]">
-                  <span className="flex items-center gap-1">
-                    <span
-                      className="w-2 h-2 rounded-full"
-                      style={{
-                        background:
-                          COLORS.teal,
-                      }}
-                    />
-
-                    Tasks
-                  </span>
-
-                  <span className="flex items-center gap-1">
-                    <span
-                      className="w-2 h-2 rounded-full"
-                      style={{
-                        background:
-                          COLORS.gold,
-                      }}
-                    />
-
-                    Habits
-                  </span>
-                </div>
-              </div>
-
-              {/* BAR CHART */}
-
-              <div
-                className="flex items-end gap-1.5 sm:gap-2"
-                style={{
-                  height: 190,
-                }}
-              >
-                {monthlyData.map(
-                  (
-                    item,
-                    index
-                  ) => {
-                    const isSelected =
-                      index ===
-                      selectedMonth;
-
-                    const taskHeight =
-                      (item.tasks /
-                        chartMax) *
-                      130;
-
-                    const habitHeight =
-                      (item.habits /
-                        chartMax) *
-                      130;
-
-                    return (
-                      <button
-                        key={
-                          item.key
-                        }
-                        type="button"
-                        onClick={() =>
-                          setSelectedMonth(
-                            index
-                          )
-                        }
-                        className="flex-1 h-full flex flex-col justify-end items-center group"
-                      >
-                        {/* VALUE */}
-
-                        <div
-                          className="text-[9px] mb-1"
-                          style={{
-                            color:
-                              COLORS.ink,
-                            opacity:
-                              isSelected
-                                ? 1
-                                : 0,
-                          }}
-                        >
-                          {item.total}
-                        </div>
-
-                        {/* BARS */}
-
-                        <div className="w-full max-w-[30px] flex items-end justify-center gap-[2px]">
-                          <div
-                            className="w-1/2 rounded-t-md"
-                            style={{
-                              height:
-                                Math.max(
-                                  3,
-                                  taskHeight
-                                ),
-
-                              background:
-                                COLORS.teal,
-
-                              opacity:
-                                isSelected
-                                  ? 1
-                                  : 0.65,
-                            }}
-                          />
-
-                          <div
-                            className="w-1/2 rounded-t-md"
-                            style={{
-                              height:
-                                Math.max(
-                                  3,
-                                  habitHeight
-                                ),
-
-                              background:
-                                COLORS.gold,
-
-                              opacity:
-                                isSelected
-                                  ? 1
-                                  : 0.65,
-                            }}
-                          />
-                        </div>
-
-                        {/* MONTH */}
-
-                        <div
-                          className="text-[9px] mt-2"
-                          style={{
-                            color:
-                              isSelected
-                                ? COLORS.teal
-                                : COLORS.mutedSoft,
-
-                            fontWeight:
-                              isSelected
-                                ? 700
-                                : 500,
-                          }}
-                        >
-                          {item.label}
-                        </div>
-                      </button>
-                    );
-                  }
-                )}
-              </div>
-            </div>
-
-            {/* =============================================
-                SELECTED MONTH
-            ============================================== */}
-
-            {viewMode ===
-              "monthly" &&
-              selectedMonthData && (
-                <div
-                  className="mt-3 rounded-xl px-3.5 py-3 flex items-center justify-between"
+            <div className="flex items-center justify-end gap-4 mb-3">
+              <div className="flex items-center gap-1.5">
+                <span
+                  className="w-2 h-2 rounded-full"
                   style={{
                     background:
-                      COLORS.card,
-                    border:
-                      `1px solid ${COLORS.line}`,
+                      COLORS.teal,
+                  }}
+                />
+
+                <span
+                  className="text-[10px]"
+                  style={{
+                    color:
+                      COLORS.muted,
                   }}
                 >
-                  <div>
-                    <div
-                      className="text-xs font-semibold"
-                      style={{
-                        color:
-                          COLORS.ink,
-                      }}
-                    >
-                      {
-                        selectedMonthData.label
-                      }{" "}
-                      {year}
+                  টাস্ক
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <span
+                  className="w-2 h-2 rounded-full"
+                  style={{
+                    background:
+                      COLORS.gold,
+                  }}
+                />
+
+                <span
+                  className="text-[10px]"
+                  style={{
+                    color:
+                      COLORS.muted,
+                  }}
+                >
+                  অভ্যাস
+                </span>
+              </div>
+            </div>
+
+            {/* Bars */}
+
+            <div className="flex items-end gap-2 sm:gap-3">
+              {chartData.map(
+                (day) => (
+                  <div
+                    key={day.key}
+                    className="flex-1 min-w-0"
+                  >
+                    <div className="flex items-end gap-1">
+                      <ActivityBar
+                        value={
+                          day.taskCompleted
+                        }
+                        max={
+                          maxValue
+                        }
+                        background={
+                          COLORS.teal
+                        }
+                      />
+
+                      <ActivityBar
+                        value={
+                          day.habitCompleted
+                        }
+                        max={
+                          maxValue
+                        }
+                        background={
+                          COLORS.gold
+                        }
+                      />
                     </div>
 
                     <div
-                      className="text-[10px] mt-1"
+                      className="text-[9px] text-center mt-2 truncate"
                       style={{
                         color:
                           COLORS.mutedSoft,
                       }}
                     >
-                      মোট{" "}
                       {
-                        selectedMonthData.total
-                      }{" "}
-                      completion
+                        day.label
+                      }
                     </div>
                   </div>
-
-                  <div
-                    className="text-xl font-semibold"
-                    style={{
-                      color:
-                        COLORS.teal,
-                      fontFamily:
-                        "'IBM Plex Mono', monospace",
-                    }}
-                  >
-                    {
-                      selectedMonthData.score
-                    }
-                    %
-                  </div>
-                </div>
+                )
               )}
-          </>
-        )}
+            </div>
+          </div>
+
+          {/* =============================================
+              DESCRIPTION
+          ============================================= */}
+
+          <div
+            className="mt-3 flex items-center gap-2 text-xs"
+            style={{
+              color:
+                COLORS.mutedSoft,
+            }}
+          >
+            <div
+              className="w-1.5 h-1.5 rounded-full"
+              style={{
+                background:
+                  COLORS.teal,
+              }}
+            />
+
+            <span>
+              বেশি বার সম্পন্ন করলে
+              গ্রাফে বার আরও উঁচু হবে।
+            </span>
+          </div>
+        </>
+      )}
     </DashboardCard>
   );
 }
