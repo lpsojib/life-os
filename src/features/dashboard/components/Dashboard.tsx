@@ -7,6 +7,7 @@ import ReminderSection from "./ReminderSection";
 import TodayTasks from "./TodayTasks";
 import TodayHabits from "./TodayHabits";
 import DashboardGoals from "./DashboardGoals";
+import ProductivityChart from "./ProductivityChart";
 
 export default function Dashboard() {
   return (
@@ -39,6 +40,9 @@ export default function Dashboard() {
 
           {/* Goals */}
           <DashboardGoals />
+
+          {/* Productivity Chart */}
+          <ProductivityChart />
         </div>
       </div>
     </div>
