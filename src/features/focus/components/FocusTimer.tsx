@@ -1,34 +1,33 @@
 import type { FocusItem } from "../types/focus.types";
 
 import {
-  collection,
-  deleteDoc,
   doc,
-  getDocs,
+  getDoc,
   setDoc,
 } from "firebase/firestore";
 
 import { auth, db } from "@/lib/firebase";
 
-function getFocusCollection() {
+const FOCUS_DOCUMENT_ID = "main";
+
+function getFocusDocument() {
   const user = auth.currentUser;
 
   if (!user) {
     throw new Error("User is not authenticated.");
   }
 
-  return collection(
+  return doc(
     db,
     "users",
     user.uid,
-    "focusItems"
+    "focusItems",
+    FOCUS_DOCUMENT_ID
   );
 }
 
 /**
- * Load Focus Timer data
- * from the currently logged-in user's
- * Firestore account.
+ * Load the user's permanent Focus Timer.
  */
 export async function loadFocusItems(): Promise<
   FocusItem[]
@@ -40,19 +39,27 @@ export async function loadFocusItems(): Promise<
   }
 
   try {
-    const snapshot = await getDocs(
-      getFocusCollection()
+    const snapshot = await getDoc(
+      getFocusDocument()
     );
 
-    return snapshot.docs.map((itemDoc) => {
-      const data = itemDoc.data();
+    if (!snapshot.exists()) {
+      return [];
+    }
 
-      return {
-        id: itemDoc.id,
-        title:
-          typeof data.title === "string"
-            ? data.title
-            : "",
+    const data = snapshot.data();
+
+    if (
+      typeof data.title !== "string" ||
+      typeof data.createdAt !== "number"
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        id: snapshot.id,
+        title: data.title,
         startedAt:
           typeof data.startedAt === "number"
             ? data.startedAt
@@ -63,15 +70,12 @@ export async function loadFocusItems(): Promise<
             : 0,
         running:
           data.running === true,
-        createdAt:
-          typeof data.createdAt === "number"
-            ? data.createdAt
-            : 0,
-      };
-    });
+        createdAt: data.createdAt,
+      },
+    ];
   } catch (error) {
     console.error(
-      "Failed to load focus items:",
+      "Failed to load focus timer:",
       error
     );
 
@@ -80,8 +84,8 @@ export async function loadFocusItems(): Promise<
 }
 
 /**
- * Save one Focus Timer item
- * to the logged-in user's account.
+ * Save the Focus Timer permanently
+ * to the logged-in user's Firebase account.
  */
 export async function saveFocusItem(
   item: FocusItem
@@ -94,18 +98,22 @@ export async function saveFocusItem(
 
   try {
     await setDoc(
-      doc(
-        db,
-        "users",
-        user.uid,
-        "focusItems",
-        item.id
-      ),
-      item
+      getFocusDocument(),
+      {
+        id: FOCUS_DOCUMENT_ID,
+        title: item.title,
+        startedAt: item.startedAt,
+        elapsed: item.elapsed,
+        running: item.running,
+        createdAt: item.createdAt,
+      },
+      {
+        merge: true,
+      }
     );
   } catch (error) {
     console.error(
-      "Failed to save focus item:",
+      "Failed to save focus timer:",
       error
     );
 
@@ -114,36 +122,30 @@ export async function saveFocusItem(
 }
 
 /**
- * Save multiple Focus Timer items.
+ * Backward-compatible function.
  */
 export async function saveFocusItems(
   items: FocusItem[]
 ): Promise<void> {
-  await Promise.all(
-    items.map((item) =>
-      saveFocusItem(item)
-    )
-  );
+  if (items.length === 0) {
+    return;
+  }
+
+  const latestItem = items[0];
+
+  await saveFocusItem(latestItem);
 }
 
 /**
- * Create a new Focus Timer item.
+ * Create a Focus Timer.
  */
 export async function createFocusItem(
   title: string
 ): Promise<FocusItem> {
-  const user = auth.currentUser;
-
-  if (!user) {
-    throw new Error("User is not authenticated.");
-  }
-
   const now = new Date().getTime();
 
   const item: FocusItem = {
-    id: `${now}-${Math.random()
-      .toString(36)
-      .slice(2, 8)}`,
+    id: FOCUS_DOCUMENT_ID,
     title: title.trim(),
     startedAt: null,
     elapsed: 0,
@@ -157,42 +159,7 @@ export async function createFocusItem(
 }
 
 /**
- * Delete a Focus Timer item.
- */
-export async function deleteFocusItem(
-  id: string
-): Promise<void> {
-  const user = auth.currentUser;
-
-  if (!user) {
-    throw new Error("User is not authenticated.");
-  }
-
-  try {
-    await deleteDoc(
-      doc(
-        db,
-        "users",
-        user.uid,
-        "focusItems",
-        id
-      )
-    );
-  } catch (error) {
-    console.error(
-      "Failed to delete focus item:",
-      error
-    );
-
-    throw error;
-  }
-}
-
-/**
  * Get current elapsed time.
- *
- * If timer is running, elapsed time is
- * calculated using startedAt.
  */
 export function getElapsedTime(
   item: FocusItem
@@ -213,7 +180,7 @@ export function getElapsedTime(
 }
 
 /**
- * Start Focus Timer.
+ * Start timer.
  */
 export function startFocus(
   item: FocusItem
@@ -222,17 +189,15 @@ export function startFocus(
     return item;
   }
 
-  const now = new Date().getTime();
-
   return {
     ...item,
     running: true,
-    startedAt: now,
+    startedAt: new Date().getTime(),
   };
 }
 
 /**
- * Pause Focus Timer.
+ * Pause timer.
  */
 export function pauseFocus(
   item: FocusItem
@@ -259,7 +224,7 @@ export function pauseFocus(
 }
 
 /**
- * Reset Focus Timer.
+ * Reset timer.
  */
 export function resetFocus(
   item: FocusItem
