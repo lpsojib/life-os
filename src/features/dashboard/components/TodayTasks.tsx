@@ -40,27 +40,13 @@ const COLORS = {
 };
 
 /* =========================================================
-   PRIORITY
+   PRIORITY LABEL
 ========================================================= */
 
-const priorityTone = {
-  high: {
-    fg: COLORS.clay,
-    bg: COLORS.claySoft,
-    label: "জরুরি",
-  },
-
-  medium: {
-    fg: COLORS.gold,
-    bg: COLORS.goldSoft,
-    label: "মাঝারি",
-  },
-
-  low: {
-    fg: COLORS.teal,
-    bg: COLORS.tealSoft,
-    label: "কম",
-  },
+const priorityLabel = {
+  high: "জরুরি",
+  medium: "মাঝারি",
+  low: "কম",
 } as const;
 
 /* =========================================================
@@ -68,13 +54,11 @@ const priorityTone = {
 ========================================================= */
 
 interface TaskCheckboxProps {
-  checked: boolean;
   loading: boolean;
   onClick: () => void;
 }
 
 function TaskCheckbox({
-  checked,
   loading,
   onClick,
 }: TaskCheckboxProps) {
@@ -83,88 +67,37 @@ function TaskCheckbox({
       type="button"
       disabled={loading}
       onClick={onClick}
-      aria-label={
-        checked
-          ? "Task completed"
-          : "Complete task"
-      }
-      className="flex items-center justify-center rounded-full flex-shrink-0 transition-all"
+      aria-label="Complete task"
+      className="
+        flex
+        items-center
+        justify-center
+        flex-shrink-0
+        rounded-full
+        transition-all
+        duration-200
+        hover:scale-105
+        active:scale-95
+      "
       style={{
         width: 22,
         height: 22,
 
-        border: `2px solid ${
-          checked
-            ? COLORS.teal
-            : COLORS.line
-        }`,
+        border: `2px solid ${COLORS.line}`,
 
-        background: checked
-          ? COLORS.teal
-          : "transparent",
+        background: COLORS.card,
 
         opacity: loading ? 0.6 : 1,
       }}
     >
-      {loading ? (
+      {loading && (
         <Loader2
           size={12}
-          color={
-            checked
-              ? COLORS.card
-              : COLORS.teal
-          }
+          color={COLORS.teal}
           className="animate-spin"
         />
-      ) : (
-        checked && (
-          <Check
-            size={13}
-            color={COLORS.card}
-            strokeWidth={3}
-          />
-        )
       )}
     </button>
-  );
-}
-
-/* =========================================================
-   PROGRESS BAR
-========================================================= */
-
-function ProgressBar({
-  percent,
-}: {
-  percent: number;
-}) {
-  return (
-    <div
-      style={{
-        height: 9,
-        borderRadius: 9,
-        background: COLORS.tealSoft,
-        overflow: "hidden",
-      }}
-    >
-      <div
-        style={{
-          height: "100%",
-
-          width: `${Math.min(
-            Math.max(percent, 0),
-            100
-          )}%`,
-
-          background: COLORS.teal,
-
-          borderRadius: 9,
-
-          transition:
-            "width 0.4s ease",
-        }}
-      />
-    </div>
   );
 }
 
@@ -173,8 +106,7 @@ function ProgressBar({
 ========================================================= */
 
 export default function TodayTasks() {
-  const [tasks, setTasks] =
-    useState<Task[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
 
   const [loading, setLoading] =
     useState(true);
@@ -186,7 +118,7 @@ export default function TodayTasks() {
     useState<string | null>(null);
 
   /* =======================================================
-     TODAY STRING
+     TODAY
   ======================================================= */
 
   const today = useMemo(() => {
@@ -206,41 +138,39 @@ export default function TodayTasks() {
   }, []);
 
   /* =======================================================
-     INITIAL LOAD
+     LOAD TASKS
   ======================================================= */
 
   useEffect(() => {
     let cancelled = false;
 
-    const loadInitialTasks =
-      async () => {
-        try {
-          const result =
-            await getTasks();
+    const loadTasks = async () => {
+      try {
+        const result = await getTasks();
 
-          if (!cancelled) {
-            setTasks(result);
-            setError(null);
-          }
-        } catch (err) {
-          console.error(
-            "Failed to load dashboard tasks:",
-            err
-          );
-
-          if (!cancelled) {
-            setError(
-              "টাস্ক লোড করা যায়নি।"
-            );
-          }
-        } finally {
-          if (!cancelled) {
-            setLoading(false);
-          }
+        if (!cancelled) {
+          setTasks(result);
+          setError(null);
         }
-      };
+      } catch (err) {
+        console.error(
+          "Failed to load dashboard tasks:",
+          err
+        );
 
-    void loadInitialTasks();
+        if (!cancelled) {
+          setError(
+            "টাস্ক লোড করা যায়নি।"
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void loadTasks();
 
     return () => {
       cancelled = true;
@@ -252,25 +182,19 @@ export default function TodayTasks() {
   ======================================================= */
 
   useEffect(() => {
-    let cancelled = false;
-
-    const handleOnline =
-      async () => {
-        try {
-          const result =
-            await getTasks();
-
-          if (!cancelled) {
-            setTasks(result);
-            setError(null);
-          }
-        } catch (err) {
+    const handleOnline = () => {
+      void getTasks()
+        .then((result) => {
+          setTasks(result);
+          setError(null);
+        })
+        .catch((err) => {
           console.error(
             "Failed to refresh dashboard tasks:",
             err
           );
-        }
-      };
+        });
+    };
 
     window.addEventListener(
       "online",
@@ -278,8 +202,6 @@ export default function TodayTasks() {
     );
 
     return () => {
-      cancelled = true;
-
       window.removeEventListener(
         "online",
         handleOnline
@@ -293,33 +215,56 @@ export default function TodayTasks() {
 
   const handleCompleteTask =
     async (taskId: string) => {
-      try {
-        setCompletingTaskId(
-          taskId
-        );
+      if (completingTaskId) {
+        return;
+      }
 
+      try {
+        setCompletingTaskId(taskId);
         setError(null);
 
         /*
-         * Existing task service:
+         * Immediately remove the task
+         * from dashboard UI.
          *
-         * Local IndexedDB updates first.
-         * Firebase sync happens in background.
+         * This makes the dashboard
+         * feel instant.
          */
-        await completeTask(taskId);
+        setTasks((currentTasks) =>
+          currentTasks.filter(
+            (task) => task.id !== taskId
+          )
+        );
 
         /*
-         * Read updated local data.
+         * Existing service handles:
+         *
+         * 1. Local update
+         * 2. Firebase background sync
+         * 3. Repeat-daily task creation
          */
-        const updatedTasks =
-          await getTasks();
-
-        setTasks(updatedTasks);
+        await completeTask(taskId);
       } catch (err) {
         console.error(
           "Failed to complete task:",
           err
         );
+
+        /*
+         * If completion fails,
+         * reload the task list so
+         * the task comes back.
+         */
+        try {
+          const result = await getTasks();
+
+          setTasks(result);
+        } catch (reloadError) {
+          console.error(
+            "Failed to restore task list:",
+            reloadError
+          );
+        }
 
         setError(
           "টাস্ক সম্পন্ন করা যায়নি।"
@@ -330,74 +275,72 @@ export default function TodayTasks() {
     };
 
   /* =======================================================
-     TODAY'S TASKS
+     TODAY'S ACTIVE TASKS
   ======================================================= */
 
   const todayTasks = useMemo(() => {
-    return tasks.filter((task) => {
-      /*
-       * Daily tasks
-       */
-      if (task.status === "daily") {
-        return true;
-      }
+    return tasks
+      .filter((task) => {
+        /*
+         * Only active daily tasks.
+         */
+        if (task.status === "daily") {
+          return true;
+        }
 
-      /*
-       * Completed today's tasks
-       */
-      if (
-        task.status === "completed" &&
-        task.completedAt
-      ) {
-        return task.completedAt.startsWith(
-          today
-        );
-      }
+        /*
+         * Pending task becomes visible
+         * when its active date is today
+         * or earlier.
+         */
+        if (
+          task.status === "pending" &&
+          task.activeDate
+        ) {
+          return task.activeDate <= today;
+        }
 
-      return false;
-    });
+        /*
+         * Completed tasks are intentionally
+         * NOT shown.
+         */
+        return false;
+      })
+      .sort((a, b) => {
+        /*
+         * Priority order:
+         *
+         * high
+         * medium
+         * low
+         */
+
+        const priorityOrder = {
+          high: 0,
+          medium: 1,
+          low: 2,
+        };
+
+        const priorityDifference =
+          priorityOrder[a.priority] -
+          priorityOrder[b.priority];
+
+        if (
+          priorityDifference !== 0
+        ) {
+          return priorityDifference;
+        }
+
+        return a.order - b.order;
+      });
   }, [tasks, today]);
 
   /* =======================================================
-     PENDING
+     EMPTY
   ======================================================= */
 
-  const pendingTasks = useMemo(() => {
-    return todayTasks.filter(
-      (task) =>
-        task.status !== "completed"
-    );
-  }, [todayTasks]);
-
-  /* =======================================================
-     COMPLETED
-  ======================================================= */
-
-  const completedTasks = useMemo(() => {
-    return todayTasks.filter(
-      (task) =>
-        task.status === "completed"
-    );
-  }, [todayTasks]);
-
-  /* =======================================================
-     PROGRESS
-  ======================================================= */
-
-  const totalTasks =
-    todayTasks.length;
-
-  const completedCount =
-    completedTasks.length;
-
-  const taskPercent =
-    totalTasks > 0
-      ? Math.round(
-          (completedCount /
-            totalTasks) *
-            100
-        )
-      : 0;
+  const hasTasks =
+    todayTasks.length > 0;
 
   /* =======================================================
      UI
@@ -412,42 +355,12 @@ export default function TodayTasks() {
       <DashboardSectionTitle
         icon={CheckSquare}
         title="আজকের টাস্ক"
-        subtitle={`${completedCount} সম্পন্ন · ${pendingTasks.length} বাকি`}
+        subtitle={
+          hasTasks
+            ? `${todayTasks.length}টি টাস্ক বাকি`
+            : "সব টাস্ক সম্পন্ন"
+        }
       />
-
-      {/* ===================================================
-          PROGRESS
-      =================================================== */}
-
-      <div className="mb-4">
-        <div
-          className="flex justify-between mb-1.5 text-xs"
-          style={{
-            color: COLORS.mutedSoft,
-          }}
-        >
-          <span>
-            অগ্রগতি
-          </span>
-
-          <span
-            style={{
-              fontFamily:
-                "'IBM Plex Mono', monospace",
-
-              color: COLORS.teal,
-
-              fontWeight: 600,
-            }}
-          >
-            {taskPercent}%
-          </span>
-        </div>
-
-        <ProgressBar
-          percent={taskPercent}
-        />
-      </div>
 
       {/* ===================================================
           LOADING
@@ -455,7 +368,14 @@ export default function TodayTasks() {
 
       {loading && (
         <div
-          className="flex items-center justify-center gap-2 py-6 text-sm"
+          className="
+            flex
+            items-center
+            justify-center
+            gap-2
+            py-7
+            text-sm
+          "
           style={{
             color: COLORS.mutedSoft,
           }}
@@ -477,12 +397,19 @@ export default function TodayTasks() {
 
       {!loading && error && (
         <div
-          className="rounded-xl px-3.5 py-3 text-sm"
+          className="
+            rounded-xl
+            px-3.5
+            py-3
+            text-sm
+            mb-3
+          "
           style={{
             background:
               COLORS.claySoft,
 
-            color: COLORS.clay,
+            color:
+              COLORS.clay,
           }}
         >
           {error}
@@ -490,183 +417,197 @@ export default function TodayTasks() {
       )}
 
       {/* ===================================================
-          EMPTY
+          EMPTY STATE
       =================================================== */}
 
       {!loading &&
         !error &&
-        todayTasks.length === 0 && (
+        !hasTasks && (
           <div
-            className="text-center py-6 text-sm"
-            style={{
-              color:
-                COLORS.mutedSoft,
-            }}
+            className="
+              flex
+              flex-col
+              items-center
+              justify-center
+              py-8
+              text-center
+            "
           >
-            আজকের কোনো টাস্ক নেই। 🎉
+            <div
+              className="
+                flex
+                items-center
+                justify-center
+                rounded-full
+                mb-3
+              "
+              style={{
+                width: 44,
+                height: 44,
+                background:
+                  COLORS.tealSoft,
+              }}
+            >
+              <Check
+                size={22}
+                color={COLORS.teal}
+                strokeWidth={2.5}
+              />
+            </div>
+
+            <p
+              className="text-sm font-medium"
+              style={{
+                color: COLORS.ink,
+              }}
+            >
+              আজকের সব টাস্ক সম্পন্ন 🎉
+            </p>
+
+            <p
+              className="text-xs mt-1"
+              style={{
+                color:
+                  COLORS.mutedSoft,
+              }}
+            >
+              দারুণ কাজ করেছেন।
+            </p>
           </div>
         )}
 
       {/* ===================================================
-          PENDING TASKS
+          TASK LIST
       =================================================== */}
 
       {!loading &&
-        pendingTasks.length > 0 && (
-          <div className="mb-4">
-            <div
-              className="text-xs mb-2"
-              style={{
-                color:
-                  COLORS.mutedSoft,
+        !error &&
+        hasTasks && (
+          <div className="flex flex-col gap-2.5">
+            {todayTasks.map((task) => {
+              const isCompleting =
+                completingTaskId ===
+                task.id;
 
-                fontWeight: 600,
-              }}
-            >
-              বাকি আছে
-            </div>
+              return (
+                <button
+                  key={task.id}
+                  type="button"
+                  disabled={
+                    completingTaskId !==
+                      null &&
+                    !isCompleting
+                  }
+                  onClick={() =>
+                    handleCompleteTask(
+                      task.id
+                    )
+                  }
+                  className="
+                    w-full
+                    flex
+                    items-center
+                    gap-3
+                    text-left
+                    rounded-xl
+                    px-3.5
+                    py-3
+                    transition-all
+                    duration-200
+                    hover:-translate-y-[1px]
+                    active:scale-[0.99]
+                  "
+                  style={{
+                    background:
+                      COLORS.paper,
 
-            <div className="flex flex-col gap-2">
-              {pendingTasks.map(
-                (task) => {
-                  const tone =
-                    priorityTone[
-                      task.priority
-                    ];
+                    border:
+                      `1px solid ${COLORS.line}`,
 
-                  const isCompleting =
-                    completingTaskId ===
-                    task.id;
+                    opacity:
+                      isCompleting
+                        ? 0.65
+                        : 1,
+                  }}
+                >
+                  {/* =================================================
+                      CHECKBOX
+                  ================================================= */}
 
-                  return (
+                  <TaskCheckbox
+                    loading={
+                      isCompleting
+                    }
+                    onClick={() => {}}
+                  />
+
+                  {/* =================================================
+                      TASK CONTENT
+                  ================================================= */}
+
+                  <div className="flex-1 min-w-0">
                     <div
-                      key={task.id}
-                      className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl"
-                      style={{
-                        background:
-                          COLORS.paper,
-
-                        border:
-                          `1px solid ${COLORS.line}`,
-                      }}
-                    >
-                      {/* Checkbox */}
-
-                      <TaskCheckbox
-                        checked={false}
-                        loading={
-                          isCompleting
-                        }
-                        onClick={() =>
-                          handleCompleteTask(
-                            task.id
-                          )
-                        }
-                      />
-
-                      {/* Title */}
-
-                      <span
-                        className="text-sm flex-1 min-w-0"
-                        style={{
-                          color:
-                            COLORS.ink,
-
-                          overflowWrap:
-                            "anywhere",
-                        }}
-                      >
-                        {task.title}
-                      </span>
-
-                      {/* Priority */}
-
-                      <span
-                        className="text-xs px-2 py-0.5 rounded-full flex-shrink-0"
-                        style={{
-                          background:
-                            tone.bg,
-
-                          color:
-                            tone.fg,
-
-                          fontWeight: 600,
-                        }}
-                      >
-                        {tone.label}
-                      </span>
-                    </div>
-                  );
-                }
-              )}
-            </div>
-          </div>
-        )}
-
-      {/* ===================================================
-          COMPLETED TASKS
-      =================================================== */}
-
-      {!loading &&
-        completedTasks.length > 0 && (
-          <div>
-            <div
-              className="text-xs mb-2"
-              style={{
-                color:
-                  COLORS.mutedSoft,
-
-                fontWeight: 600,
-              }}
-            >
-              সম্পন্ন হয়েছে
-            </div>
-
-            <div className="flex flex-col gap-2">
-              {completedTasks.map(
-                (task) => (
-                  <div
-                    key={task.id}
-                    className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl"
-                    style={{
-                      background:
-                        COLORS.paper,
-
-                      border:
-                        `1px solid ${COLORS.line}`,
-
-                      opacity: 0.65,
-                    }}
-                  >
-                    {/* Completed checkbox */}
-
-                    <TaskCheckbox
-                      checked={true}
-                      loading={false}
-                      onClick={() => {}}
-                    />
-
-                    {/* Task title */}
-
-                    <span
-                      className="text-sm flex-1 min-w-0"
+                      className="text-sm font-medium"
                       style={{
                         color:
-                          COLORS.mutedSoft,
-
-                        textDecoration:
-                          "line-through",
+                          COLORS.ink,
 
                         overflowWrap:
                           "anywhere",
                       }}
                     >
                       {task.title}
-                    </span>
+                    </div>
+
+                    {/* Description */}
+
+                    {task.description && (
+                      <div
+                        className="
+                          text-xs
+                          mt-1
+                          line-clamp-1
+                        "
+                        style={{
+                          color:
+                            COLORS.muted,
+                        }}
+                      >
+                        {task.description}
+                      </div>
+                    )}
                   </div>
-                )
-              )}
-            </div>
+
+                  {/* =================================================
+                      PRIORITY TEXT
+                  ================================================= */}
+
+                  <span
+                    className="
+                      text-xs
+                      font-semibold
+                      flex-shrink-0
+                    "
+                    style={{
+                      color:
+                        task.priority ===
+                        "high"
+                          ? COLORS.clay
+                          : task.priority ===
+                            "medium"
+                          ? COLORS.gold
+                          : COLORS.teal,
+                    }}
+                  >
+                    {
+                      priorityLabel[
+                        task.priority
+                      ]
+                    }
+                  </span>
+                </button>
+              );
+            })}
           </div>
         )}
     </DashboardCard>
