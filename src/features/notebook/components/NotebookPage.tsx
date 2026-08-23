@@ -3,6 +3,7 @@
 import {
   useMemo,
   useState,
+  type ReactNode,
 } from "react";
 
 import {
@@ -22,13 +23,9 @@ import {
   toggleNotePin,
 } from "../services/notebook.service";
 
-import {
-  useNotes,
-} from "../hooks/useNotes";
+import { useNotes } from "../hooks/useNotes";
 
-import {
-  Note,
-} from "../types/notebook.types";
+import type { Note } from "../types/notebook.types";
 
 import NoteEditor from "./NoteEditor";
 
@@ -90,10 +87,6 @@ export default function NotebookPage() {
             block.type === "text" &&
             typeof block.text === "string" &&
             block.text.trim().length > 0,
-        ) ||
-        (
-          typeof note.content === "string" &&
-          note.content.trim().length > 0
         );
 
       const hasCheckbox =
@@ -102,13 +95,11 @@ export default function NotebookPage() {
             block.type === "checklist" &&
             typeof block.text === "string" &&
             block.text.trim().length > 0,
-        ) ||
-        (
-          Array.isArray(note.checklist) &&
-          note.checklist.length > 0
         );
 
-      /* FILTER */
+      /* =====================================================
+         FILTER
+      ===================================================== */
 
       if (
         activeFilter === "paragraph" &&
@@ -138,7 +129,9 @@ export default function NotebookPage() {
         return false;
       }
 
-      /* SEARCH */
+      /* =====================================================
+         SEARCH
+      ===================================================== */
 
       if (!query) {
         return true;
@@ -147,11 +140,6 @@ export default function NotebookPage() {
       const title =
         typeof note.title === "string"
           ? note.title.toLowerCase()
-          : "";
-
-      const content =
-        typeof note.content === "string"
-          ? note.content.toLowerCase()
           : "";
 
       const blockText =
@@ -164,36 +152,9 @@ export default function NotebookPage() {
           .join(" ")
           .toLowerCase();
 
-      const checklistText =
-        Array.isArray(note.checklist)
-          ? note.checklist
-              .map((item) => {
-                if (
-                  typeof item === "string"
-                ) {
-                  return item;
-                }
-
-                if (
-                  item &&
-                  typeof item === "object" &&
-                  "text" in item &&
-                  typeof item.text === "string"
-                ) {
-                  return item.text;
-                }
-
-                return "";
-              })
-              .join(" ")
-              .toLowerCase()
-          : "";
-
       return (
         title.includes(query) ||
-        content.includes(query) ||
-        blockText.includes(query) ||
-        checklistText.includes(query)
+        blockText.includes(query)
       );
     });
   }, [
@@ -224,10 +185,6 @@ export default function NotebookPage() {
             block.type === "text" &&
             typeof block.text === "string" &&
             block.text.trim().length > 0,
-        ) ||
-        (
-          typeof note.content === "string" &&
-          note.content.trim().length > 0
         );
 
       const hasCheckbox =
@@ -236,10 +193,6 @@ export default function NotebookPage() {
             block.type === "checklist" &&
             typeof block.text === "string" &&
             block.text.trim().length > 0,
-        ) ||
-        (
-          Array.isArray(note.checklist) &&
-          note.checklist.length > 0
         );
 
       if (
@@ -279,9 +232,7 @@ export default function NotebookPage() {
 
     try {
       /*
-       * IMPORTANT:
-       * Title is intentionally empty.
-       * No default title is created.
+       * Title intentionally empty.
        */
       const note =
         await addNote("");
@@ -403,7 +354,9 @@ export default function NotebookPage() {
     <div className="min-h-full bg-gray-50 p-4 sm:p-6">
       <div className="mx-auto max-w-7xl">
 
-        {/* HEADER */}
+        {/* =================================================
+            HEADER
+        ================================================= */}
 
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 
@@ -448,7 +401,9 @@ export default function NotebookPage() {
           </button>
         </div>
 
-        {/* SEARCH */}
+        {/* =================================================
+            SEARCH
+        ================================================= */}
 
         <div className="mt-6 rounded-2xl border border-gray-200 bg-white p-3 shadow-sm">
           <div className="flex items-center gap-3 px-1">
@@ -479,7 +434,9 @@ export default function NotebookPage() {
           </div>
         </div>
 
-        {/* FILTERS */}
+        {/* =================================================
+            FILTERS
+        ================================================= */}
 
         <div className="mt-4 overflow-x-auto pb-1">
           <div className="flex min-w-max gap-2">
@@ -563,7 +520,9 @@ export default function NotebookPage() {
           </div>
         </div>
 
-        {/* STATUS */}
+        {/* =================================================
+            STATUS
+        ================================================= */}
 
         <div className="mt-6 flex items-center justify-between">
 
@@ -589,7 +548,9 @@ export default function NotebookPage() {
           )}
         </div>
 
-        {/* ERROR */}
+        {/* =================================================
+            ERROR / OFFLINE
+        ================================================= */}
 
         {error && (
           <div className="mt-4 rounded-xl border border-yellow-100 bg-yellow-50 px-4 py-3 text-xs text-yellow-700">
@@ -597,11 +558,15 @@ export default function NotebookPage() {
           </div>
         )}
 
-        {/* NOTES */}
+        {/* =================================================
+            NOTES
+        ================================================= */}
 
         {filteredNotes.length === 0 ? (
           <EmptyState
-            onCreate={handleCreateNote}
+            onCreate={
+              handleCreateNote
+            }
           />
         ) : (
           <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -635,7 +600,9 @@ export default function NotebookPage() {
         )}
       </div>
 
-      {/* NOTE EDITOR */}
+      {/* =================================================
+          NOTE EDITOR
+      ================================================= */}
 
       {editingNote && (
         <NoteEditor
@@ -673,7 +640,7 @@ function FilterButton({
 }: {
   active: boolean;
   onClick: () => void;
-  icon: React.ReactNode;
+  icon: ReactNode;
   label: string;
   count: number;
 }) {
@@ -797,6 +764,10 @@ function NoteCard({
       ? note.blocks
       : [];
 
+  /* =======================================================
+     TEXT BLOCKS
+  ======================================================= */
+
   const textParts =
     blocks
       .filter(
@@ -808,6 +779,10 @@ function NoteCard({
       .map(
         (block) => block.text,
       );
+
+  /* =======================================================
+     CHECKLIST BLOCKS
+  ======================================================= */
 
   const checklistParts =
     blocks
@@ -822,33 +797,39 @@ function NoteCard({
       );
 
   const hasParagraph =
-    textParts.length > 0 ||
-    (
-      typeof note.content === "string" &&
-      note.content.trim().length > 0
-    );
+    textParts.length > 0;
 
   const hasCheckbox =
-    checklistParts.length > 0 ||
-    (
-      Array.isArray(note.checklist) &&
-      note.checklist.length > 0
-    );
+    checklistParts.length > 0;
+
+  /* =======================================================
+     PREVIEW
+  ======================================================= */
 
   const preview =
     textParts.join(" ") ||
     checklistParts.join(" • ") ||
-    (
-      typeof note.content === "string"
-        ? note.content
-        : ""
-    ) ||
     "Empty note";
 
   return (
-    <div className="group relative overflow-hidden rounded-2xl border border-gray-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+    <div className="
+      group
+      relative
+      overflow-hidden
+      rounded-2xl
+      border
+      border-gray-200
+      bg-white
+      p-5
+      shadow-sm
+      transition
+      hover:-translate-y-0.5
+      hover:shadow-md
+    ">
 
-      {/* PIN */}
+      {/* =================================================
+          PIN
+      ================================================= */}
 
       <button
         type="button"
@@ -875,7 +856,9 @@ function NoteCard({
         <Pin size={17} />
       </button>
 
-      {/* OPEN */}
+      {/* =================================================
+          OPEN
+      ================================================= */}
 
       <button
         type="button"
@@ -883,30 +866,64 @@ function NoteCard({
         className="w-full text-left"
       >
         <h4 className="pr-10 font-semibold text-gray-900">
-          {note.title || ""}
+          {note.title || "Untitled Note"}
         </h4>
 
-        <p className="mt-3 line-clamp-4 text-sm leading-6 text-gray-500">
+        <p className="
+          mt-3
+          line-clamp-4
+          text-sm
+          leading-6
+          text-gray-500
+        ">
           {preview}
         </p>
+
+        {/* =================================================
+            TYPE BADGES
+        ================================================= */}
 
         <div className="mt-4 flex flex-wrap gap-2">
 
           {hasParagraph && (
-            <span className="rounded-lg bg-blue-50 px-2.5 py-1 text-[10px] font-medium text-blue-600">
+            <span className="
+              rounded-lg
+              bg-blue-50
+              px-2.5
+              py-1
+              text-[10px]
+              font-medium
+              text-blue-600
+            ">
               Paragraph
             </span>
           )}
 
           {hasCheckbox && (
-            <span className="rounded-lg bg-orange-50 px-2.5 py-1 text-[10px] font-medium text-orange-600">
+            <span className="
+              rounded-lg
+              bg-orange-50
+              px-2.5
+              py-1
+              text-[10px]
+              font-medium
+              text-orange-600
+            ">
               Checkbox
             </span>
           )}
 
           {hasParagraph &&
             hasCheckbox && (
-              <span className="rounded-lg bg-purple-50 px-2.5 py-1 text-[10px] font-medium text-purple-600">
+              <span className="
+                rounded-lg
+                bg-purple-50
+                px-2.5
+                py-1
+                text-[10px]
+                font-medium
+                text-purple-600
+              ">
                 Both
               </span>
             )}
@@ -914,9 +931,19 @@ function NoteCard({
         </div>
       </button>
 
-      {/* FOOTER */}
+      {/* =================================================
+          FOOTER
+      ================================================= */}
 
-      <div className="mt-5 flex items-center justify-between border-t border-gray-100 pt-3">
+      <div className="
+        mt-5
+        flex
+        items-center
+        justify-between
+        border-t
+        border-gray-100
+        pt-3
+      ">
 
         <span className="text-[11px] text-gray-400">
           {formatDate(
