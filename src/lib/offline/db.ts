@@ -13,9 +13,10 @@ export interface OfflineRecord {
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
-/**
- * Open IndexedDB
- */
+/* =========================================================
+   OPEN DATABASE
+   ========================================================= */
+
 function openDatabase(): Promise<IDBDatabase> {
   if (typeof window === "undefined") {
     return Promise.reject(
@@ -29,126 +30,99 @@ function openDatabase(): Promise<IDBDatabase> {
     return dbPromise;
   }
 
-  dbPromise = new Promise((resolve, reject) => {
-    const request = indexedDB.open(
-      DB_NAME,
-      DB_VERSION
-    );
-
-    /**
-     * Database open error
-     */
-    request.onerror = () => {
-      dbPromise = null;
-
-      console.error(
-        "IndexedDB open error:",
-        request.error
+  dbPromise = new Promise<IDBDatabase>(
+    (resolve, reject) => {
+      const request = indexedDB.open(
+        DB_NAME,
+        DB_VERSION
       );
 
-      reject(
-        request.error ??
-          new Error("Failed to open IndexedDB.")
-      );
-    };
-
-    /**
-     * Database opened successfully
-     */
-    request.onsuccess = () => {
-      const db = request.result;
-
-      /**
-       * If database connection closes,
-       * allow it to be opened again.
-       */
-      db.onclose = () => {
+      request.onerror = () => {
         dbPromise = null;
+
+        console.error(
+          "IndexedDB open error:",
+          request.error
+        );
+
+        reject(
+          request.error ??
+            new Error(
+              "Failed to open IndexedDB."
+            )
+        );
       };
 
-      /**
-       * If database version changes
-       * or another tab blocks the upgrade.
-       */
-      db.onversionchange = () => {
-        db.close();
-        dbPromise = null;
-      };
+      request.onupgradeneeded = () => {
+        const db = request.result;
 
-      resolve(db);
-    };
+        if (
+          !db.objectStoreNames.contains(
+            STORE_NAME
+          )
+        ) {
+          const store =
+            db.createObjectStore(
+              STORE_NAME,
+              {
+                keyPath: "id",
+              }
+            );
 
-    /**
-     * Create database/store
-     */
-    request.onupgradeneeded = () => {
-      const db = request.result;
-
-      if (
-        !db.objectStoreNames.contains(
-          STORE_NAME
-        )
-      ) {
-        const store =
-          db.createObjectStore(
-            STORE_NAME,
+          store.createIndex(
+            "collection",
+            "collection",
             {
-              keyPath: "id",
+              unique: false,
             }
           );
 
-        /**
-         * Collection index
-         */
-        store.createIndex(
-          "collection",
-          "collection",
-          {
-            unique: false,
-          }
-        );
+          store.createIndex(
+            "syncStatus",
+            "syncStatus",
+            {
+              unique: false,
+            }
+          );
+        }
+      };
 
-        /**
-         * Sync status index
-         */
-        store.createIndex(
-          "syncStatus",
-          "syncStatus",
-          {
-            unique: false,
-          }
-        );
-      }
-    };
+      request.onsuccess = () => {
+        const db = request.result;
 
-    /**
-     * Upgrade blocked
-     */
-    request.onblocked = () => {
-      console.warn(
-        "IndexedDB upgrade is blocked. Close other tabs using Life OS."
-      );
-    };
-  });
+        db.onclose = () => {
+          dbPromise = null;
+        };
+
+        db.onversionchange = () => {
+          db.close();
+          dbPromise = null;
+        };
+
+        resolve(db);
+      };
+
+      request.onblocked = () => {
+        console.warn(
+          "IndexedDB upgrade is blocked. Close other Life OS tabs."
+        );
+      };
+    }
+  );
 
   return dbPromise;
 }
 
-/**
- * Save or update local data.
- *
- * Used for:
- * - offline task creation
- * - offline task update
- * - offline task delete
- * - synced local data
- */
+/* =========================================================
+   SAVE ONE RECORD
+   ========================================================= */
+
 export async function saveOfflineData(
   record: OfflineRecord
 ): Promise<void> {
   const db = await openDatabase();
 
-  return new Promise(
+  return new Promise<void>(
     (resolve, reject) => {
       const transaction =
         db.transaction(
@@ -188,15 +162,74 @@ export async function saveOfflineData(
   );
 }
 
-/**
- * Get one local record.
- */
+/* =========================================================
+   SAVE MANY RECORDS
+   ---------------------------------------------------------
+   Used when Firebase returns many records.
+   Much faster than opening a transaction for every item.
+   ========================================================= */
+
+export async function saveOfflineDataBatch(
+  records: OfflineRecord[]
+): Promise<void> {
+  if (records.length === 0) {
+    return;
+  }
+
+  const db = await openDatabase();
+
+  return new Promise<void>(
+    (resolve, reject) => {
+      const transaction =
+        db.transaction(
+          STORE_NAME,
+          "readwrite"
+        );
+
+      const store =
+        transaction.objectStore(
+          STORE_NAME
+        );
+
+      for (const record of records) {
+        store.put(record);
+      }
+
+      transaction.oncomplete = () => {
+        resolve();
+      };
+
+      transaction.onerror = () => {
+        reject(
+          transaction.error ??
+            new Error(
+              "Failed to save offline data batch."
+            )
+        );
+      };
+
+      transaction.onabort = () => {
+        reject(
+          transaction.error ??
+            new Error(
+              "Offline data batch transaction aborted."
+            )
+        );
+      };
+    }
+  );
+}
+
+/* =========================================================
+   GET ONE RECORD
+   ========================================================= */
+
 export async function getOfflineData(
   id: string
 ): Promise<OfflineRecord | null> {
   const db = await openDatabase();
 
-  return new Promise(
+  return new Promise<OfflineRecord | null>(
     (resolve, reject) => {
       const transaction =
         db.transaction(
@@ -214,7 +247,8 @@ export async function getOfflineData(
 
       request.onsuccess = () => {
         resolve(
-          request.result ?? null
+          request.result ??
+            null
         );
       };
 
@@ -230,19 +264,16 @@ export async function getOfflineData(
   );
 }
 
-/**
- * Get all records from one collection.
- *
- * Includes:
- * - synced data
- * - pending data
- */
+/* =========================================================
+   GET COLLECTION
+   ========================================================= */
+
 export async function getOfflineCollection(
   collection: string
 ): Promise<OfflineRecord[]> {
   const db = await openDatabase();
 
-  return new Promise(
+  return new Promise<OfflineRecord[]>(
     (resolve, reject) => {
       const transaction =
         db.transaction(
@@ -262,9 +293,22 @@ export async function getOfflineCollection(
         index.getAll(collection);
 
       request.onsuccess = () => {
-        resolve(
-          request.result ?? []
+        const records =
+          request.result ?? [];
+
+        /**
+         * Keep newest local version first.
+         *
+         * This is useful when multiple
+         * local records exist.
+         */
+        records.sort(
+          (a, b) =>
+            b.updatedAt -
+            a.updatedAt
         );
+
+        resolve(records);
       };
 
       request.onerror = () => {
@@ -279,16 +323,16 @@ export async function getOfflineCollection(
   );
 }
 
-/**
- * Get all records waiting
- * for Firebase synchronization.
- */
+/* =========================================================
+   GET ALL PENDING DATA
+   ========================================================= */
+
 export async function getPendingOfflineData(): Promise<
   OfflineRecord[]
 > {
   const db = await openDatabase();
 
-  return new Promise(
+  return new Promise<OfflineRecord[]>(
     (resolve, reject) => {
       const transaction =
         db.transaction(
@@ -308,9 +352,20 @@ export async function getPendingOfflineData(): Promise<
         index.getAll("pending");
 
       request.onsuccess = () => {
-        resolve(
-          request.result ?? []
+        const records =
+          request.result ?? [];
+
+        /**
+         * Oldest changes first.
+         * This keeps sync order predictable.
+         */
+        records.sort(
+          (a, b) =>
+            a.updatedAt -
+            b.updatedAt
         );
+
+        resolve(records);
       };
 
       request.onerror = () => {
@@ -325,15 +380,16 @@ export async function getPendingOfflineData(): Promise<
   );
 }
 
-/**
- * Delete local data.
- */
+/* =========================================================
+   DELETE ONE RECORD
+   ========================================================= */
+
 export async function deleteOfflineData(
   id: string
 ): Promise<void> {
   const db = await openDatabase();
 
-  return new Promise(
+  return new Promise<void>(
     (resolve, reject) => {
       const transaction =
         db.transaction(
@@ -373,12 +429,10 @@ export async function deleteOfflineData(
   );
 }
 
-/**
- * Mark local data as synced.
- *
- * The record remains in IndexedDB so the app
- * can continue displaying data while offline.
- */
+/* =========================================================
+   MARK AS SYNCED
+   ========================================================= */
+
 export async function markOfflineDataSynced(
   id: string
 ): Promise<void> {
@@ -396,12 +450,10 @@ export async function markOfflineDataSynced(
   });
 }
 
-/**
- * Clear all records from a collection.
- *
- * Useful when we need to reset local
- * cached data for a specific user.
- */
+/* =========================================================
+   CLEAR ONE COLLECTION
+   ========================================================= */
+
 export async function clearOfflineCollection(
   collection: string
 ): Promise<void> {
@@ -416,7 +468,7 @@ export async function clearOfflineCollection(
 
   const db = await openDatabase();
 
-  return new Promise(
+  return new Promise<void>(
     (resolve, reject) => {
       const transaction =
         db.transaction(
@@ -442,6 +494,109 @@ export async function clearOfflineCollection(
           transaction.error ??
             new Error(
               "Failed to clear offline collection."
+            )
+        );
+      };
+
+      transaction.onabort = () => {
+        reject(
+          transaction.error ??
+            new Error(
+              "Clear offline collection transaction aborted."
+            )
+        );
+      };
+    }
+  );
+}
+
+/* =========================================================
+   CLEAR USER'S OFFLINE DATA
+   ---------------------------------------------------------
+   IMPORTANT:
+   This only removes local IndexedDB cache.
+   It does NOT delete Firebase data.
+   ========================================================= */
+
+export async function clearOfflineUserData(
+  uid: string
+): Promise<void> {
+  const db = await openDatabase();
+
+  return new Promise<void>(
+    (resolve, reject) => {
+      const transaction =
+        db.transaction(
+          STORE_NAME,
+          "readwrite"
+        );
+
+      const store =
+        transaction.objectStore(
+          STORE_NAME
+        );
+
+      const request =
+        store.openCursor();
+
+      request.onsuccess = () => {
+        const cursor =
+          request.result;
+
+        if (!cursor) {
+          return;
+        }
+
+        const record =
+          cursor.value as OfflineRecord;
+
+        /**
+         * User-specific collections normally
+         * use the UID in their collection name.
+         *
+         * Example:
+         * tasks:USER_UID
+         * habits:USER_UID
+         * goals:USER_UID
+         */
+        if (
+          record.collection.endsWith(
+            `:${uid}`
+          )
+        ) {
+          cursor.delete();
+        }
+
+        cursor.continue();
+      };
+
+      request.onerror = () => {
+        reject(
+          request.error ??
+            new Error(
+              "Failed to clear user offline data."
+            )
+        );
+      };
+
+      transaction.oncomplete = () => {
+        resolve();
+      };
+
+      transaction.onerror = () => {
+        reject(
+          transaction.error ??
+            new Error(
+              "Failed to clear user offline data transaction."
+            )
+        );
+      };
+
+      transaction.onabort = () => {
+        reject(
+          transaction.error ??
+            new Error(
+              "Clear user offline data transaction aborted."
             )
         );
       };
