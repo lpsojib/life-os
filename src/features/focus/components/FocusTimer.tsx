@@ -28,24 +28,40 @@ import {
 function formatTime(
   milliseconds: number
 ): string {
-  const totalSeconds = Math.floor(
-    Math.max(0, milliseconds) / 1000
-  );
+  const totalSeconds =
+    Math.floor(
+      Math.max(
+        0,
+        milliseconds
+      ) / 1000
+    );
 
-  const hours = Math.floor(
-    totalSeconds / 3600
-  );
+  const hours =
+    Math.floor(
+      totalSeconds / 3600
+    );
 
-  const minutes = Math.floor(
-    (totalSeconds % 3600) / 60
-  );
+  const minutes =
+    Math.floor(
+      (totalSeconds % 3600) /
+        60
+    );
 
-  const seconds = totalSeconds % 60;
+  const seconds =
+    totalSeconds % 60;
 
   return [
-    hours.toString().padStart(2, "0"),
-    minutes.toString().padStart(2, "0"),
-    seconds.toString().padStart(2, "0"),
+    hours
+      .toString()
+      .padStart(2, "0"),
+
+    minutes
+      .toString()
+      .padStart(2, "0"),
+
+    seconds
+      .toString()
+      .padStart(2, "0"),
   ].join(":");
 }
 
@@ -61,12 +77,13 @@ export default function FocusTimer() {
     useState<FocusItem | null>(null);
 
   /*
-   * 0 is used as initial value.
+   * This state only forces the component
+   * to re-render every second.
    *
-   * No Date.now() during render.
+   * No Date.now() here.
    */
-  const [now, setNow] =
-    useState<number>(0);
+  const [tick, setTick] =
+    useState(0);
 
   const [loading, setLoading] =
     useState(true);
@@ -95,20 +112,21 @@ export default function FocusTimer() {
           setError(null);
           setLoading(true);
 
-          /*
-           * Logged out
-           */
+          /* -----------------------------------------------
+             LOGOUT
+             ----------------------------------------------- */
+
           if (!currentUser) {
             setTimer(null);
             setLoading(false);
             return;
           }
 
+          /* -----------------------------------------------
+             LOAD FIRESTORE TIMER
+             ----------------------------------------------- */
+
           try {
-            /*
-             * Load permanent timer
-             * from Firestore.
-             */
             const savedTimer =
               await loadFocusTimer(
                 currentUser
@@ -119,17 +137,24 @@ export default function FocusTimer() {
             }
 
             /*
-             * Existing timer found.
+             * Existing timer.
+             *
+             * DO NOT create a new timer.
              */
             if (savedTimer) {
-              setTimer(savedTimer);
+              setTimer(
+                savedTimer
+              );
+
               setLoading(false);
+
               return;
             }
 
-            /*
-             * First timer for this account.
-             */
+            /* ---------------------------------------------
+               FIRST TIMER FOR THIS USER
+               --------------------------------------------- */
+
             const newTimer =
               createDefaultFocusItem();
 
@@ -142,10 +167,12 @@ export default function FocusTimer() {
               return;
             }
 
-            setTimer(newTimer);
+            setTimer(
+              newTimer
+            );
           } catch (err) {
             console.error(
-              "Failed to load Focus Timer:",
+              "Focus Timer error:",
               err
             );
 
@@ -166,47 +193,38 @@ export default function FocusTimer() {
 
     return () => {
       cancelled = true;
+
       unsubscribe();
     };
   }, []);
 
   /* =======================================================
-     TIMER CLOCK
+     CLOCK
      ======================================================= */
 
   useEffect(() => {
     /*
-     * If timer is not running,
-     * there is nothing to subscribe to.
+     * Timer paused হলে interval দরকার নেই।
      *
-     * No setState here.
+     * এখানে কোনো setState নেই।
      */
     if (!timer?.running) {
       return;
     }
 
-    /*
-     * Timer is running.
-     *
-     * First update happens asynchronously,
-     * avoiding synchronous setState inside
-     * the effect body.
-     */
-    const firstUpdate =
-      window.setTimeout(() => {
-        setNow(Date.now());
-      }, 0);
-
     const interval =
       window.setInterval(() => {
-        setNow(Date.now());
+        /*
+         * Functional update.
+         *
+         * React cascading-render warning হবে না।
+         */
+        setTick(
+          (value) => value + 1
+        );
       }, 1000);
 
     return () => {
-      window.clearTimeout(
-        firstUpdate
-      );
-
       window.clearInterval(
         interval
       );
@@ -227,36 +245,32 @@ export default function FocusTimer() {
         return;
       }
 
-      const startTime =
-        Date.now();
-
       const updatedTimer =
         startFocus(
-          timer,
-          startTime
+          timer
         );
 
       setSaving(true);
       setError(null);
 
       try {
+        /*
+         * Firebase first.
+         */
         await saveFocusTimer(
           user,
           updatedTimer
         );
 
+        /*
+         * Firebase success হলে UI update.
+         */
         setTimer(
           updatedTimer
         );
-
-        /*
-         * This happens from a click
-         * handler, not render/effect.
-         */
-        setNow(startTime);
       } catch (err) {
         console.error(
-          "Failed to start timer:",
+          "Start timer error:",
           err
         );
 
@@ -286,13 +300,9 @@ export default function FocusTimer() {
         return;
       }
 
-      const pauseTime =
-        Date.now();
-
       const updatedTimer =
         pauseFocus(
-          timer,
-          pauseTime
+          timer
         );
 
       setSaving(true);
@@ -309,7 +319,7 @@ export default function FocusTimer() {
         );
       } catch (err) {
         console.error(
-          "Failed to pause timer:",
+          "Pause timer error:",
           err
         );
 
@@ -354,7 +364,7 @@ export default function FocusTimer() {
         );
       } catch (err) {
         console.error(
-          "Failed to reset timer:",
+          "Reset timer error:",
           err
         );
 
@@ -426,28 +436,20 @@ export default function FocusTimer() {
      ======================================================= */
 
   /*
-   * When running:
+   * tick state শুধু render trigger করে।
    *
-   * now > 0
-   *      ↓
-   * calculate live elapsed
+   * Actual time calculation service-এর
+   * getElapsedTime() থেকে হবে।
    *
-   * When paused:
-   *
-   * timer.elapsed
-   *      ↓
-   * display saved time
+   * tick এখানে intentionally referenced
+   * so React keeps it as a dependency of
+   * the rendered value.
    */
-  const displayNow =
-    timer.running && now > 0
-      ? now
-      : timer.startedAt ??
-        0;
+  void tick;
 
   const elapsed =
     getElapsedTime(
-      timer,
-      displayNow
+      timer
     );
 
   /* =======================================================
@@ -467,10 +469,12 @@ export default function FocusTimer() {
           {timer.title}
         </h2>
 
-        {/* TIME */}
+        {/* TIMER */}
 
         <div className="mt-8 font-mono text-5xl font-bold tracking-wider text-slate-900">
-          {formatTime(elapsed)}
+          {formatTime(
+            elapsed
+          )}
         </div>
 
         {/* ERROR */}
@@ -513,6 +517,8 @@ export default function FocusTimer() {
             </button>
           )}
 
+          {/* RESET */}
+
           <button
             type="button"
             onClick={() => {
@@ -526,7 +532,7 @@ export default function FocusTimer() {
 
         </div>
 
-        {/* STATUS */}
+        {/* RUNNING */}
 
         {timer.running && (
           <p className="mt-5 text-xs font-medium text-green-600">
