@@ -18,6 +18,11 @@ export default function Dashboard() {
           maxWidth: "750px",
         }}
       >
+        {/* CACHE TEST */}
+        <div className="mb-4 rounded-xl bg-red-500 p-4 text-center font-bold text-white">
+          CACHE TEST — NEW CODE
+        </div>
+        
         {/* Header */}
         <DashboardHeader />
 
