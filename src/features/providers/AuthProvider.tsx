@@ -15,13 +15,17 @@ import {
   useAuthStore,
 } from "@/store/auth.store";
 
+/* =========================================================
+   PROPS
+========================================================= */
+
 interface Props {
   children: ReactNode;
 }
 
 /* =========================================================
    PUBLIC ROUTES
-   ========================================================= */
+========================================================= */
 
 const PUBLIC_ROUTES = [
   "/login",
@@ -30,7 +34,7 @@ const PUBLIC_ROUTES = [
 
 /* =========================================================
    CHECK PUBLIC ROUTE
-   ========================================================= */
+========================================================= */
 
 function isPublicRoute(
   pathname: string
@@ -46,7 +50,7 @@ function isPublicRoute(
 
 /* =========================================================
    AUTH PROVIDER
-   ========================================================= */
+========================================================= */
 
 export default function AuthProvider({
   children,
@@ -72,8 +76,8 @@ export default function AuthProvider({
     );
 
   /* =======================================================
-     START FIREBASE AUTH LISTENER
-     ======================================================= */
+     INITIALIZE AUTH
+  ======================================================= */
 
   useEffect(() => {
     initializeAuthListener();
@@ -81,12 +85,11 @@ export default function AuthProvider({
 
   /* =======================================================
      ROUTE PROTECTION
-     ======================================================= */
+  ======================================================= */
 
   useEffect(() => {
     /*
-     * Firebase এখনো cached auth/session
-     * check করছে।
+     * Firebase এখনো user check করছে।
      *
      * এই সময় কোনো redirect হবে না।
      */
@@ -100,13 +103,14 @@ export default function AuthProvider({
     const publicRoute =
       isPublicRoute(pathname);
 
-    /*
-     * User logged in আছে।
-     */
+    /* =====================================================
+       USER LOGGED IN
+    ===================================================== */
+
     if (user) {
       /*
-       * Login/Register page থেকে
-       * Dashboard-এ পাঠাবে।
+       * Logged-in user login/register
+       * page-এ থাকলে dashboard-এ পাঠাবো।
        */
       if (publicRoute) {
         router.replace(
@@ -117,9 +121,11 @@ export default function AuthProvider({
       return;
     }
 
+    /* =====================================================
+       USER NOT LOGGED IN
+    ===================================================== */
+
     /*
-     * User নেই।
-     *
      * Public page হলে থাকতে পারবে।
      */
     if (publicRoute) {
@@ -127,8 +133,8 @@ export default function AuthProvider({
     }
 
     /*
-     * Protected page + user নেই
-     * => Login page।
+     * Protected page + no user
+     * => Login
      */
     router.replace("/login");
   }, [
@@ -139,12 +145,81 @@ export default function AuthProvider({
     router,
   ]);
 
+  /* =======================================================
+     AUTH INITIALIZATION SCREEN
+  ======================================================= */
+
   /*
-   * IMPORTANT:
+   * সবচেয়ে গুরুত্বপূর্ণ change:
    *
-   * Auth check চলাকালীন children block করছি না।
+   * Firebase Auth ready হওয়ার আগে
+   * dashboard render হবে না।
    *
-   * তাই dashboard দ্রুত render হবে।
+   * তাই refresh-এর সময়
+   * auth.currentUser = null দেখে
+   * getTasks()/getHabits()/getGoals()
+   * ভুলভাবে execute করবে না।
    */
+
+  if (
+    loading ||
+    !initialized
+  ) {
+    return (
+      <div
+        className="
+          min-h-screen
+          flex
+          items-center
+          justify-center
+        "
+        style={{
+          background:
+            "#FAF5EA",
+        }}
+      >
+        <div
+          className="
+            flex
+            flex-col
+            items-center
+            gap-3
+          "
+        >
+          <div
+            className="
+              w-9
+              h-9
+              rounded-full
+              border-2
+              animate-spin
+            "
+            style={{
+              borderColor:
+                "#E9E0CC",
+
+              borderTopColor:
+                "#2A6459",
+            }}
+          />
+
+          <span
+            className="text-sm"
+            style={{
+              color:
+                "#8D8271",
+            }}
+          >
+            Life OS লোড হচ্ছে...
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  /* =======================================================
+     RENDER
+  ======================================================= */
+
   return <>{children}</>;
 }

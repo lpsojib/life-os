@@ -6,28 +6,25 @@ import {
 } from "firebase/auth";
 
 import { auth } from "@/lib/firebase";
-
 import { create } from "zustand";
+
+/* =========================================================
+   TYPES
+========================================================= */
 
 interface AuthState {
   user: User | null;
-
   loading: boolean;
-
   initialized: boolean;
 
-  setUser: (
-    user: User | null
-  ) => void;
-
-  setLoading: (
-    loading: boolean
-  ) => void;
-
-  setInitialized: (
-    initialized: boolean
-  ) => void;
+  setUser: (user: User | null) => void;
+  setLoading: (loading: boolean) => void;
+  setInitialized: (initialized: boolean) => void;
 }
+
+/* =========================================================
+   AUTH STORE
+========================================================= */
 
 export const useAuthStore =
   create<AuthState>((set) => ({
@@ -55,15 +52,18 @@ export const useAuthStore =
 
 /* =========================================================
    AUTH LISTENER
-   ========================================================= */
+========================================================= */
 
 let authListenerStarted = false;
 
+/**
+ * Firebase Auth listener.
+ *
+ * IMPORTANT:
+ * This must run only once.
+ */
 export const initializeAuthListener =
   (): void => {
-    /*
-     * Listener একবারই initialize হবে।
-     */
     if (authListenerStarted) {
       return;
     }
@@ -78,7 +78,6 @@ export const initializeAuthListener =
       useAuthStore.getState();
 
     setLoading(true);
-
     setInitialized(false);
 
     onAuthStateChanged(

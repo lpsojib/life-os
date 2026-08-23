@@ -6,9 +6,11 @@ import {
   Target,
   TrendingUp,
 } from "lucide-react";
+
 import {
   useCallback,
   useEffect,
+  useRef,
   useState,
 } from "react";
 
@@ -26,6 +28,8 @@ import {
   getGoals,
   getGoalTasks,
 } from "@/features/goals/services/goal.service";
+
+import { useAuthStore } from "@/store/auth.store";
 
 /* =========================================================
    TYPES
@@ -85,19 +89,17 @@ const COLORS = {
    HELPERS
 ========================================================= */
 
-const getTodayString = (): string => {
+function getTodayString(): string {
   const today = new Date();
 
-  return `${today.getFullYear()}-${String(
-    today.getMonth() + 1
-  ).padStart(2, "0")}-${String(
-    today.getDate()
-  ).padStart(2, "0")}`;
-};
+  return [
+    today.getFullYear(),
+    String(today.getMonth() + 1).padStart(2, "0"),
+    String(today.getDate()).padStart(2, "0"),
+  ].join("-");
+}
 
-const clampPercentage = (
-  value: number
-): number => {
+function clampPercentage(value: number): number {
   if (!Number.isFinite(value)) {
     return 0;
   }
@@ -106,6 +108,31 @@ const clampPercentage = (
     100,
     Math.max(0, Math.round(value))
   );
+}
+
+/* =========================================================
+   EMPTY SUMMARY
+========================================================= */
+
+const EMPTY_SUMMARY: Summary = {
+  tasks: {
+    total: 0,
+    completed: 0,
+    pending: 0,
+  },
+
+  habits: {
+    total: 0,
+    completed: 0,
+    pending: 0,
+  },
+
+  goals: {
+    total: 0,
+    completed: 0,
+    pending: 0,
+    progress: 0,
+  },
 };
 
 /* =========================================================
@@ -191,30 +218,34 @@ function OverviewCard({
 ========================================================= */
 
 export default function OverviewSection() {
+  /* =======================================================
+     AUTH
+  ======================================================= */
+
+  const user = useAuthStore(
+    (state) => state.user
+  );
+
+  const initialized = useAuthStore(
+    (state) => state.initialized
+  );
+
+  /* =======================================================
+     STATE
+  ======================================================= */
+
   const [summary, setSummary] =
-    useState<Summary>({
-      tasks: {
-        total: 0,
-        completed: 0,
-        pending: 0,
-      },
-
-      habits: {
-        total: 0,
-        completed: 0,
-        pending: 0,
-      },
-
-      goals: {
-        total: 0,
-        completed: 0,
-        pending: 0,
-        progress: 0,
-      },
-    });
+    useState<Summary>(EMPTY_SUMMARY);
 
   const [loading, setLoading] =
     useState(true);
+
+  /*
+   * Prevent old async requests from
+   * updating the UI after a newer request.
+   */
+  const requestIdRef =
+    useRef(0);
 
   /* =======================================================
      LOAD SUMMARY
@@ -222,6 +253,18 @@ export default function OverviewSection() {
 
   const loadSummary =
     useCallback(async () => {
+      /*
+       * Firebase auth এখনো ready না হলে
+       * কোনো database request করা হবে না।
+       */
+      if (!initialized || !user) {
+        setLoading(false);
+        return;
+      }
+
+      const requestId =
+        ++requestIdRef.current;
+
       try {
         setLoading(true);
 
@@ -236,18 +279,22 @@ export default function OverviewSection() {
           await getTasks();
 
         /*
-         * আজকের Task:
-         *
-         * 1. dueDate আজকের হলে
-         * 2. status daily হলে
-         * 3. আজ complete করা হলে
-         *
-         * Future/pending Task এখানে আসবে না।
+         * Request-এর মধ্যে user/auth state
+         * change হয়ে গেলে এই result ignore।
          */
+        if (
+          requestId !==
+          requestIdRef.current
+        ) {
+          return;
+        }
 
         const todayTasks =
           allTasks.filter(
             (task) => {
+              /*
+               * Due today
+               */
               if (
                 task.dueDate ===
                 today
@@ -255,6 +302,9 @@ export default function OverviewSection() {
                 return true;
               }
 
+              /*
+               * Daily task
+               */
               if (
                 task.status ===
                 "daily"
@@ -262,6 +312,9 @@ export default function OverviewSection() {
                 return true;
               }
 
+              /*
+               * আজ complete করা task
+               */
               if (
                 task.status ===
                   "completed" &&
@@ -307,6 +360,13 @@ export default function OverviewSection() {
         const allHabits =
           await getHabits();
 
+        if (
+          requestId !==
+          requestIdRef.current
+        ) {
+          return;
+        }
+
         const activeHabits =
           allHabits.filter(
             (habit) =>
@@ -317,41 +377,50 @@ export default function OverviewSection() {
         const totalHabits =
           activeHabits.length;
 
-        let completedHabits = 0;
+        /*
+         * প্রতিটি habit-এর আজকের
+         * completion check।
+         */
+        const habitResults =
+          await Promise.all(
+            activeHabits.map(
+              async (habit) => {
+                try {
+                  const completions =
+                    await getHabitCompletions(
+                      habit.id
+                    );
 
-        await Promise.all(
-          activeHabits.map(
-            async (habit) => {
-              try {
-                const completions =
-                  await getHabitCompletions(
-                    habit.id
-                  );
-
-                const completedToday =
-                  completions.some(
+                  return completions.some(
                     (completion) =>
                       completion.date ===
                         today &&
                       completion.completed ===
                         true
                   );
+                } catch (error) {
+                  console.error(
+                    "Habit completion load failed:",
+                    error
+                  );
 
-                if (
-                  completedToday
-                ) {
-                  completedHabits +=
-                    1;
+                  return false;
                 }
-              } catch (error) {
-                console.error(
-                  "Habit completion load failed:",
-                  error
-                );
               }
-            }
-          )
-        );
+            )
+          );
+
+        if (
+          requestId !==
+          requestIdRef.current
+        ) {
+          return;
+        }
+
+        const completedHabits =
+          habitResults.filter(
+            Boolean
+          ).length;
 
         const pendingHabits =
           Math.max(
@@ -367,11 +436,16 @@ export default function OverviewSection() {
         const allGoals =
           await getGoals();
 
-        /*
-         * শুধু আজকের date range-এর
-         * ভিতরে থাকা Goal।
-         */
+        if (
+          requestId !==
+          requestIdRef.current
+        ) {
+          return;
+        }
 
+        /*
+         * আজ active থাকা goals।
+         */
         const todayGoals =
           allGoals.filter(
             (goal) =>
@@ -387,7 +461,12 @@ export default function OverviewSection() {
         let completedGoals = 0;
         let totalGoalProgress = 0;
 
-        for (const goal of todayGoals) {
+        /*
+         * Goal progress calculate
+         */
+        for (
+          const goal of todayGoals
+        ) {
           let progress =
             typeof goal.progress ===
             "number"
@@ -399,6 +478,18 @@ export default function OverviewSection() {
               goal.id
             );
 
+          if (
+            requestId !==
+            requestIdRef.current
+          ) {
+            return;
+          }
+
+          /*
+           * Goal-এর task থাকলে
+           * task completion থেকেই
+           * progress calculate হবে।
+           */
           if (
             goalTasks.length > 0
           ) {
@@ -429,6 +520,13 @@ export default function OverviewSection() {
           ) {
             completedGoals += 1;
           }
+        }
+
+        if (
+          requestId !==
+          requestIdRef.current
+        ) {
+          return;
         }
 
         const pendingGoals =
@@ -481,26 +579,71 @@ export default function OverviewSection() {
           },
         });
       } catch (error) {
+        /*
+         * Firebase/auth ready হওয়ার আগের
+         * temporary error হলে console-এ দেখাবে।
+         */
         console.error(
           "Overview summary load failed:",
           error
         );
       } finally {
-        setLoading(false);
+        /*
+         * শুধু latest request loading বন্ধ করবে।
+         */
+        if (
+          requestId ===
+          requestIdRef.current
+        ) {
+          setLoading(false);
+        }
       }
-    }, []);
+    }, [initialized, user]);
 
   /* =======================================================
-     INITIAL LOAD + UPDATE EVENTS
+     INITIAL LOAD
   ======================================================= */
 
   useEffect(() => {
-    queueMicrotask(() => {
-      void loadSummary();
-    });
+    /*
+     * React 19 lint rule এড়ানোর জন্য
+     * effect-এর body থেকে সরাসরি
+     * loadSummary() call করা হচ্ছে না।
+     *
+     * Browser task queue-তে পাঠানো হচ্ছে।
+     */
+    const timer =
+      window.setTimeout(() => {
+        void loadSummary();
+      }, 0);
 
+    return () => {
+      window.clearTimeout(timer);
+
+      /*
+       * Current request invalid করে দিচ্ছি।
+       */
+      requestIdRef.current += 1;
+    };
+  }, [
+    initialized,
+    user,
+    loadSummary,
+  ]);
+
+  /* =======================================================
+     REAL-TIME UPDATE EVENTS
+  ======================================================= */
+
+  useEffect(() => {
+    /*
+     * Dashboard-এর অন্য component থেকে
+     * event এলে summary আবার load হবে।
+     */
     const handleUpdate = () => {
-      void loadSummary();
+      window.setTimeout(() => {
+        void loadSummary();
+      }, 0);
     };
 
     window.addEventListener(
@@ -520,6 +663,11 @@ export default function OverviewSection() {
 
     window.addEventListener(
       "life-os-task-synced",
+      handleUpdate
+    );
+
+    window.addEventListener(
+      "life-os-habit-synced",
       handleUpdate
     );
 
@@ -555,6 +703,11 @@ export default function OverviewSection() {
       );
 
       window.removeEventListener(
+        "life-os-habit-synced",
+        handleUpdate
+      );
+
+      window.removeEventListener(
         "life-os-goal-synced",
         handleUpdate
       );
@@ -570,21 +723,25 @@ export default function OverviewSection() {
      DISPLAY VALUES
   ======================================================= */
 
-  const taskValue = loading
-    ? "—"
-    : `${summary.tasks.completed}/${summary.tasks.total}`;
+  const taskValue =
+    loading
+      ? "—"
+      : `${summary.tasks.completed}/${summary.tasks.total}`;
 
-  const habitValue = loading
-    ? "—"
-    : `${summary.habits.completed}/${summary.habits.total}`;
+  const habitValue =
+    loading
+      ? "—"
+      : `${summary.habits.completed}/${summary.habits.total}`;
 
-  const goalValue = loading
-    ? "—"
-    : `${summary.goals.completed}/${summary.goals.total}`;
+  const goalValue =
+    loading
+      ? "—"
+      : `${summary.goals.completed}/${summary.goals.total}`;
 
-  const progressValue = loading
-    ? "—"
-    : `${summary.goals.progress}%`;
+  const progressValue =
+    loading
+      ? "—"
+      : `${summary.goals.progress}%`;
 
   /* =======================================================
      UI
@@ -597,6 +754,10 @@ export default function OverviewSection() {
       />
 
       <div className="grid grid-cols-2 gap-3">
+        {/* =================================================
+            TASKS
+        ================================================= */}
+
         <OverviewCard
           icon={CheckSquare}
           title="আজকের টাস্ক"
@@ -613,6 +774,10 @@ export default function OverviewSection() {
             COLORS.task.background
           }
         />
+
+        {/* =================================================
+            HABITS
+        ================================================= */}
 
         <OverviewCard
           icon={Flame}
@@ -631,6 +796,10 @@ export default function OverviewSection() {
           }
         />
 
+        {/* =================================================
+            GOALS
+        ================================================= */}
+
         <OverviewCard
           icon={Target}
           title="সক্রিয় লক্ষ্য"
@@ -647,6 +816,10 @@ export default function OverviewSection() {
             COLORS.goal.background
           }
         />
+
+        {/* =================================================
+            PROGRESS
+        ================================================= */}
 
         <OverviewCard
           icon={TrendingUp}
