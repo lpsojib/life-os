@@ -1,13 +1,12 @@
 "use client";
 
-import QuickSummary from "./QuickSummary";
+import DashboardHeader from "./DashboardHeader";
 import IslamicQuote from "./IslamicQuote";
 import OverviewSection from "./OverviewSection";
 import ReminderSection from "./ReminderSection";
 import TodayTasks from "./TodayTasks";
 import TodayHabits from "./TodayHabits";
 import DashboardGoals from "./DashboardGoals";
-
 
 export default function Dashboard() {
   return (
@@ -20,8 +19,7 @@ export default function Dashboard() {
       >
 
         {/* Header */}
-        {/* Quick Summary */}
-          <QuickSummary />
+        <DashboardHeader />
 
         {/* Islamic Quote */}
         <IslamicQuote />
@@ -41,7 +39,6 @@ export default function Dashboard() {
 
           {/* Goals */}
           <DashboardGoals />
-
         </div>
       </div>
     </div>
