@@ -352,21 +352,7 @@ export default function GoalList({
   return (
     <div className="space-y-7">
 
-      {/* ===================================================
-          HERO
-      =================================================== */}
 
-      <section>
-        <h1 className="text-[28px] font-extrabold leading-tight text-[#22261F]">
-          আমার লক্ষ্য
-        </h1>
-
-        <p className="mt-1.5 max-w-[34ch] text-sm leading-6 text-[#767C70]">
-          আপনার গুরুত্বপূর্ণ লক্ষ্য
-          নির্ধারণ করুন এবং ধাপে ধাপে
-          এগিয়ে যান।
-        </p>
-      </section>
 
       {/* ===================================================
           ACTIVE GOALS
