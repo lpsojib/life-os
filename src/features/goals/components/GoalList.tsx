@@ -3,8 +3,8 @@
 import {
   Check,
   CheckCircle2,
+  ChevronRight,
   Flame,
-  Sparkles,
   Target,
   Trophy,
 } from "lucide-react";
@@ -15,9 +15,7 @@ import {
   useState,
 } from "react";
 
-import {
-  onAuthStateChanged,
-} from "firebase/auth";
+import { onAuthStateChanged } from "firebase/auth";
 
 import { auth } from "@/lib/firebase";
 
@@ -37,6 +35,61 @@ interface GoalListProps {
   refreshKey?: number;
 }
 
+/* =========================================================
+   HELPERS
+========================================================= */
+
+const getDaysLeft = (
+  endDate: string
+): number => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const end = new Date(endDate);
+  end.setHours(0, 0, 0, 0);
+
+  const diff =
+    end.getTime() - today.getTime();
+
+  return Math.max(
+    0,
+    Math.ceil(
+      diff / (1000 * 60 * 60 * 24)
+    )
+  );
+};
+
+const getBanglaNumber = (
+  value: number
+): string => {
+  const numbers = [
+    "০",
+    "১",
+    "২",
+    "৩",
+    "৪",
+    "৫",
+    "৬",
+    "৭",
+    "৮",
+    "৯",
+  ];
+
+  return String(value)
+    .split("")
+    .map(
+      (char) =>
+        numbers[
+          Number(char)
+        ] ?? char
+    )
+    .join("");
+};
+
+/* =========================================================
+   GOAL LIST
+========================================================= */
+
 export default function GoalList({
   refreshKey = 0,
 }: GoalListProps) {
@@ -52,9 +105,9 @@ export default function GoalList({
   const [error, setError] =
     useState("");
 
-  /* =========================================================
-     LOAD GOALS
-  ========================================================= */
+  /* =======================================================
+     LOAD
+  ======================================================= */
 
   const loadGoals = useCallback(
     async (
@@ -68,38 +121,44 @@ export default function GoalList({
 
         setError("");
 
-        /*
-         * Online হলে Firebase → IndexedDB
-         */
         if (
           syncFromFirebase &&
           typeof window !== "undefined" &&
           navigator.onLine &&
           auth.currentUser
         ) {
-          await refreshGoalsFromFirebase(false);
+          try {
+            await refreshGoalsFromFirebase(
+              false
+            );
 
-          await refreshGoalTasksFromFirebase(false);
+            await refreshGoalTasksFromFirebase(
+              false
+            );
+          } catch (firebaseError) {
+            console.warn(
+              "Goal Firebase refresh skipped:",
+              firebaseError
+            );
+          }
         }
 
-        /*
-         * Active Goals
-         */
-        const activeGoals =
-          await getGoals();
-
-        /*
-         * Completed Goals
-         */
-        const finishedGoals =
-          await getCompletedGoals();
+        const [
+          activeGoals,
+          finishedGoals,
+        ] = await Promise.all([
+          getGoals(),
+          getCompletedGoals(),
+        ]);
 
         setGoals(activeGoals);
-        setCompletedGoals(finishedGoals);
-      } catch (error) {
+        setCompletedGoals(
+          finishedGoals
+        );
+      } catch (loadError) {
         console.error(
           "Load goals error:",
-          error
+          loadError
         );
 
         setError(
@@ -114,9 +173,9 @@ export default function GoalList({
     []
   );
 
-  /* =========================================================
-     AUTHENTICATION
-  ========================================================= */
+  /* =======================================================
+     AUTH
+  ======================================================= */
 
   useEffect(() => {
     const unsubscribe =
@@ -127,11 +186,9 @@ export default function GoalList({
             setGoals([]);
             setCompletedGoals([]);
             setLoading(false);
-
             setError(
               "লক্ষ্য দেখতে আগে লগইন করুন।"
             );
-
             return;
           }
 
@@ -142,69 +199,67 @@ export default function GoalList({
         }
       );
 
-    return () => {
-      unsubscribe();
-    };
-  }, [
-    loadGoals,
-    refreshKey,
-  ]);
+    return unsubscribe;
+  }, [loadGoals, refreshKey]);
 
-  /* =========================================================
-     GOAL EVENTS
-  ========================================================= */
+  /* =======================================================
+     EVENTS
+  ======================================================= */
 
   useEffect(() => {
-    const handleGoalChange = () => {
-      void loadGoals(false, false);
+    const handleChange = () => {
+      void loadGoals(
+        false,
+        false
+      );
     };
 
     window.addEventListener(
       "life-os-goal-changed",
-      handleGoalChange
+      handleChange
     );
 
     window.addEventListener(
       "life-os-goal-added",
-      handleGoalChange
+      handleChange
     );
 
     window.addEventListener(
       "life-os-goal-synced",
-      handleGoalChange
+      handleChange
     );
 
     window.addEventListener(
       "life-os-goal-completed",
-      handleGoalChange
+      handleChange
     );
 
     return () => {
       window.removeEventListener(
         "life-os-goal-changed",
-        handleGoalChange
+        handleChange
       );
 
       window.removeEventListener(
         "life-os-goal-added",
-        handleGoalChange
+        handleChange
       );
 
       window.removeEventListener(
         "life-os-goal-synced",
-        handleGoalChange
+        handleChange
       );
 
       window.removeEventListener(
         "life-os-goal-completed",
-        handleGoalChange
+        handleChange
       );
     };
   }, [loadGoals]);
 
-  /* =========================================================
-     DELETE GOAL
-  ========================================================= */
+  /* =======================================================
+     DELETE
+  ======================================================= */
 
   const handleDeleteGoal = async (
     goalId: string
@@ -212,39 +267,42 @@ export default function GoalList({
     try {
       setError("");
 
-      /*
-       * Instant UI update
-       */
       setGoals((current) =>
         current.filter(
-          (goal) => goal.id !== goalId
+          (goal) =>
+            goal.id !== goalId
         )
       );
 
-      setCompletedGoals((current) =>
-        current.filter(
-          (goal) => goal.id !== goalId
-        )
+      setCompletedGoals(
+        (current) =>
+          current.filter(
+            (goal) =>
+              goal.id !== goalId
+          )
       );
 
       await deleteGoal(goalId);
-    } catch (error) {
+    } catch (deleteError) {
       console.error(
         "Delete goal error:",
-        error
+        deleteError
       );
 
       setError(
         "লক্ষ্যটি মুছে ফেলা যায়নি।"
       );
 
-      await loadGoals(false, false);
+      void loadGoals(
+        false,
+        false
+      );
     }
   };
 
-  /* =========================================================
+  /* =======================================================
      LOADING
-  ========================================================= */
+  ======================================================= */
 
   if (
     loading &&
@@ -253,221 +311,355 @@ export default function GoalList({
   ) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="flex items-center gap-3 text-sm text-gray-500">
-          <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-200 border-t-gray-700" />
-          লক্ষ্য লোড হচ্ছে...
-        </div>
+        <div className="h-7 w-7 animate-spin rounded-full border-2 border-[#173C30] border-t-transparent" />
       </div>
     );
   }
 
-  /* =========================================================
+  /* =======================================================
      ERROR
-  ========================================================= */
+  ======================================================= */
 
   if (error) {
     return (
-      <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-4 text-center text-sm font-medium text-red-600">
+      <div className="mx-5 rounded-2xl border border-red-100 bg-red-50 px-4 py-4 text-center text-sm font-medium text-red-600">
         {error}
       </div>
     );
   }
 
-  /* =========================================================
+  /* =======================================================
      EMPTY
-  ========================================================= */
+  ======================================================= */
 
   if (
     goals.length === 0 &&
     completedGoals.length === 0
   ) {
     return (
-      <div className="overflow-hidden rounded-3xl border border-gray-200 bg-white">
-        <div className="px-6 py-14 text-center">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-900 shadow-sm">
+      <div className="px-5 py-10">
+        <div className="rounded-[20px] border border-[#E7E3D8] bg-white px-6 py-12 text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#173C30]">
             <Target className="h-7 w-7 text-white" />
           </div>
 
-          <h3 className="mt-5 text-lg font-bold text-gray-900">
+          <h3 className="mt-4 text-lg font-extrabold text-[#22261F]">
             এখনো কোনো লক্ষ্য নেই
           </h3>
 
-          <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-gray-500">
-            একটি লক্ষ্য তৈরি করো এবং প্রতিদিন
-            ছোট ছোট পদক্ষেপ নিয়ে সেটার দিকে
-            এগিয়ে যাও।
+          <p className="mx-auto mt-1 max-w-xs text-sm leading-6 text-[#767C70]">
+            আপনার গুরুত্বপূর্ণ লক্ষ্য
+            নির্ধারণ করুন এবং ধাপে ধাপে
+            এগিয়ে যান।
           </p>
         </div>
       </div>
     );
   }
 
-  /* =========================================================
-     TOTAL COMPLETED
-  ========================================================= */
-
-  const completedCount =
-    completedGoals.length;
-
-  /* =========================================================
-     MAIN UI
-  ========================================================= */
+  /* =======================================================
+     UI
+  ======================================================= */
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-6 bg-[#F3F1EA] pb-8">
 
-      {/* =====================================================
+      {/* ===================================================
+          HERO
+      =================================================== */}
+
+      <section className="px-5 pt-5">
+        <h1 className="text-[28px] font-extrabold leading-tight tracking-[-0.5px] text-[#22261F]">
+          আমার লক্ষ্য
+        </h1>
+
+        <p className="mt-1.5 max-w-[34ch] text-[14px] leading-6 text-[#767C70]">
+          আপনার গুরুত্বপূর্ণ লক্ষ্য
+          নির্ধারণ করুন এবং ধাপে ধাপে
+          এগিয়ে যান।
+        </p>
+      </section>
+
+      {/* ===================================================
           ACTIVE GOALS
-      ===================================================== */}
+      =================================================== */}
 
       {goals.length > 0 && (
         <section>
-          {/* Section Header */}
-
-          <div className="mb-5 flex items-end justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gray-900">
-                  <Target className="h-4 w-4 text-white" />
-                </div>
-
-                <h2 className="text-lg font-bold tracking-tight text-gray-900">
-                  আমার লক্ষ্য
-                </h2>
-              </div>
-
-              <p className="mt-2 text-sm text-gray-500">
-                আজকের ছোট অগ্রগতিই আগামী দিনের
-                বড় ফলাফল তৈরি করবে।
-              </p>
+          <div className="mb-3 flex items-center gap-2 px-5">
+            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#173C30]">
+              <Target className="h-3.5 w-3.5 text-white" />
             </div>
 
-            <div className="shrink-0 rounded-full bg-gray-100 px-3 py-1.5 text-xs font-bold text-gray-600">
-              {goals.length}টি চলমান
-            </div>
+            <h2 className="text-[16px] font-extrabold text-[#22261F]">
+              চলমান লক্ষ্য
+            </h2>
+
+            <span className="ml-auto rounded-full bg-[#EDEAE0] px-2.5 py-1 text-[11px] text-[#767C70]">
+              {getBanglaNumber(
+                goals.length
+              )} টি
+            </span>
           </div>
 
-          {/* Active Goal Cards */}
-
-          <div className="space-y-4">
+          <div className="space-y-3 px-5">
             {goals.map((goal) => (
-              <GoalCard
+              <ActiveGoalPreview
                 key={goal.id}
                 goal={goal}
-                onDelete={handleDeleteGoal}
-              />
+              >
+                <GoalCard
+                  goal={goal}
+                  onDelete={
+                    handleDeleteGoal
+                  }
+                />
+              </ActiveGoalPreview>
             ))}
           </div>
         </section>
       )}
 
-      {/* =====================================================
-          COMPLETED GOALS
-      ===================================================== */}
+      {/* ===================================================
+          ACHIEVEMENT HEADER
+      =================================================== */}
 
       {completedGoals.length > 0 && (
-        <section>
+        <>
+          <section className="mx-5 overflow-hidden rounded-[18px] bg-gradient-to-br from-[#15251E] to-[#1D362B]">
+            <div className="relative flex items-center gap-3 px-4 py-3.5">
+              <div className="absolute -right-5 -top-5 h-20 w-20 rounded-full bg-[#D9A441]/15" />
 
-          {/* Achievement Header */}
-
-          <div className="relative mb-5 overflow-hidden rounded-3xl bg-gray-900 text-white">
-
-            {/* Decorative elements */}
-
-            <div className="pointer-events-none absolute -right-10 -top-16 h-40 w-40 rounded-full bg-white/[0.06]" />
-
-            <div className="pointer-events-none absolute -bottom-20 -left-10 h-36 w-36 rounded-full bg-white/[0.04]" />
-
-            <div className="relative px-6 py-7">
-
-              <div className="flex items-start justify-between gap-5">
-
-                <div className="flex items-center gap-4">
-
-                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white text-gray-900 shadow-lg">
-                    <Trophy className="h-7 w-7" />
-                  </div>
-
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="h-4 w-4 text-gray-300" />
-
-                      <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">
-                        Achievement
-                      </span>
-                    </div>
-
-                    <h2 className="mt-1 text-xl font-bold tracking-tight">
-                      সম্পন্ন লক্ষ্য
-                    </h2>
-
-                    <p className="mt-1.5 text-sm text-gray-400">
-                      তুমি যেগুলো শুরু করেছিলে,
-                      সেগুলো শেষ করেছো।
-                    </p>
-                  </div>
-                </div>
-
-                {/* Count */}
-
-                <div className="hidden shrink-0 text-right sm:block">
-                  <p className="text-3xl font-bold">
-                    {completedCount}
-                  </p>
-
-                  <p className="text-xs text-gray-400">
-                    লক্ষ্য সম্পন্ন
-                  </p>
-                </div>
+              <div className="relative z-10 flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[13px] bg-[#D9A441]/15">
+                <Trophy className="h-5 w-5 text-[#D9A441]" />
               </div>
 
-              {/* Mobile Count */}
-
-              <div className="mt-6 flex items-center gap-2 sm:hidden">
-                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
-                  <div className="h-full w-full rounded-full bg-white" />
-                </div>
-
-                <span className="text-xs font-semibold text-gray-300">
-                  {completedCount} completed
+              <div className="relative z-10 min-w-0 flex-1">
+                <span className="block text-[10px] font-bold tracking-wider text-[#B7C4A9]">
+                  ACHIEVEMENT
                 </span>
+
+                <h3 className="mt-0.5 text-[14.5px] font-bold text-white">
+                  যা শুরু করেছিলে,
+                  শেষ করেছো
+                </h3>
+              </div>
+
+              <div className="relative z-10 shrink-0 rounded-xl bg-white/10 px-3 py-1.5 text-center">
+                <div className="text-[18px] font-extrabold leading-none text-[#D9A441]">
+                  {getBanglaNumber(
+                    completedGoals.length
+                  )}
+                </div>
+
+                <div className="mt-0.5 text-[9px] text-white/60">
+                  completed
+                </div>
               </div>
             </div>
-          </div>
+          </section>
 
-          {/* Completed Cards */}
+          {/* =================================================
+              COMPLETED GOALS
+          ================================================= */}
 
-          <div className="space-y-4">
-            {completedGoals.map((goal) => (
-              <CompletedGoalCard
-                key={goal.id}
-                goal={goal}
-                onDelete={handleDeleteGoal}
-              />
-            ))}
-          </div>
+          <section>
+            <div className="mb-3 flex items-center gap-2 px-5">
+              <div className="h-1.5 w-1.5 rounded-full bg-[#D9A441]" />
 
-          {/* Motivation */}
-
-          <div className="mt-6 flex items-center gap-4 rounded-3xl border border-gray-200 bg-white px-5 py-5">
-
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gray-100">
-              <Flame className="h-5 w-5 text-gray-800" />
+              <h2 className="text-[15px] font-extrabold text-[#22261F]">
+                সম্পন্ন লক্ষ্য
+              </h2>
             </div>
 
-            <div>
-              <p className="text-sm font-bold text-gray-900">
-                Momentum তৈরি হয়েছে 🔥
-              </p>
-
-              <p className="mt-0.5 text-xs leading-5 text-gray-500">
-                একটি লক্ষ্য শেষ করার পর থেমে যেও না।
-                পরের লক্ষ্যটা শুরু করো।
-              </p>
+            <div className="space-y-3 px-5">
+              {completedGoals.map(
+                (goal) => (
+                  <CompletedGoalCard
+                    key={goal.id}
+                    goal={goal}
+                    onDelete={
+                      handleDeleteGoal
+                    }
+                  />
+                )
+              )}
             </div>
-          </div>
-        </section>
+          </section>
+
+          {/* =================================================
+              MOTIVATION
+          ================================================= */}
+
+          <section className="mx-5 rounded-[18px] border border-[#E7E3D8] bg-white px-5 py-5 text-center">
+            <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-[#F3E3C2]">
+              <Flame className="h-5 w-5 text-[#C97F1E]" />
+            </div>
+
+            <p className="mt-2.5 text-[14px] font-bold text-[#22261F]">
+              Keep going.
+            </p>
+
+            <p className="mx-auto mt-1 max-w-[280px] text-[11.5px] leading-5 text-[#767C70]">
+              একটি লক্ষ্য শেষ করা মানে
+              শুধু একটি কাজ শেষ করা নয় —
+              তুমি নিজের উপর বিশ্বাসটা
+              আরও শক্ত করেছো।
+            </p>
+          </section>
+        </>
       )}
+    </div>
+  );
+}
+
+/* =========================================================
+   ACTIVE GOAL PREVIEW
+========================================================= */
+
+interface ActiveGoalPreviewProps {
+  goal: Goal;
+  children: React.ReactNode;
+}
+
+function ActiveGoalPreview({
+  goal,
+  children,
+}: ActiveGoalPreviewProps) {
+  /*
+   * GoalCard already contains the
+   * full goal functionality.
+   *
+   * এই wrapper শুধু visual container
+   * হিসেবে কাজ করছে।
+   */
+  return (
+    <div className="overflow-hidden rounded-[18px] border border-[#E7E3D8] bg-white shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
+      <div className="hidden">
+        {children}
+      </div>
+
+      <ActiveGoalCompact
+        goal={goal}
+      />
+
+      <div className="px-3 pb-3">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================
+   ACTIVE GOAL COMPACT HEADER
+========================================================= */
+
+function ActiveGoalCompact({
+  goal,
+}: {
+  goal: Goal;
+}) {
+  const progress = Math.min(
+    100,
+    Math.max(0, goal.progress)
+  );
+
+  const daysLeft = getDaysLeft(
+    goal.endDate
+  );
+
+  const circumference =
+    2 * Math.PI * 25;
+
+  const offset =
+    circumference -
+    (circumference * progress) /
+      100;
+
+  return (
+    <div className="px-[18px] pt-[18px]">
+      <div className="flex items-center gap-3.5">
+        {/* Ring */}
+
+        <div className="relative h-[58px] w-[58px] shrink-0">
+          <svg
+            width="58"
+            height="58"
+            viewBox="0 0 58 58"
+            className="-rotate-90"
+          >
+            <circle
+              cx="29"
+              cy="29"
+              r="25"
+              fill="none"
+              stroke="#EDEAE0"
+              strokeWidth="6"
+            />
+
+            <circle
+              cx="29"
+              cy="29"
+              r="25"
+              fill="none"
+              stroke="#173C30"
+              strokeWidth="6"
+              strokeLinecap="round"
+              strokeDasharray={
+                circumference
+              }
+              strokeDashoffset={
+                offset
+              }
+            />
+          </svg>
+
+          <div className="absolute inset-0 flex items-center justify-center text-[14px] font-extrabold text-[#22261F]">
+            {getBanglaNumber(
+              progress
+            )}%
+          </div>
+        </div>
+
+        {/* Content */}
+
+        <div className="min-w-0 flex-1">
+          <h3 className="truncate text-[15.5px] font-bold text-[#22261F]">
+            {goal.title}
+          </h3>
+
+          <div className="mt-1.5 flex items-center gap-2">
+            <span className="rounded-full bg-[#EAF1FB] px-2.5 py-1 text-[11.5px] font-bold text-[#3B6FC4]">
+              চলছে
+            </span>
+
+            <span className="text-[12px] text-[#767C70]">
+              •
+            </span>
+
+            <span className="text-[12px] text-[#767C70]">
+              {getBanglaNumber(
+                goal.completedTasks
+              )}
+              /
+              {getBanglaNumber(
+                goal.totalTasks
+              )}{" "}
+              টাস্ক
+            </span>
+          </div>
+        </div>
+
+        <ChevronRight className="h-[18px] w-[18px] shrink-0 text-[#767C70]" />
+      </div>
+
+      <div className="pb-3 pt-2 text-[13px] text-[#767C70]">
+        {daysLeft === 0
+          ? "আজ শেষ দিন"
+          : `${getBanglaNumber(
+              daysLeft
+            )} দিন বাকি`}
+      </div>
     </div>
   );
 }
@@ -478,7 +670,6 @@ export default function GoalList({
 
 interface CompletedGoalCardProps {
   goal: Goal;
-
   onDelete: (
     goalId: string
   ) => void;
@@ -489,132 +680,68 @@ function CompletedGoalCard({
   onDelete,
 }: CompletedGoalCardProps) {
   return (
-    <article className="group relative overflow-hidden rounded-3xl border border-gray-200 bg-white transition-all duration-200 hover:border-gray-300 hover:shadow-md">
+    <div className="relative overflow-hidden rounded-[18px] border border-[#E7E3D8] bg-white">
+      {/* Gold Shine */}
 
-      {/* Completion indicator */}
+      <div className="absolute left-0 right-0 top-0 h-1 bg-gradient-to-r from-[#D9A441] via-[#EBC372] to-[#D9A441]" />
 
-      <div className="absolute bottom-0 left-0 top-0 w-1 bg-gray-900" />
+      <div className="px-3.5 pb-3 pt-4">
+        {/* Header */}
 
-      <div className="p-5 pl-6 sm:p-6 sm:pl-7">
-
-        {/* Top */}
-
-        <div className="flex items-start gap-4">
-
-          {/* Check */}
-
-          <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gray-900 shadow-sm">
-            <CheckCircle2 className="h-6 w-6 text-white" />
-
-            <div className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-gray-100">
-              <Check className="h-2.5 w-2.5 text-gray-800" />
-            </div>
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[11px] bg-[#F3E3C2]">
+            <Trophy className="h-[18px] w-[18px] text-[#C97F1E]" />
           </div>
-
-          {/* Content */}
 
           <div className="min-w-0 flex-1">
+            <p className="truncate text-[14.5px] font-extrabold leading-tight text-[#22261F]">
+              {goal.title}
+            </p>
 
-            <div className="flex flex-wrap items-center gap-2">
-
-              <h3 className="break-words text-base font-bold leading-6 text-gray-900">
-                {goal.title}
-              </h3>
-
-              <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-gray-600">
-                <Check className="h-3 w-3" />
-                Done
-              </span>
-            </div>
-
-            {goal.description && (
-              <p className="mt-2 line-clamp-2 text-sm leading-6 text-gray-500">
-                {goal.description}
-              </p>
-            )}
+            <span className="text-[11px] text-[#767C70]">
+              {getBanglaNumber(
+                goal.completedTasks
+              )}
+              /
+              {getBanglaNumber(
+                goal.totalTasks
+              )}{" "}
+              টাস্ক সম্পন্ন
+            </span>
           </div>
+
+          <span className="shrink-0 text-[14px] font-extrabold text-[#C97F1E]">
+            ১০০%
+          </span>
         </div>
 
         {/* Progress */}
 
-        <div className="mt-6">
+        <div className="my-2.5 h-1.5 overflow-hidden rounded-full bg-[#EFECE1]">
+          <div className="h-full w-full rounded-full bg-gradient-to-r from-[#D9A441] to-[#C98A2A]" />
+        </div>
 
-          <div className="mb-2.5 flex items-center justify-between">
+        {/* Footer */}
 
-            <span className="text-xs font-semibold text-gray-400">
-              Goal progress
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <span className="flex items-center gap-1 rounded-full bg-[#E4F5EA] px-2 py-0.5 text-[11px] font-bold text-[#1E8E4C]">
+              <Check className="h-3 w-3" />
+              Completed
             </span>
-
-            <span className="text-sm font-bold text-gray-900">
-              100%
-            </span>
           </div>
 
-          <div className="h-2 overflow-hidden rounded-full bg-gray-100">
-            <div className="relative h-full w-full rounded-full bg-gray-900">
-              <div className="absolute inset-y-0 right-0 w-1/3 bg-white/10" />
-            </div>
-          </div>
+          <button
+            type="button"
+            onClick={() =>
+              onDelete(goal.id)
+            }
+            className="text-[11px] text-[#767C70] underline underline-offset-[3px] transition hover:text-[#22261F]"
+          >
+            মুছে ফেলুন
+          </button>
         </div>
-
-        {/* Stats */}
-
-        <div className="mt-5 grid grid-cols-2 gap-3">
-
-          <div className="rounded-2xl bg-gray-50 px-4 py-3.5">
-            <p className="text-[11px] font-medium text-gray-400">
-              Tasks completed
-            </p>
-
-            <p className="mt-1 text-base font-bold text-gray-900">
-              {goal.completedTasks}
-              <span className="mx-1 text-gray-300">
-                /
-              </span>
-              {goal.totalTasks}
-            </p>
-          </div>
-
-          <div className="rounded-2xl bg-gray-50 px-4 py-3.5">
-            <p className="text-[11px] font-medium text-gray-400">
-              Status
-            </p>
-
-            <div className="mt-1 flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-gray-900" />
-
-              <p className="text-sm font-bold text-gray-900">
-                Completed
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Achievement Message */}
-
-        <div className="mt-4 flex items-start gap-3 rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3.5">
-
-          <Trophy className="mt-0.5 h-4 w-4 shrink-0 text-gray-700" />
-
-          <p className="text-xs leading-5 text-gray-600">
-            এই লক্ষ্যটি সফলভাবে শেষ হয়েছে।
-            তুমি নিজের commitment ধরে রেখেছো —
-            এটাই আসল achievement।
-          </p>
-        </div>
-
-        {/* Delete */}
-
-        <button
-          type="button"
-          onClick={() =>
-            onDelete(goal.id)
-          }
-          className="mt-4 w-full rounded-2xl border border-transparent px-4 py-2.5 text-xs font-semibold text-gray-400 transition hover:border-gray-200 hover:bg-gray-50 hover:text-gray-700"
-        >
-          লক্ষ্য মুছে ফেলুন
-        </button>
       </div>
-    </article>
+    </div>
   );
 }
