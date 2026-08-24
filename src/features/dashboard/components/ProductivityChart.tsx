@@ -16,9 +16,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 
-import {
-  getTasks,
-} from "@/features/tasks/services/task.service";
+import { getTasks } from "@/features/tasks/services/task.service";
 
 import {
   getHabits,
@@ -93,17 +91,11 @@ const COLORS = {
    DATE HELPERS
 ========================================================= */
 
-function formatDate(
-  date: Date
-): string {
+function formatDate(date: Date): string {
   return [
     date.getFullYear(),
-    String(
-      date.getMonth() + 1
-    ).padStart(2, "0"),
-    String(
-      date.getDate()
-    ).padStart(2, "0"),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
   ].join("-");
 }
 
@@ -122,9 +114,7 @@ function getMonthKey(
   year: number,
   month: number
 ): string {
-  return `${year}-${String(
-    month + 1
-  ).padStart(2, "0")}`;
+  return `${year}-${String(month + 1).padStart(2, "0")}`;
 }
 
 function getMonthName(
@@ -135,13 +125,10 @@ function getMonthName(
     year,
     month,
     1
-  ).toLocaleDateString(
-    "bn-BD",
-    {
-      month: "long",
-      year: "numeric",
-    }
-  );
+  ).toLocaleDateString("bn-BD", {
+    month: "long",
+    year: "numeric",
+  });
 }
 
 function getShortMonthName(
@@ -151,18 +138,13 @@ function getShortMonthName(
     2024,
     month,
     1
-  ).toLocaleDateString(
-    "bn-BD",
-    {
-      month: "short",
-    }
-  );
+  ).toLocaleDateString("bn-BD", {
+    month: "short",
+  });
 }
 
 /* =========================================================
    RANGE HELPER
-   IMPORTANT:
-   Keep this OUTSIDE the component.
 ========================================================= */
 
 function daysInRange(
@@ -179,14 +161,10 @@ function daysInRange(
     `${endKey}T00:00:00`
   );
 
-  const current = new Date(
-    start
-  );
+  const current = new Date(start);
 
   while (current <= end) {
-    result.push(
-      formatDate(current)
-    );
+    result.push(formatDate(current));
 
     current.setDate(
       current.getDate() + 1
@@ -213,10 +191,7 @@ function getTaskDate(
     return null;
   }
 
-  return possibleDate.slice(
-    0,
-    10
-  );
+  return possibleDate.slice(0, 10);
 }
 
 /* =========================================================
@@ -234,8 +209,7 @@ function calculatePercentage(
   return Math.min(
     100,
     Math.round(
-      (completed / total) *
-        100
+      (completed / total) * 100
     )
   );
 }
@@ -275,8 +249,7 @@ function getPointX(
 
   return (
     PADDING_LEFT +
-    (index /
-      (total - 1)) *
+    (index / (total - 1)) *
       GRAPH_WIDTH
   );
 }
@@ -300,53 +273,35 @@ function createSmoothPath(
   }
 
   if (values.length === 1) {
-    const x = getPointX(
-      0,
-      1
-    );
-
-    const y = getPointY(
-      values[0]
-    );
+    const x = getPointX(0, 1);
+    const y = getPointY(values[0]);
 
     return `M ${x} ${y}`;
   }
 
-  const points =
-    values.map(
-      (
-        value,
-        index
-      ) => ({
-        x: getPointX(
-          index,
-          values.length
-        ),
-        y: getPointY(
-          value
-        ),
-      })
-    );
+  const points = values.map(
+    (value, index) => ({
+      x: getPointX(
+        index,
+        values.length
+      ),
+      y: getPointY(value),
+    })
+  );
 
   let path =
     `M ${points[0].x} ${points[0].y}`;
 
   for (
     let i = 0;
-    i <
-    points.length - 1;
+    i < points.length - 1;
     i++
   ) {
-    const current =
-      points[i];
-
-    const next =
-      points[i + 1];
+    const current = points[i];
+    const next = points[i + 1];
 
     const controlX =
-      (current.x +
-        next.x) /
-      2;
+      (current.x + next.x) / 2;
 
     path +=
       ` C ${controlX} ${current.y}, ` +
@@ -358,7 +313,7 @@ function createSmoothPath(
 }
 
 /* =========================================================
-   LINE CHART
+   MONTHLY LINE CHART
 ========================================================= */
 
 interface LineChartProps {
@@ -368,27 +323,19 @@ interface LineChartProps {
 function MonthlyLineChart({
   data,
 }: LineChartProps) {
-  const habitValues =
-    data.map(
-      (item) =>
-        item.habitPercentage
-    );
+  const habitValues = data.map(
+    (item) => item.habitPercentage
+  );
 
-  const taskValues =
-    data.map(
-      (item) =>
-        item.taskPercentage
-    );
+  const taskValues = data.map(
+    (item) => item.taskPercentage
+  );
 
   const habitPath =
-    createSmoothPath(
-      habitValues
-    );
+    createSmoothPath(habitValues);
 
   const taskPath =
-    createSmoothPath(
-      taskValues
-    );
+    createSmoothPath(taskValues);
 
   const gridLines = [
     0,
@@ -403,10 +350,8 @@ function MonthlyLineChart({
     <div
       className="w-full overflow-hidden rounded-2xl p-2 sm:p-3"
       style={{
-        background:
-          COLORS.paper,
-        border:
-          `1px solid ${COLORS.line}`,
+        background: COLORS.paper,
+        border: `1px solid ${COLORS.line}`,
       }}
     >
       {/* Legend */}
@@ -416,16 +361,14 @@ function MonthlyLineChart({
           <span
             className="w-2.5 h-2.5 rounded-full"
             style={{
-              background:
-                COLORS.teal,
+              background: COLORS.teal,
             }}
           />
 
           <span
             className="text-[10px] font-medium"
             style={{
-              color:
-                COLORS.muted,
+              color: COLORS.muted,
             }}
           >
             Habit
@@ -436,16 +379,14 @@ function MonthlyLineChart({
           <span
             className="w-2.5 h-2.5 rounded-full"
             style={{
-              background:
-                COLORS.clay,
+              background: COLORS.clay,
             }}
           />
 
           <span
             className="text-[10px] font-medium"
             style={{
-              color:
-                COLORS.muted,
+              color: COLORS.muted,
             }}
           >
             Task
@@ -461,62 +402,44 @@ function MonthlyLineChart({
         >
           {/* Grid */}
 
-          {gridLines.map(
-            (value) => {
-              const y =
-                getPointY(
-                  value
-                );
+          {gridLines.map((value) => {
+            const y = getPointY(value);
 
-              return (
-                <g
-                  key={value}
+            return (
+              <g key={value}>
+                <line
+                  x1={PADDING_LEFT}
+                  x2={
+                    CHART_WIDTH -
+                    PADDING_RIGHT
+                  }
+                  y1={y}
+                  y2={y}
+                  stroke={COLORS.line}
+                  strokeWidth="1"
+                />
+
+                <text
+                  x={
+                    PADDING_LEFT - 8
+                  }
+                  y={y + 4}
+                  textAnchor="end"
+                  fontSize="10"
+                  fill={COLORS.mutedSoft}
                 >
-                  <line
-                    x1={
-                      PADDING_LEFT
-                    }
-                    x2={
-                      CHART_WIDTH -
-                      PADDING_RIGHT
-                    }
-                    y1={y}
-                    y2={y}
-                    stroke={
-                      COLORS.line
-                    }
-                    strokeWidth="1"
-                  />
-
-                  <text
-                    x={
-                      PADDING_LEFT -
-                      8
-                    }
-                    y={
-                      y + 4
-                    }
-                    textAnchor="end"
-                    fontSize="10"
-                    fill={
-                      COLORS.mutedSoft
-                    }
-                  >
-                    {value}%
-                  </text>
-                </g>
-              );
-            }
-          )}
+                  {value}%
+                </text>
+              </g>
+            );
+          })}
 
           {/* Habit line */}
 
           <path
             d={habitPath}
             fill="none"
-            stroke={
-              COLORS.teal
-            }
+            stroke={COLORS.teal}
             strokeWidth="3"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -527,9 +450,7 @@ function MonthlyLineChart({
           <path
             d={taskPath}
             fill="none"
-            stroke={
-              COLORS.clay
-            }
+            stroke={COLORS.clay}
             strokeWidth="2.5"
             strokeDasharray="7 5"
             strokeLinecap="round"
@@ -538,99 +459,72 @@ function MonthlyLineChart({
 
           {/* Habit points */}
 
-          {data.map(
-            (
-              item,
-              index
-            ) => (
-              <circle
-                key={`habit-${item.key}`}
-                cx={getPointX(
-                  index,
-                  data.length
-                )}
-                cy={getPointY(
-                  item.habitPercentage
-                )}
-                r="2.5"
-                fill={
-                  COLORS.teal
-                }
-              />
-            )
-          )}
+          {data.map((item, index) => (
+            <circle
+              key={`habit-${item.key}`}
+              cx={getPointX(
+                index,
+                data.length
+              )}
+              cy={getPointY(
+                item.habitPercentage
+              )}
+              r="2.5"
+              fill={COLORS.teal}
+            />
+          ))}
 
           {/* Task points */}
 
-          {data.map(
-            (
-              item,
-              index
-            ) => (
-              <circle
-                key={`task-${item.key}`}
-                cx={getPointX(
-                  index,
-                  data.length
-                )}
-                cy={getPointY(
-                  item.taskPercentage
-                )}
-                r="2"
-                fill={
-                  COLORS.clay
-                }
-              />
-            )
-          )}
+          {data.map((item, index) => (
+            <circle
+              key={`task-${item.key}`}
+              cx={getPointX(
+                index,
+                data.length
+              )}
+              cy={getPointY(
+                item.taskPercentage
+              )}
+              r="2"
+              fill={COLORS.clay}
+            />
+          ))}
 
           {/* X labels */}
 
-          {data.map(
-            (
-              item,
-              index
-            ) => {
-              const shouldShow =
-                data.length <=
-                  15 ||
-                index === 0 ||
-                index ===
-                  data.length -
-                    1 ||
-                index % 3 ===
-                  0;
+          {data.map((item, index) => {
+            const shouldShow =
+              data.length <= 15 ||
+              index === 0 ||
+              index ===
+                data.length - 1 ||
+              index % 3 === 0;
 
-              if (
-                !shouldShow
-              ) {
-                return null;
-              }
-
-              return (
-                <text
-                  key={`label-${item.key}`}
-                  x={getPointX(
-                    index,
-                    data.length
-                  )}
-                  y={
-                    CHART_HEIGHT -
-                    10
-                  }
-                  textAnchor="middle"
-                  fontSize="10"
-                  fill={
-                    COLORS.mutedSoft
-                  }
-                >
-                  {
-                    item.label
-                  }
-                </text>
-              );
+            if (!shouldShow) {
+              return null;
             }
-          )}
+
+            return (
+              <text
+                key={`label-${item.key}`}
+                x={getPointX(
+                  index,
+                  data.length
+                )}
+                y={
+                  CHART_HEIGHT - 10
+                }
+                textAnchor="middle"
+                fontSize="10"
+                fill={
+                  COLORS.mutedSoft
+                }
+              >
+                {item.label}
+              </text>
+            );
+          })}
         </svg>
       </div>
     </div>
@@ -652,10 +546,8 @@ function YearBarChart({
     <div
       className="w-full rounded-2xl p-3 sm:p-4"
       style={{
-        background:
-          COLORS.paper,
-        border:
-          `1px solid ${COLORS.line}`,
+        background: COLORS.paper,
+        border: `1px solid ${COLORS.line}`,
       }}
     >
       {/* Legend */}
@@ -665,16 +557,14 @@ function YearBarChart({
           <span
             className="w-2.5 h-2.5 rounded-sm"
             style={{
-              background:
-                COLORS.teal,
+              background: COLORS.teal,
             }}
           />
 
           <span
             className="text-[10px]"
             style={{
-              color:
-                COLORS.muted,
+              color: COLORS.muted,
             }}
           >
             Habit
@@ -685,16 +575,14 @@ function YearBarChart({
           <span
             className="w-2.5 h-2.5 rounded-sm"
             style={{
-              background:
-                COLORS.clay,
+              background: COLORS.clay,
             }}
           />
 
           <span
             className="text-[10px]"
             style={{
-              color:
-                COLORS.muted,
+              color: COLORS.muted,
             }}
           >
             Task
@@ -705,70 +593,65 @@ function YearBarChart({
       {/* Bars */}
 
       <div className="flex items-end gap-1 sm:gap-2 h-[260px]">
-        {data.map(
-          (month) => (
-            <div
-              key={month.key}
-              className="flex-1 min-w-0 h-full flex flex-col justify-end"
-            >
-              {/* Values */}
+        {data.map((month) => (
+          <div
+            key={month.key}
+            className="flex-1 min-w-0 h-full flex flex-col justify-end"
+          >
+            {/* Values */}
 
-              <div className="flex items-end justify-center gap-0.5 sm:gap-1 h-[220px]">
-                <div
-                  className="w-full max-w-[16px] rounded-t-md transition-all duration-500"
-                  style={{
-                    height: `${Math.max(
-                      3,
-                      month.habitPercentage *
-                        2.05
-                    )}px`,
-                    background:
-                      COLORS.teal,
-                    opacity:
-                      month.habitPercentage ===
-                      0
-                        ? 0.18
-                        : 1,
-                  }}
-                  title={`Habit ${month.habitPercentage}%`}
-                />
-
-                <div
-                  className="w-full max-w-[16px] rounded-t-md transition-all duration-500"
-                  style={{
-                    height: `${Math.max(
-                      3,
-                      month.taskPercentage *
-                        2.05
-                    )}px`,
-                    background:
-                      COLORS.clay,
-                    opacity:
-                      month.taskPercentage ===
-                      0
-                        ? 0.18
-                        : 1,
-                  }}
-                  title={`Task ${month.taskPercentage}%`}
-                />
-              </div>
-
-              {/* Month */}
+            <div className="flex items-end justify-center gap-0.5 sm:gap-1 h-[220px]">
+              <div
+                className="w-full max-w-[16px] rounded-t-md transition-all duration-500"
+                style={{
+                  height: `${Math.max(
+                    3,
+                    month.habitPercentage *
+                      2.05
+                  )}px`,
+                  background:
+                    COLORS.teal,
+                  opacity:
+                    month.habitPercentage ===
+                    0
+                      ? 0.18
+                      : 1,
+                }}
+                title={`Habit ${month.habitPercentage}%`}
+              />
 
               <div
-                className="text-[9px] sm:text-[10px] text-center mt-2 truncate"
+                className="w-full max-w-[16px] rounded-t-md transition-all duration-500"
                 style={{
-                  color:
-                    COLORS.muted,
+                  height: `${Math.max(
+                    3,
+                    month.taskPercentage *
+                      2.05
+                  )}px`,
+                  background:
+                    COLORS.clay,
+                  opacity:
+                    month.taskPercentage ===
+                    0
+                      ? 0.18
+                      : 1,
                 }}
-              >
-                {
-                  month.label
-                }
-              </div>
+                title={`Task ${month.taskPercentage}%`}
+              />
             </div>
-          )
-        )}
+
+            {/* Month */}
+
+            <div
+              className="text-[9px] sm:text-[10px] text-center mt-2 truncate"
+              style={{
+                color: COLORS.muted,
+              }}
+            >
+              {month.label}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -778,14 +661,11 @@ function YearBarChart({
    COMPONENT
 ========================================================= */
 
-export default function ActivityGraph() {
-  const today =
-    new Date();
+export default function ProductivityChart() {
+  const today = new Date();
 
   const [mode, setMode] =
-    useState<ReportMode>(
-      "monthly"
-    );
+    useState<ReportMode>("monthly");
 
   const [
     selectedYear,
@@ -804,16 +684,12 @@ export default function ActivityGraph() {
   const [
     monthlyData,
     setMonthlyData,
-  ] = useState<
-    DailyReport[]
-  >([]);
+  ] = useState<DailyReport[]>([]);
 
   const [
     yearlyData,
     setYearlyData,
-  ] = useState<
-    MonthlyReport[]
-  >([]);
+  ] = useState<MonthlyReport[]>([]);
 
   const [
     loading,
@@ -823,440 +699,377 @@ export default function ActivityGraph() {
   const [
     error,
     setError,
-  ] = useState<
-    string | null
-  >(null);
+  ] = useState<string | null>(null);
 
   /* =======================================================
      LOAD REPORT
   ======================================================= */
 
-  const loadReport =
-    useCallback(
-      async (
-        year: number,
-        month: number
-      ) => {
-        try {
-          setLoading(true);
+  const loadReport = useCallback(
+    async (
+      year: number,
+      month: number
+    ) => {
+      try {
+        setLoading(true);
+        setError(null);
 
-          const [
-            taskResult,
-            habitResult,
-          ] = await Promise.all([
-            getTasks(),
-            getHabits(),
-          ]);
+        const [
+          taskResult,
+          habitResult,
+        ] = await Promise.all([
+          getTasks(),
+          getHabits(),
+        ]);
 
-          const tasks =
-            taskResult as TaskRecord[];
+        const tasks =
+          taskResult as TaskRecord[];
 
-          const habits =
-            habitResult as HabitRecord[];
+        const habits =
+          habitResult as HabitRecord[];
 
-          const activeHabits =
-            habits.filter(
-              (habit) =>
-                habit.status ===
-                "active"
-            );
+        const activeHabits =
+          habits.filter(
+            (habit) =>
+              habit.status ===
+              "active"
+          );
 
-          /* ===============================================
-             LOAD ALL HABIT COMPLETIONS
-          =============================================== */
+        /* ===============================================
+           LOAD ALL HABIT COMPLETIONS
+        =============================================== */
 
-          const completionResults =
-            await Promise.all(
-              activeHabits.map(
-                async (
-                  habit
-                ) => {
-                  try {
-                    return (await getHabitCompletions(
-                      habit.id
-                    )) as HabitCompletion[];
-                  } catch (
+        const completionResults =
+          await Promise.all(
+            activeHabits.map(
+              async (habit) => {
+                try {
+                  return (await getHabitCompletions(
+                    habit.id
+                  )) as HabitCompletion[];
+                } catch (
+                  completionError
+                ) {
+                  console.error(
+                    "Habit completion load failed:",
                     completionError
-                  ) {
-                    console.error(
-                      "Habit completion load failed:",
-                      completionError
-                    );
-
-                    return [];
-                  }
-                }
-              )
-            );
-
-          /* ===============================================
-             HABIT COMPLETIONS BY DATE
-          =============================================== */
-
-          const habitByDate =
-            new Map<
-              string,
-              number
-            >();
-
-          completionResults.forEach(
-            (
-              completions
-            ) => {
-              completions.forEach(
-                (
-                  completion
-                ) => {
-                  if (
-                    !completion.completed
-                  ) {
-                    return;
-                  }
-
-                  const current =
-                    habitByDate.get(
-                      completion.date
-                    ) ?? 0;
-
-                  habitByDate.set(
-                    completion.date,
-                    current + 1
                   );
+
+                  return [];
                 }
-              );
-            }
+              }
+            )
           );
 
-          /* ===============================================
-             TASKS BY DATE
-          =============================================== */
+        /* ===============================================
+           HABIT COMPLETIONS BY DATE
+        =============================================== */
 
-          const completedTasksByDate =
-            new Map<
-              string,
-              number
-            >();
+        const habitByDate =
+          new Map<string, number>();
 
-          const dueTasksByDate =
-            new Map<
-              string,
-              number
-            >();
-
-          tasks.forEach(
-            (task) => {
-              const taskDate =
-                getTaskDate(
-                  task
-                );
-
-              /* Completed task */
-
-              if (
-                task.status ===
-                  "completed" &&
-                task.completedAt
-              ) {
-                const completedDate =
-                  task.completedAt.slice(
-                    0,
-                    10
-                  );
+        completionResults.forEach(
+          (completions) => {
+            completions.forEach(
+              (completion) => {
+                if (
+                  !completion.completed
+                ) {
+                  return;
+                }
 
                 const current =
-                  completedTasksByDate.get(
-                    completedDate
+                  habitByDate.get(
+                    completion.date
                   ) ?? 0;
 
-                completedTasksByDate.set(
-                  completedDate,
+                habitByDate.set(
+                  completion.date,
                   current + 1
                 );
               }
-
-              /* Due / scheduled task */
-
-              if (
-                taskDate
-              ) {
-                const current =
-                  dueTasksByDate.get(
-                    taskDate
-                  ) ?? 0;
-
-                dueTasksByDate.set(
-                  taskDate,
-                  current + 1
-                );
-              }
-            }
-          );
-
-          /* ===============================================
-             MONTHLY DATA
-          =============================================== */
-
-          const daysInMonth =
-            getDaysInMonth(
-              year,
-              month
             );
+          }
+        );
 
-          const days: DailyReport[] =
-            [];
+        /* ===============================================
+           TASKS BY DATE
+        =============================================== */
 
-          for (
-            let day = 1;
-            day <=
-            daysInMonth;
-            day++
+        const completedTasksByDate =
+          new Map<string, number>();
+
+        const dueTasksByDate =
+          new Map<string, number>();
+
+        tasks.forEach((task) => {
+          const taskDate =
+            getTaskDate(task);
+
+          /* Completed task */
+
+          if (
+            task.status ===
+              "completed" &&
+            task.completedAt
           ) {
-            const date =
-              new Date(
-                year,
-                month,
-                day
+            const completedDate =
+              task.completedAt.slice(
+                0,
+                10
               );
 
-            const key =
-              formatDate(
-                date
-              );
-
-            const completedTasks =
+            const current =
               completedTasksByDate.get(
-                key
+                completedDate
               ) ?? 0;
 
-            const dueTasks =
+            completedTasksByDate.set(
+              completedDate,
+              current + 1
+            );
+          }
+
+          /* Due / scheduled task */
+
+          if (taskDate) {
+            const current =
               dueTasksByDate.get(
-                key
+                taskDate
               ) ?? 0;
 
-            const completedHabits =
-              habitByDate.get(
-                key
-              ) ?? 0;
+            dueTasksByDate.set(
+              taskDate,
+              current + 1
+            );
+          }
+        });
 
-            const habitPercentage =
-              activeHabits.length >
+        /* ===============================================
+           MONTHLY DATA
+        =============================================== */
+
+        const daysInMonth =
+          getDaysInMonth(
+            year,
+            month
+          );
+
+        const days: DailyReport[] =
+          [];
+
+        for (
+          let day = 1;
+          day <= daysInMonth;
+          day++
+        ) {
+          const date = new Date(
+            year,
+            month,
+            day
+          );
+
+          const key =
+            formatDate(date);
+
+          const completedTasks =
+            completedTasksByDate.get(
+              key
+            ) ?? 0;
+
+          const dueTasks =
+            dueTasksByDate.get(
+              key
+            ) ?? 0;
+
+          const completedHabits =
+            habitByDate.get(key) ?? 0;
+
+          const habitPercentage =
+            activeHabits.length > 0
+              ? calculatePercentage(
+                  completedHabits,
+                  activeHabits.length
+                )
+              : 0;
+
+          const taskPercentage =
+            dueTasks > 0
+              ? calculatePercentage(
+                  completedTasks,
+                  dueTasks
+                )
+              : 0;
+
+          days.push({
+            key,
+            label: String(day),
+            taskPercentage,
+            habitPercentage,
+          });
+        }
+
+        /* ===============================================
+           YEARLY DATA
+        =============================================== */
+
+        const months: MonthlyReport[] =
+          [];
+
+        for (
+          let monthIndex = 0;
+          monthIndex < 12;
+          monthIndex++
+        ) {
+          const monthStart =
+            new Date(
+              year,
+              monthIndex,
+              1
+            );
+
+          const monthEnd =
+            new Date(
+              year,
+              monthIndex + 1,
               0
-                ? calculatePercentage(
-                    completedHabits,
-                    activeHabits.length
-                  )
-                : 0;
+            );
 
-            const taskPercentage =
-              dueTasks > 0
-                ? calculatePercentage(
+          const startKey =
+            formatDate(monthStart);
+
+          const endKey =
+            formatDate(monthEnd);
+
+          const monthDays =
+            daysInRange(
+              startKey,
+              endKey
+            );
+
+          let taskTotal = 0;
+          let habitTotal = 0;
+
+          let taskDays = 0;
+          let habitDays = 0;
+
+          monthDays.forEach(
+            (dateKey) => {
+              const completedTasks =
+                completedTasksByDate.get(
+                  dateKey
+                ) ?? 0;
+
+              const dueTasks =
+                dueTasksByDate.get(
+                  dateKey
+                ) ?? 0;
+
+              const completedHabits =
+                habitByDate.get(
+                  dateKey
+                ) ?? 0;
+
+              if (dueTasks > 0) {
+                taskTotal +=
+                  calculatePercentage(
                     completedTasks,
                     dueTasks
-                  )
-                : 0;
+                  );
 
-            days.push({
-              key,
-
-              label:
-                String(day),
-
-              taskPercentage,
-
-              habitPercentage,
-            });
-          }
-
-          /* ===============================================
-             YEARLY DATA
-          =============================================== */
-
-          const months: MonthlyReport[] =
-            [];
-
-          for (
-            let monthIndex = 0;
-            monthIndex < 12;
-            monthIndex++
-          ) {
-            const monthStart =
-              new Date(
-                year,
-                monthIndex,
-                1
-              );
-
-            const monthEnd =
-              new Date(
-                year,
-                monthIndex + 1,
-                0
-              );
-
-            const startKey =
-              formatDate(
-                monthStart
-              );
-
-            const endKey =
-              formatDate(
-                monthEnd
-              );
-
-            /*
-             * daysInRange is now declared
-             * outside the component.
-             */
-
-            const monthDays =
-              daysInRange(
-                startKey,
-                endKey
-              );
-
-            let taskTotal =
-              0;
-
-            let habitTotal =
-              0;
-
-            let taskDays =
-              0;
-
-            let habitDays =
-              0;
-
-            monthDays.forEach(
-              (dateKey) => {
-                const completedTasks =
-                  completedTasksByDate.get(
-                    dateKey
-                  ) ?? 0;
-
-                const dueTasks =
-                  dueTasksByDate.get(
-                    dateKey
-                  ) ?? 0;
-
-                const completedHabits =
-                  habitByDate.get(
-                    dateKey
-                  ) ?? 0;
-
-                if (
-                  dueTasks > 0
-                ) {
-                  taskTotal +=
-                    calculatePercentage(
-                      completedTasks,
-                      dueTasks
-                    );
-
-                  taskDays++;
-                }
-
-                if (
-                  activeHabits.length >
-                  0
-                ) {
-                  habitTotal +=
-                    calculatePercentage(
-                      completedHabits,
-                      activeHabits.length
-                    );
-
-                  habitDays++;
-                }
+                taskDays++;
               }
-            );
 
-            const taskPercentage =
-              taskDays > 0
-                ? Math.round(
-                    taskTotal /
-                      taskDays
-                  )
-                : 0;
+              if (
+                activeHabits.length >
+                0
+              ) {
+                habitTotal +=
+                  calculatePercentage(
+                    completedHabits,
+                    activeHabits.length
+                  );
 
-            const habitPercentage =
-              habitDays > 0
-                ? Math.round(
-                    habitTotal /
-                      habitDays
-                  )
-                : 0;
-
-            months.push({
-              key:
-                getMonthKey(
-                  year,
-                  monthIndex
-                ),
-
-              label:
-                getShortMonthName(
-                  monthIndex
-                ),
-
-              taskPercentage,
-
-              habitPercentage,
-            });
-          }
-
-          setMonthlyData(
-            days
+                habitDays++;
+              }
+            }
           );
 
-          setYearlyData(
-            months
-          );
+          const taskPercentage =
+            taskDays > 0
+              ? Math.round(
+                  taskTotal /
+                    taskDays
+                )
+              : 0;
 
-          setError(null);
-        } catch (
-          loadError
-        ) {
-          console.error(
-            "Activity report load failed:",
-            loadError
-          );
+          const habitPercentage =
+            habitDays > 0
+              ? Math.round(
+                  habitTotal /
+                    habitDays
+                )
+              : 0;
 
-          setError(
-            "রিপোর্টের ডাটা লোড করা যায়নি।"
-          );
-        } finally {
-          setLoading(false);
+          months.push({
+            key: getMonthKey(
+              year,
+              monthIndex
+            ),
+
+            label:
+              getShortMonthName(
+                monthIndex
+              ),
+
+            taskPercentage,
+            habitPercentage,
+          });
         }
-      },
-      []
-    );
+
+        setMonthlyData(days);
+        setYearlyData(months);
+      } catch (loadError) {
+        console.error(
+          "Activity report load failed:",
+          loadError
+        );
+
+        setError(
+          "রিপোর্টের ডাটা লোড করা যায়নি।"
+        );
+      } finally {
+        setLoading(false);
+      }
+    },
+    []
+  );
 
   /* =======================================================
      LOAD WHEN DATE CHANGES
+     
+     IMPORTANT:
+     setTimeout prevents the React cascading-render warning.
   ======================================================= */
 
   useEffect(() => {
-    let cancelled =
-      false;
+    let cancelled = false;
 
-    const run =
-      async () => {
-        await loadReport(
+    const timer =
+      window.setTimeout(() => {
+        if (cancelled) {
+          return;
+        }
+
+        void loadReport(
           selectedYear,
           selectedMonth
         );
-
-        if (
-          cancelled
-        ) {
-          return;
-        }
-      };
-
-    void run();
+      }, 0);
 
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
     };
   }, [
     selectedYear,
@@ -1270,30 +1083,21 @@ export default function ActivityGraph() {
 
   useEffect(() => {
     let timer:
-      | ReturnType<
-          typeof setTimeout
-        >
+      | ReturnType<typeof setTimeout>
       | null = null;
 
-    const handleUpdate =
-      () => {
-        if (timer) {
-          clearTimeout(
-            timer
-          );
-        }
+    const handleUpdate = () => {
+      if (timer) {
+        clearTimeout(timer);
+      }
 
-        timer =
-          setTimeout(
-            () => {
-              void loadReport(
-                selectedYear,
-                selectedMonth
-              );
-            },
-            100
-          );
-      };
+      timer = setTimeout(() => {
+        void loadReport(
+          selectedYear,
+          selectedMonth
+        );
+      }, 100);
+    };
 
     window.addEventListener(
       "life-os-task-changed",
@@ -1322,9 +1126,7 @@ export default function ActivityGraph() {
 
     return () => {
       if (timer) {
-        clearTimeout(
-          timer
-        );
+        clearTimeout(timer);
       }
 
       window.removeEventListener(
@@ -1362,73 +1164,53 @@ export default function ActivityGraph() {
      MONTH NAVIGATION
   ======================================================= */
 
-  const goPreviousMonth =
-    () => {
-      if (
-        selectedMonth ===
-        0
-      ) {
-        setSelectedMonth(
-          11
-        );
+  const goPreviousMonth = () => {
+    if (selectedMonth === 0) {
+      setSelectedMonth(11);
 
-        setSelectedYear(
-          (year) =>
-            year - 1
-        );
-
-        return;
-      }
-
-      setSelectedMonth(
-        (month) =>
-          month - 1
+      setSelectedYear(
+        (year) => year - 1
       );
-    };
 
-  const goNextMonth =
-    () => {
-      if (
-        selectedMonth ===
-        11
-      ) {
-        setSelectedMonth(
-          0
-        );
+      return;
+    }
 
-        setSelectedYear(
-          (year) =>
-            year + 1
-        );
+    setSelectedMonth(
+      (month) => month - 1
+    );
+  };
 
-        return;
-      }
+  const goNextMonth = () => {
+    if (selectedMonth === 11) {
+      setSelectedMonth(0);
 
-      setSelectedMonth(
-        (month) =>
-          month + 1
+      setSelectedYear(
+        (year) => year + 1
       );
-    };
+
+      return;
+    }
+
+    setSelectedMonth(
+      (month) => month + 1
+    );
+  };
 
   /* =======================================================
      YEAR NAVIGATION
   ======================================================= */
 
-  const goPreviousYear =
-    () => {
-      setSelectedYear(
-        (year) =>
-          year - 1
-      );
-    };
+  const goPreviousYear = () => {
+    setSelectedYear(
+      (year) => year - 1
+    );
+  };
 
-  const goNextYear =
-    () => {
-      setSelectedYear(
-        (year) =>
-          year + 1
-      );
-    };
+  const goNextYear = () => {
+    setSelectedYear(
+      (year) => year + 1
+    );
+  };
 
   /* =======================================================
      SUMMARY
@@ -1437,8 +1219,7 @@ export default function ActivityGraph() {
   const monthlySummary =
     useMemo(() => {
       if (
-        monthlyData.length ===
-        0
+        monthlyData.length === 0
       ) {
         return {
           habit: 0,
@@ -1488,8 +1269,7 @@ export default function ActivityGraph() {
   const yearlySummary =
     useMemo(() => {
       if (
-        yearlyData.length ===
-        0
+        yearlyData.length === 0
       ) {
         return {
           habit: 0,
@@ -1532,17 +1312,14 @@ export default function ActivityGraph() {
 
   return (
     <DashboardCard>
-      {/* ===================================================
-          HEADER
-      =================================================== */}
+      {/* HEADER */}
 
       <div className="flex items-start justify-between gap-3">
         <DashboardSectionTitle
           icon={TrendingUp}
           title="মাসিক ও বার্ষিক রিপোর্ট"
           subtitle={
-            mode ===
-            "monthly"
+            mode === "monthly"
               ? "দিন অনুযায়ী Habit ও Task performance"
               : "মাস অনুযায়ী পুরো বছরের performance"
           }
@@ -1553,30 +1330,24 @@ export default function ActivityGraph() {
         <div
           className="flex items-center rounded-xl p-1 flex-shrink-0"
           style={{
-            background:
-              COLORS.paper,
-            border:
-              `1px solid ${COLORS.line}`,
+            background: COLORS.paper,
+            border: `1px solid ${COLORS.line}`,
           }}
         >
           <button
             type="button"
             onClick={() =>
-              setMode(
-                "monthly"
-              )
+              setMode("monthly")
             }
             className="px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all"
             style={{
               background:
-                mode ===
-                "monthly"
+                mode === "monthly"
                   ? COLORS.card
                   : "transparent",
 
               color:
-                mode ===
-                "monthly"
+                mode === "monthly"
                   ? COLORS.teal
                   : COLORS.muted,
             }}
@@ -1587,21 +1358,17 @@ export default function ActivityGraph() {
           <button
             type="button"
             onClick={() =>
-              setMode(
-                "yearly"
-              )
+              setMode("yearly")
             }
             className="px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all"
             style={{
               background:
-                mode ===
-                "yearly"
+                mode === "yearly"
                   ? COLORS.card
                   : "transparent",
 
               color:
-                mode ===
-                "yearly"
+                mode === "yearly"
                   ? COLORS.teal
                   : COLORS.muted,
             }}
@@ -1611,45 +1378,35 @@ export default function ActivityGraph() {
         </div>
       </div>
 
-      {/* ===================================================
-          PERIOD NAVIGATION
-      =================================================== */}
+      {/* PERIOD NAVIGATION */}
 
       <div className="flex items-center justify-between mt-4 mb-4">
         <button
           type="button"
           onClick={
-            mode ===
-            "monthly"
+            mode === "monthly"
               ? goPreviousMonth
               : goPreviousYear
           }
           className="w-8 h-8 rounded-lg flex items-center justify-center transition-all hover:scale-105"
           style={{
-            background:
-              COLORS.paper,
-            border:
-              `1px solid ${COLORS.line}`,
-            color:
-              COLORS.muted,
+            background: COLORS.paper,
+            border: `1px solid ${COLORS.line}`,
+            color: COLORS.muted,
           }}
           aria-label="Previous"
         >
-          <ChevronLeft
-            size={16}
-          />
+          <ChevronLeft size={16} />
         </button>
 
         <div className="text-center">
           <div
             className="text-sm font-semibold"
             style={{
-              color:
-                COLORS.ink,
+              color: COLORS.ink,
             }}
           >
-            {mode ===
-            "monthly"
+            {mode === "monthly"
               ? getMonthName(
                   selectedYear,
                   selectedMonth
@@ -1660,12 +1417,10 @@ export default function ActivityGraph() {
           <div
             className="text-[10px] mt-0.5"
             style={{
-              color:
-                COLORS.mutedSoft,
+              color: COLORS.mutedSoft,
             }}
           >
-            {mode ===
-            "monthly"
+            {mode === "monthly"
               ? "Monthly Report"
               : "Yearly Report"}
           </div>
@@ -1674,52 +1429,42 @@ export default function ActivityGraph() {
         <button
           type="button"
           onClick={
-            mode ===
-            "monthly"
+            mode === "monthly"
               ? goNextMonth
               : goNextYear
           }
           className="w-8 h-8 rounded-lg flex items-center justify-center transition-all hover:scale-105"
           style={{
-            background:
-              COLORS.paper,
-            border:
-              `1px solid ${COLORS.line}`,
-            color:
-              COLORS.muted,
+            background: COLORS.paper,
+            border: `1px solid ${COLORS.line}`,
+            color: COLORS.muted,
           }}
           aria-label="Next"
         >
-          <ChevronRight
-            size={16}
-          />
+          <ChevronRight size={16} />
         </button>
       </div>
 
-      {/* ===================================================
-          SUMMARY
-      =================================================== */}
+      {/* SUMMARY */}
 
       <div className="grid grid-cols-2 gap-3 mb-5">
+        {/* Habit */}
+
         <div
           className="rounded-xl px-3 py-3 flex items-center gap-2.5"
           style={{
-            background:
-              COLORS.tealSoft,
+            background: COLORS.tealSoft,
           }}
         >
           <div
             className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
             style={{
-              background:
-                COLORS.card,
+              background: COLORS.card,
             }}
           >
             <Flame
               size={16}
-              color={
-                COLORS.teal
-              }
+              color={COLORS.teal}
             />
           </div>
 
@@ -1727,12 +1472,10 @@ export default function ActivityGraph() {
             <div
               className="text-base font-bold"
               style={{
-                color:
-                  COLORS.teal,
+                color: COLORS.teal,
               }}
             >
-              {mode ===
-              "monthly"
+              {mode === "monthly"
                 ? monthlySummary.habit
                 : yearlySummary.habit}
               %
@@ -1741,8 +1484,7 @@ export default function ActivityGraph() {
             <div
               className="text-[10px]"
               style={{
-                color:
-                  COLORS.muted,
+                color: COLORS.muted,
               }}
             >
               Habit Avg
@@ -1750,25 +1492,23 @@ export default function ActivityGraph() {
           </div>
         </div>
 
+        {/* Task */}
+
         <div
           className="rounded-xl px-3 py-3 flex items-center gap-2.5"
           style={{
-            background:
-              COLORS.claySoft,
+            background: COLORS.claySoft,
           }}
         >
           <div
             className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
             style={{
-              background:
-                COLORS.card,
+              background: COLORS.card,
             }}
           >
             <CheckSquare
               size={16}
-              color={
-                COLORS.clay
-              }
+              color={COLORS.clay}
             />
           </div>
 
@@ -1776,12 +1516,10 @@ export default function ActivityGraph() {
             <div
               className="text-base font-bold"
               style={{
-                color:
-                  COLORS.clay,
+                color: COLORS.clay,
               }}
             >
-              {mode ===
-              "monthly"
+              {mode === "monthly"
                 ? monthlySummary.task
                 : yearlySummary.task}
               %
@@ -1790,8 +1528,7 @@ export default function ActivityGraph() {
             <div
               className="text-[10px]"
               style={{
-                color:
-                  COLORS.muted,
+                color: COLORS.muted,
               }}
             >
               Task Avg
@@ -1800,34 +1537,27 @@ export default function ActivityGraph() {
         </div>
       </div>
 
-      {/* ===================================================
-          ERROR
-      =================================================== */}
+      {/* ERROR */}
 
       {error && (
         <div
           className="rounded-xl px-3 py-2.5 mb-3 text-xs"
           style={{
-            background:
-              COLORS.claySoft,
-            color:
-              COLORS.clay,
+            background: COLORS.claySoft,
+            color: COLORS.clay,
           }}
         >
           {error}
         </div>
       )}
 
-      {/* ===================================================
-          CHART
-      =================================================== */}
+      {/* CHART */}
 
       {loading ? (
         <div
           className="flex items-center justify-center gap-2 py-14"
           style={{
-            color:
-              COLORS.mutedSoft,
+            color: COLORS.mutedSoft,
           }}
         >
           <Loader2
@@ -1839,46 +1569,36 @@ export default function ActivityGraph() {
             রিপোর্ট লোড হচ্ছে...
           </span>
         </div>
-      ) : mode ===
-        "monthly" ? (
+      ) : mode === "monthly" ? (
         <MonthlyLineChart
-          data={
-            monthlyData
-          }
+          data={monthlyData}
         />
       ) : (
         <YearBarChart
-          data={
-            yearlyData
-          }
+          data={yearlyData}
         />
       )}
 
-      {/* ===================================================
-          DESCRIPTION
-      =================================================== */}
+      {/* DESCRIPTION */}
 
       <div
         className="mt-3 flex items-center gap-2 text-xs"
         style={{
-          color:
-            COLORS.mutedSoft,
+          color: COLORS.mutedSoft,
         }}
       >
         <div
           className="w-1.5 h-1.5 rounded-full flex-shrink-0"
           style={{
             background:
-              mode ===
-              "monthly"
+              mode === "monthly"
                 ? COLORS.teal
                 : COLORS.gold,
           }}
         />
 
         <span>
-          {mode ===
-          "monthly"
+          {mode === "monthly"
             ? "প্রতিদিনের Habit ও Task completion percentage এখানে দেখা যাবে।"
             : "প্রতিটি bar সেই মাসের গড় Habit ও Task performance দেখায়।"}
         </span>
