@@ -1,14 +1,6 @@
 "use client";
 
 import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-
-import {
   CheckSquare,
   ChevronLeft,
   ChevronRight,
@@ -17,15 +9,27 @@ import {
   TrendingUp,
 } from "lucide-react";
 
-import { getTasks } from "@/features/tasks/services/task.service";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+
+import DashboardCard from "./DashboardCard";
+import DashboardSectionTitle from "./DashboardSectionTitle";
+
+import {
+  getTasks,
+} from "@/features/tasks/services/task.service";
 
 import {
   getHabits,
   getHabitCompletions,
 } from "@/features/habits/services/habit.service";
 
-import DashboardCard from "./DashboardCard";
-import DashboardSectionTitle from "./DashboardSectionTitle";
+import { useAuthStore } from "@/store/auth.store";
 
 /* =========================================================
    TYPES
@@ -33,7 +37,7 @@ import DashboardSectionTitle from "./DashboardSectionTitle";
 
 type ReportMode = "monthly" | "yearly";
 
-interface TaskRecord {
+interface ActivityTask {
   id?: string;
   status: string;
   completedAt?: string | null;
@@ -42,14 +46,14 @@ interface TaskRecord {
   scheduledDate?: string | null;
 }
 
-interface HabitRecord {
+interface ActivityHabit {
   id: string;
   status: string;
 }
 
-interface HabitCompletion {
-  date: string;
-  completed: boolean;
+interface ActivityHabitCompletion {
+  date?: string | null;
+  completed?: boolean;
 }
 
 interface DailyReport {
@@ -148,7 +152,7 @@ function getShortMonthName(
 }
 
 /* =========================================================
-   DAYS IN RANGE
+   RANGE
 ========================================================= */
 
 function daysInRange(
@@ -179,17 +183,17 @@ function daysInRange(
 }
 
 /* =========================================================
-   SAFE DATE EXTRACTION
+   SAFE TASK DATE
 ========================================================= */
 
 function getTaskDate(
-  task: TaskRecord
+  task: ActivityTask
 ): string | null {
   const possibleDate =
     task.dueDate ??
     task.scheduledDate ??
     task.date ??
-    task.completedAt;
+    null;
 
   if (
     typeof possibleDate !== "string" ||
@@ -215,14 +219,17 @@ function calculatePercentage(
 
   return Math.min(
     100,
-    Math.round(
-      (completed / total) * 100
+    Math.max(
+      0,
+      Math.round(
+        (completed / total) * 100
+      )
     )
   );
 }
 
 /* =========================================================
-   SVG CHART CONSTANTS
+   SVG CONSTANTS
 ========================================================= */
 
 const CHART_WIDTH = 900;
@@ -244,7 +251,7 @@ const GRAPH_HEIGHT =
   PADDING_BOTTOM;
 
 /* =========================================================
-   SVG POINT HELPERS
+   SVG POINT
 ========================================================= */
 
 function getPointX(
@@ -277,7 +284,7 @@ function getPointY(
 }
 
 /* =========================================================
-   SMOOTH LINE
+   SMOOTH PATH
 ========================================================= */
 
 function createSmoothPath(
@@ -309,7 +316,8 @@ function createSmoothPath(
 
   for (
     let index = 0;
-    index < points.length - 1;
+    index <
+    points.length - 1;
     index++
   ) {
     const current =
@@ -341,15 +349,17 @@ interface LineChartProps {
 function MonthlyLineChart({
   data,
 }: LineChartProps) {
-  const habitValues = data.map(
-    (item) =>
-      item.habitPercentage
-  );
+  const habitValues =
+    data.map(
+      (item) =>
+        item.habitPercentage
+    );
 
-  const taskValues = data.map(
-    (item) =>
-      item.taskPercentage
-  );
+  const taskValues =
+    data.map(
+      (item) =>
+        item.taskPercentage
+    );
 
   const habitPath =
     createSmoothPath(
@@ -374,7 +384,8 @@ function MonthlyLineChart({
     <div
       className="w-full overflow-hidden rounded-2xl p-2 sm:p-3"
       style={{
-        background: COLORS.paper,
+        background:
+          COLORS.paper,
         border:
           `1px solid ${COLORS.line}`,
       }}
@@ -427,44 +438,47 @@ function MonthlyLineChart({
           className="w-full min-w-[620px]"
           preserveAspectRatio="none"
         >
-          {gridLines.map((value) => {
-            const y =
-              getPointY(value);
+          {gridLines.map(
+            (value) => {
+              const y =
+                getPointY(value);
 
-            return (
-              <g key={value}>
-                <line
-                  x1={
-                    PADDING_LEFT
-                  }
-                  x2={
-                    CHART_WIDTH -
-                    PADDING_RIGHT
-                  }
-                  y1={y}
-                  y2={y}
-                  stroke={
-                    COLORS.line
-                  }
-                  strokeWidth="1"
-                />
+              return (
+                <g key={value}>
+                  <line
+                    x1={
+                      PADDING_LEFT
+                    }
+                    x2={
+                      CHART_WIDTH -
+                      PADDING_RIGHT
+                    }
+                    y1={y}
+                    y2={y}
+                    stroke={
+                      COLORS.line
+                    }
+                    strokeWidth="1"
+                  />
 
-                <text
-                  x={
-                    PADDING_LEFT - 8
-                  }
-                  y={y + 4}
-                  textAnchor="end"
-                  fontSize="10"
-                  fill={
-                    COLORS.mutedSoft
-                  }
-                >
-                  {value}%
-                </text>
-              </g>
-            );
-          })}
+                  <text
+                    x={
+                      PADDING_LEFT -
+                      8
+                    }
+                    y={y + 4}
+                    textAnchor="end"
+                    fontSize="10"
+                    fill={
+                      COLORS.mutedSoft
+                    }
+                  >
+                    {value}%
+                  </text>
+                </g>
+              );
+            }
+          )}
 
           <path
             d={habitPath}
@@ -632,62 +646,64 @@ function YearBarChart({
       </div>
 
       <div className="flex items-end gap-1 sm:gap-2 h-[260px]">
-        {data.map((month) => (
-          <div
-            key={month.key}
-            className="flex-1 min-w-0 h-full flex flex-col justify-end"
-          >
-            <div className="flex items-end justify-center gap-0.5 sm:gap-1 h-[220px]">
-              <div
-                className="w-full max-w-[16px] rounded-t-md transition-all duration-500"
-                style={{
-                  height: `${Math.max(
-                    3,
-                    month.habitPercentage *
-                      2.05
-                  )}px`,
-                  background:
-                    COLORS.teal,
-                  opacity:
-                    month.habitPercentage ===
-                    0
-                      ? 0.18
-                      : 1,
-                }}
-                title={`Habit ${month.habitPercentage}%`}
-              />
-
-              <div
-                className="w-full max-w-[16px] rounded-t-md transition-all duration-500"
-                style={{
-                  height: `${Math.max(
-                    3,
-                    month.taskPercentage *
-                      2.05
-                  )}px`,
-                  background:
-                    COLORS.clay,
-                  opacity:
-                    month.taskPercentage ===
-                    0
-                      ? 0.18
-                      : 1,
-                }}
-                title={`Task ${month.taskPercentage}%`}
-              />
-            </div>
-
+        {data.map(
+          (month) => (
             <div
-              className="text-[9px] sm:text-[10px] text-center mt-2 truncate"
-              style={{
-                color:
-                  COLORS.muted,
-              }}
+              key={month.key}
+              className="flex-1 min-w-0 h-full flex flex-col justify-end"
             >
-              {month.label}
+              <div className="flex items-end justify-center gap-0.5 sm:gap-1 h-[220px]">
+                <div
+                  className="w-full max-w-[16px] rounded-t-md transition-all duration-500"
+                  style={{
+                    height: `${Math.max(
+                      3,
+                      month.habitPercentage *
+                        2.05
+                    )}px`,
+                    background:
+                      COLORS.teal,
+                    opacity:
+                      month.habitPercentage ===
+                      0
+                        ? 0.18
+                        : 1,
+                  }}
+                  title={`Habit ${month.habitPercentage}%`}
+                />
+
+                <div
+                  className="w-full max-w-[16px] rounded-t-md transition-all duration-500"
+                  style={{
+                    height: `${Math.max(
+                      3,
+                      month.taskPercentage *
+                        2.05
+                    )}px`,
+                    background:
+                      COLORS.clay,
+                    opacity:
+                      month.taskPercentage ===
+                      0
+                        ? 0.18
+                        : 1,
+                  }}
+                  title={`Task ${month.taskPercentage}%`}
+                />
+              </div>
+
+              <div
+                className="text-[9px] sm:text-[10px] text-center mt-2 truncate"
+                style={{
+                  color:
+                    COLORS.muted,
+                }}
+              >
+                {month.label}
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        )}
       </div>
     </div>
   );
@@ -698,10 +714,32 @@ function YearBarChart({
 ========================================================= */
 
 export default function ActivityGraph() {
+  /* =======================================================
+     AUTH
+  ======================================================= */
+
+  const user = useAuthStore(
+    (state) => state.user
+  );
+
+  const initialized =
+    useAuthStore(
+      (state) =>
+        state.initialized
+    );
+
+  /* =======================================================
+     INITIAL DATE
+  ======================================================= */
+
   const initialDate = useMemo(
     () => new Date(),
     []
   );
+
+  /* =======================================================
+     STATE
+  ======================================================= */
 
   const [mode, setMode] =
     useState<ReportMode>(
@@ -761,12 +799,27 @@ export default function ActivityGraph() {
         year: number,
         month: number
       ) => {
+        /*
+         * Auth ready না হলে Firebase
+         * request করা হবে না।
+         */
+        if (
+          !initialized ||
+          !user
+        ) {
+          return;
+        }
+
         const requestId =
           ++requestIdRef.current;
 
         try {
           setLoading(true);
           setError(null);
+
+          /* ===============================================
+             TASKS + HABITS
+          =============================================== */
 
           const [
             taskResult,
@@ -784,13 +837,21 @@ export default function ActivityGraph() {
           }
 
           const tasks =
-            Array.isArray(taskResult)
-              ? (taskResult as TaskRecord[])
+            Array.isArray(
+              taskResult
+            )
+              ? (
+                  taskResult as ActivityTask[]
+                )
               : [];
 
           const habits =
-            Array.isArray(habitResult)
-              ? (habitResult as HabitRecord[])
+            Array.isArray(
+              habitResult
+            )
+              ? (
+                  habitResult as ActivityHabit[]
+                )
               : [];
 
           const activeHabits =
@@ -800,21 +861,37 @@ export default function ActivityGraph() {
                 "active"
             );
 
+          /* ===============================================
+             HABIT COMPLETIONS
+          =============================================== */
+
           const completionResults =
             await Promise.all(
               activeHabits.map(
-                async (habit) => {
+                async (
+                  habit
+                ) => {
                   try {
                     const result =
                       await getHabitCompletions(
                         habit.id
                       );
 
-                    return Array.isArray(
-                      result
-                    )
-                      ? (result as HabitCompletion[])
-                      : [];
+                    if (
+                      !Array.isArray(
+                        result
+                      )
+                    ) {
+                      return [];
+                    }
+
+                    /*
+                     * এখানে কোনো type predicate
+                     * ব্যবহার করা হচ্ছে না।
+                     *
+                     * তাই TS2677 হবে না।
+                     */
+                    return result as ActivityHabitCompletion[];
                   } catch (
                     completionError
                   ) {
@@ -864,6 +941,13 @@ export default function ActivityGraph() {
                     return;
                   }
 
+                  if (
+                    completion.date.length <
+                    10
+                  ) {
+                    return;
+                  }
+
                   const dateKey =
                     completion.date.slice(
                       0,
@@ -900,47 +984,55 @@ export default function ActivityGraph() {
               number
             >();
 
-          tasks.forEach((task) => {
-            if (
-              task.status ===
-                "completed" &&
-              typeof task.completedAt ===
-                "string" &&
-              task.completedAt.length >=
-                10
-            ) {
-              const completedDate =
-                task.completedAt.slice(
-                  0,
+          tasks.forEach(
+            (task) => {
+              /*
+               * Completed task
+               */
+              if (
+                task.status ===
+                  "completed" &&
+                typeof task.completedAt ===
+                  "string" &&
+                task.completedAt.length >=
                   10
+              ) {
+                const completedDate =
+                  task.completedAt.slice(
+                    0,
+                    10
+                  );
+
+                const current =
+                  completedTasksByDate.get(
+                    completedDate
+                  ) ?? 0;
+
+                completedTasksByDate.set(
+                  completedDate,
+                  current + 1
                 );
+              }
 
-              const current =
-                completedTasksByDate.get(
-                  completedDate
-                ) ?? 0;
+              /*
+               * Task due date
+               */
+              const taskDate =
+                getTaskDate(task);
 
-              completedTasksByDate.set(
-                completedDate,
-                current + 1
-              );
+              if (taskDate) {
+                const current =
+                  dueTasksByDate.get(
+                    taskDate
+                  ) ?? 0;
+
+                dueTasksByDate.set(
+                  taskDate,
+                  current + 1
+                );
+              }
             }
-
-            const taskDate =
-              getTaskDate(task);
-
-            if (taskDate) {
-              const current =
-                dueTasksByDate.get(
-                  taskDate
-                ) ?? 0;
-
-              dueTasksByDate.set(
-                taskDate,
-                current + 1
-              );
-            }
-          });
+          );
 
           /* ===============================================
              MONTHLY DATA
@@ -986,7 +1078,8 @@ export default function ActivityGraph() {
               ) ?? 0;
 
             const habitPercentage =
-              activeHabits.length > 0
+              activeHabits.length >
+              0
                 ? calculatePercentage(
                     completedHabits,
                     activeHabits.length
@@ -1003,7 +1096,9 @@ export default function ActivityGraph() {
 
             days.push({
               key,
-              label: String(day),
+              label: String(
+                day
+              ),
               taskPercentage,
               habitPercentage,
             });
@@ -1123,20 +1218,19 @@ export default function ActivityGraph() {
                   year,
                   monthIndex
                 ),
+
               label:
                 getShortMonthName(
                   monthIndex
                 ),
+
               taskPercentage,
               habitPercentage,
             });
           }
 
           /* ===============================================
-             IMPORTANT
-             
-             Never clear existing data while loading.
-             Firebase result becomes the new source of truth.
+             LATEST REQUEST ONLY
           =============================================== */
 
           if (
@@ -1146,10 +1240,20 @@ export default function ActivityGraph() {
             return;
           }
 
+          /*
+           * IMPORTANT:
+           * Firebase থেকে valid data আসার পরেই
+           * state replace হবে।
+           *
+           * Loading শুরু হওয়ার সময় data clear
+           * করা হচ্ছে না।
+           */
           setMonthlyData(days);
           setYearlyData(months);
           setError(null);
-        } catch (loadError) {
+        } catch (
+          loadError
+        ) {
           console.error(
             "Activity report load failed:",
             loadError
@@ -1162,6 +1266,10 @@ export default function ActivityGraph() {
             return;
           }
 
+          /*
+           * Existing graph data রেখে
+           * শুধু error দেখানো হবে।
+           */
           setError(
             "রিপোর্টের ডাটা লোড করা যায়নি।"
           );
@@ -1174,29 +1282,59 @@ export default function ActivityGraph() {
           }
         }
       },
-      []
+      [initialized, user]
     );
 
   /* =======================================================
-     INITIAL LOAD / DATE CHANGE
-     
-     Delayed callback prevents the React lint warning.
+     INITIAL LOAD
   ======================================================= */
 
   useEffect(() => {
+    /*
+     * Auth এখনো initialize না হলে
+     * কিছু করা হবে না।
+     */
+    if (!initialized) {
+      return;
+    }
+
+    /*
+     * User না থাকলে database request নয়।
+     */
+    if (!user) {
+      const timer = window.setTimeout(() => {
+        setLoading(false);
+      }, 0);
+
+      return () => {
+        window.clearTimeout(timer);
+      };
+    }
+
+    /*
+     * Effect-এর body থেকে সরাসরি
+     * async state update trigger না করে
+     * browser task queue ব্যবহার করা হচ্ছে।
+     */
     const timer =
       window.setTimeout(() => {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         void loadReport(
           selectedYear,
           selectedMonth
         );
-      }, 50);
+      }, 0);
 
     return () => {
       window.clearTimeout(timer);
+
+      /*
+       * পুরোনো request invalidate।
+       */
+      requestIdRef.current += 1;
     };
   }, [
+    initialized,
+    user,
     selectedYear,
     selectedMonth,
     loadReport,
@@ -1207,8 +1345,14 @@ export default function ActivityGraph() {
   ======================================================= */
 
   useEffect(() => {
+    if (!initialized || !user) {
+      return;
+    }
+
     let timer:
-      | ReturnType<typeof setTimeout>
+      | ReturnType<
+          typeof setTimeout
+        >
       | null = null;
 
     const handleUpdate = () => {
@@ -1280,6 +1424,8 @@ export default function ActivityGraph() {
       );
     };
   }, [
+    initialized,
+    user,
     selectedYear,
     selectedMonth,
     loadReport,
@@ -1381,6 +1527,7 @@ export default function ActivityGraph() {
           habitTotal /
             monthlyData.length
         ),
+
         task: Math.round(
           taskTotal /
             monthlyData.length
@@ -1424,6 +1571,7 @@ export default function ActivityGraph() {
           habitTotal /
             yearlyData.length
         ),
+
         task: Math.round(
           taskTotal /
             yearlyData.length
@@ -1470,6 +1618,7 @@ export default function ActivityGraph() {
                 mode === "monthly"
                   ? COLORS.card
                   : "transparent",
+
               color:
                 mode === "monthly"
                   ? COLORS.teal
@@ -1490,6 +1639,7 @@ export default function ActivityGraph() {
                 mode === "yearly"
                   ? COLORS.card
                   : "transparent",
+
               color:
                 mode === "yearly"
                   ? COLORS.teal
@@ -1522,14 +1672,17 @@ export default function ActivityGraph() {
           }}
           aria-label="Previous"
         >
-          <ChevronLeft size={16} />
+          <ChevronLeft
+            size={16}
+          />
         </button>
 
         <div className="text-center">
           <div
             className="text-sm font-semibold"
             style={{
-              color: COLORS.ink,
+              color:
+                COLORS.ink,
             }}
           >
             {mode === "monthly"
@@ -1571,13 +1724,17 @@ export default function ActivityGraph() {
           }}
           aria-label="Next"
         >
-          <ChevronRight size={16} />
+          <ChevronRight
+            size={16}
+          />
         </button>
       </div>
 
       {/* SUMMARY */}
 
       <div className="grid grid-cols-2 gap-3 mb-5">
+        {/* HABIT */}
+
         <div
           className="rounded-xl px-3 py-3 flex items-center gap-2.5"
           style={{
@@ -1608,8 +1765,7 @@ export default function ActivityGraph() {
                   COLORS.teal,
               }}
             >
-              {mode ===
-              "monthly"
+              {mode === "monthly"
                 ? monthlySummary.habit
                 : yearlySummary.habit}
               %
@@ -1626,6 +1782,8 @@ export default function ActivityGraph() {
             </div>
           </div>
         </div>
+
+        {/* TASK */}
 
         <div
           className="rounded-xl px-3 py-3 flex items-center gap-2.5"
@@ -1657,8 +1815,7 @@ export default function ActivityGraph() {
                   COLORS.clay,
               }}
             >
-              {mode ===
-              "monthly"
+              {mode === "monthly"
                 ? monthlySummary.task
                 : yearlySummary.task}
               %
@@ -1719,10 +1876,13 @@ export default function ActivityGraph() {
               style={{
                 background:
                   COLORS.card,
+
                 border:
                   `1px solid ${COLORS.line}`,
+
                 color:
                   COLORS.muted,
+
                 boxShadow:
                   "0 4px 16px rgba(42,35,24,0.06)",
               }}
