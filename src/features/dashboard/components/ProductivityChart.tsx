@@ -129,13 +129,10 @@ function getMonthName(
     year,
     month,
     1
-  ).toLocaleDateString(
-    "bn-BD",
-    {
-      month: "long",
-      year: "numeric",
-    }
-  );
+  ).toLocaleDateString("bn-BD", {
+    month: "long",
+    year: "numeric",
+  });
 }
 
 function getShortMonthName(
@@ -145,12 +142,9 @@ function getShortMonthName(
     2024,
     month,
     1
-  ).toLocaleDateString(
-    "bn-BD",
-    {
-      month: "short",
-    }
-  );
+  ).toLocaleDateString("bn-BD", {
+    month: "short",
+  });
 }
 
 /* =========================================================
@@ -385,8 +379,6 @@ function MonthlyLineChart({
           `1px solid ${COLORS.line}`,
       }}
     >
-      {/* Legend */}
-
       <div className="flex items-center justify-end gap-4 mb-2 pr-1">
         <div className="flex items-center gap-1.5">
           <span
@@ -435,8 +427,6 @@ function MonthlyLineChart({
           className="w-full min-w-[620px]"
           preserveAspectRatio="none"
         >
-          {/* Grid */}
-
           {gridLines.map((value) => {
             const y =
               getPointY(value);
@@ -476,8 +466,6 @@ function MonthlyLineChart({
             );
           })}
 
-          {/* Habit */}
-
           <path
             d={habitPath}
             fill="none"
@@ -488,8 +476,6 @@ function MonthlyLineChart({
             strokeLinecap="round"
             strokeLinejoin="round"
           />
-
-          {/* Task */}
 
           <path
             d={taskPath}
@@ -502,8 +488,6 @@ function MonthlyLineChart({
             strokeLinecap="round"
             strokeLinejoin="round"
           />
-
-          {/* Habit points */}
 
           {data.map(
             (item, index) => (
@@ -524,8 +508,6 @@ function MonthlyLineChart({
             )
           )}
 
-          {/* Task points */}
-
           {data.map(
             (item, index) => (
               <circle
@@ -544,8 +526,6 @@ function MonthlyLineChart({
               />
             )
           )}
-
-          {/* X labels */}
 
           {data.map(
             (item, index) => {
@@ -609,8 +589,6 @@ function YearBarChart({
           `1px solid ${COLORS.line}`,
       }}
     >
-      {/* Legend */}
-
       <div className="flex items-center justify-end gap-4 mb-4">
         <div className="flex items-center gap-1.5">
           <span
@@ -653,8 +631,6 @@ function YearBarChart({
         </div>
       </div>
 
-      {/* Bars */}
-
       <div className="flex items-end gap-1 sm:gap-2 h-[260px]">
         {data.map((month) => (
           <div
@@ -662,8 +638,6 @@ function YearBarChart({
             className="flex-1 min-w-0 h-full flex flex-col justify-end"
           >
             <div className="flex items-end justify-center gap-0.5 sm:gap-1 h-[220px]">
-              {/* Habit bar */}
-
               <div
                 className="w-full max-w-[16px] rounded-t-md transition-all duration-500"
                 style={{
@@ -682,8 +656,6 @@ function YearBarChart({
                 }}
                 title={`Habit ${month.habitPercentage}%`}
               />
-
-              {/* Task bar */}
 
               <div
                 className="w-full max-w-[16px] rounded-t-md transition-all duration-500"
@@ -704,8 +676,6 @@ function YearBarChart({
                 title={`Task ${month.taskPercentage}%`}
               />
             </div>
-
-            {/* Month */}
 
             <div
               className="text-[9px] sm:text-[10px] text-center mt-2 truncate"
@@ -778,10 +748,6 @@ export default function ActivityGraph() {
     null
   );
 
-  /* =======================================================
-     REQUEST ID
-  ======================================================= */
-
   const requestIdRef =
     useRef(0);
 
@@ -801,10 +767,6 @@ export default function ActivityGraph() {
         try {
           setLoading(true);
           setError(null);
-
-          /* ===============================================
-             LOAD TASKS + HABITS
-          =============================================== */
 
           const [
             taskResult,
@@ -831,20 +793,12 @@ export default function ActivityGraph() {
               ? (habitResult as HabitRecord[])
               : [];
 
-          /* ===============================================
-             ACTIVE HABITS
-          =============================================== */
-
           const activeHabits =
             habits.filter(
               (habit) =>
                 habit.status ===
                 "active"
             );
-
-          /* ===============================================
-             HABIT COMPLETIONS
-          =============================================== */
 
           const completionResults =
             await Promise.all(
@@ -883,7 +837,7 @@ export default function ActivityGraph() {
           }
 
           /* ===============================================
-             HABIT BY DATE
+             HABITS BY DATE
           =============================================== */
 
           const habitByDate =
@@ -947,8 +901,6 @@ export default function ActivityGraph() {
             >();
 
           tasks.forEach((task) => {
-            /* Completed task */
-
             if (
               task.status ===
                 "completed" &&
@@ -973,8 +925,6 @@ export default function ActivityGraph() {
                 current + 1
               );
             }
-
-            /* Due / scheduled task */
 
             const taskDate =
               getTaskDate(task);
@@ -1183,7 +1133,10 @@ export default function ActivityGraph() {
           }
 
           /* ===============================================
-             UPDATE STATE
+             IMPORTANT
+             
+             Never clear existing data while loading.
+             Firebase result becomes the new source of truth.
           =============================================== */
 
           if (
@@ -1225,22 +1178,20 @@ export default function ActivityGraph() {
     );
 
   /* =======================================================
-     INITIAL / DATE CHANGE LOAD
+     INITIAL LOAD / DATE CHANGE
      
-     IMPORTANT:
-     loadReport is started from a timer.
-     This prevents React's
-     setState-in-effect warning.
+     Delayed callback prevents the React lint warning.
   ======================================================= */
 
   useEffect(() => {
     const timer =
       window.setTimeout(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         void loadReport(
           selectedYear,
           selectedMonth
         );
-      }, 0);
+      }, 50);
 
     return () => {
       window.clearTimeout(timer);
@@ -1486,9 +1437,7 @@ export default function ActivityGraph() {
 
   return (
     <DashboardCard>
-      {/* ===================================================
-          HEADER
-      =================================================== */}
+      {/* HEADER */}
 
       <div className="flex items-start justify-between gap-3">
         <DashboardSectionTitle
@@ -1500,8 +1449,6 @@ export default function ActivityGraph() {
               : "মাস অনুযায়ী পুরো বছরের performance"
           }
         />
-
-        {/* Report switch */}
 
         <div
           className="flex items-center rounded-xl p-1 flex-shrink-0"
@@ -1554,9 +1501,7 @@ export default function ActivityGraph() {
         </div>
       </div>
 
-      {/* ===================================================
-          PERIOD NAVIGATION
-      =================================================== */}
+      {/* PERIOD NAVIGATION */}
 
       <div className="flex items-center justify-between mt-4 mb-4">
         <button
@@ -1630,13 +1575,9 @@ export default function ActivityGraph() {
         </button>
       </div>
 
-      {/* ===================================================
-          SUMMARY
-      =================================================== */}
+      {/* SUMMARY */}
 
       <div className="grid grid-cols-2 gap-3 mb-5">
-        {/* Habit */}
-
         <div
           className="rounded-xl px-3 py-3 flex items-center gap-2.5"
           style={{
@@ -1685,8 +1626,6 @@ export default function ActivityGraph() {
             </div>
           </div>
         </div>
-
-        {/* Task */}
 
         <div
           className="rounded-xl px-3 py-3 flex items-center gap-2.5"
@@ -1738,9 +1677,7 @@ export default function ActivityGraph() {
         </div>
       </div>
 
-      {/* ===================================================
-          ERROR
-      =================================================== */}
+      {/* ERROR */}
 
       {error && (
         <div
@@ -1756,45 +1693,54 @@ export default function ActivityGraph() {
         </div>
       )}
 
-      {/* ===================================================
-          CHART
-      =================================================== */}
+      {/* CHART */}
 
-      {loading ? (
-        <div
-          className="flex items-center justify-center gap-2 py-14"
-          style={{
-            color:
-              COLORS.mutedSoft,
-          }}
-        >
-          <Loader2
-            size={18}
-            className="animate-spin"
+      <div className="relative">
+        {mode === "monthly" ? (
+          <MonthlyLineChart
+            data={monthlyData}
           />
+        ) : (
+          <YearBarChart
+            data={yearlyData}
+          />
+        )}
 
-          <span className="text-sm">
-            রিপোর্ট লোড হচ্ছে...
-          </span>
-        </div>
-      ) : mode ===
-        "monthly" ? (
-        <MonthlyLineChart
-          data={
-            monthlyData
-          }
-        />
-      ) : (
-        <YearBarChart
-          data={
-            yearlyData
-          }
-        />
-      )}
+        {loading && (
+          <div
+            className="absolute inset-0 flex items-center justify-center rounded-2xl pointer-events-none"
+            style={{
+              background:
+                "rgba(250,245,234,0.55)",
+            }}
+          >
+            <div
+              className="flex items-center gap-2 px-3 py-2 rounded-xl"
+              style={{
+                background:
+                  COLORS.card,
+                border:
+                  `1px solid ${COLORS.line}`,
+                color:
+                  COLORS.muted,
+                boxShadow:
+                  "0 4px 16px rgba(42,35,24,0.06)",
+              }}
+            >
+              <Loader2
+                size={15}
+                className="animate-spin"
+              />
 
-      {/* ===================================================
-          DESCRIPTION
-      =================================================== */}
+              <span className="text-xs">
+                আপডেট হচ্ছে...
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* DESCRIPTION */}
 
       <div
         className="mt-3 flex items-center gap-2 text-xs"
