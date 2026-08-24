@@ -6,46 +6,105 @@ import AddGoalForm from "@/features/goals/components/AddGoalForm";
 import GoalList from "@/features/goals/components/GoalList";
 
 export default function GoalsPage() {
-  const [refreshKey, setRefreshKey] = useState(0);
-  const [showAddGoal, setShowAddGoal] = useState(false);
+  const [showAddGoal, setShowAddGoal] =
+    useState(false);
+
+  /* =========================================================
+     GOAL ADDED
+  ========================================================= */
 
   const handleGoalAdded = () => {
-    setRefreshKey((current) => current + 1);
+    /*
+     * Goal service নিজেই:
+     *
+     * IndexedDB → instantly save
+     * life-os-goal-changed → event emit
+     * Firebase → background sync
+     *
+     * তাই এখানে GoalList force refresh করার
+     * কোনো দরকার নেই।
+     */
     setShowAddGoal(false);
   };
+
+  /* =========================================================
+     CLOSE FORM
+  ========================================================= */
 
   const handleCloseForm = () => {
     setShowAddGoal(false);
   };
 
   return (
-    <main className="min-h-screen bg-[#f7f9f6]">
-      <div className="mx-auto w-full max-w-5xl px-4 py-6 pb-28 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight text-[#17261e]">
-            আমার লক্ষ্য
-          </h1>
+    <main className="min-h-screen bg-white">
+      <div
+        className="
+          w-full
+          px-0
+          pb-28
+          pt-5
+          sm:pt-6
+        "
+      >
+        {/* =====================================================
+            HEADER
+        ===================================================== */}
 
-          <p className="mt-2 text-[#7a877e]">
-            আপনার গুরুত্বপূর্ণ লক্ষ্য নির্ধারণ করুন
-            এবং ধাপে ধাপে এগিয়ে যান।
-          </p>
+        <div
+          className="
+            px-4
+            sm:px-6
+            lg:px-8
+          "
+        >
+          <div className="mb-6">
+            <h1
+              className="
+                text-3xl
+                font-bold
+                tracking-tight
+                text-[#22261F]
+              "
+            >
+              আমার লক্ষ্য
+            </h1>
+
+            <p
+              className="
+                mt-1.5
+                max-w-xl
+                text-sm
+                leading-6
+                text-[#767C70]
+              "
+            >
+              আপনার গুরুত্বপূর্ণ লক্ষ্য নির্ধারণ করুন
+              এবং ধাপে ধাপে এগিয়ে যান।
+            </p>
+          </div>
         </div>
 
-        {/* Goals */}
-        <section>
-          <div className="mb-4 flex items-center justify-between">
-          </div>
+        {/* =====================================================
+            GOALS
 
-          <GoalList refreshKey={refreshKey} />
+            এখানে refreshKey নেই।
+            GoalList নিজেই local event শুনবে।
+        ===================================================== */}
+
+        <section className="w-full">
+          <GoalList />
         </section>
       </div>
 
-      {/* Floating Add Goal Button */}
+      {/* =======================================================
+          FLOATING ADD GOAL BUTTON
+      ======================================================= */}
+
       <button
         type="button"
-        onClick={() => setShowAddGoal(true)}
+        onClick={() =>
+          setShowAddGoal(true)
+        }
         aria-label="নতুন লক্ষ্য যোগ করুন"
         className="
           fixed
@@ -59,24 +118,32 @@ export default function GoalsPage() {
           items-center
           justify-center
           rounded-full
-          bg-[#3f7659]
-          text-3xl
+          bg-[#173C30]
+          text-[30px]
           font-light
+          leading-none
           text-white
-          shadow-[0_12px_30px_rgba(63,118,89,0.30)]
-          transition
+          shadow-[0_12px_30px_rgba(23,60,48,0.28)]
+          transition-all
+          duration-200
           hover:scale-105
-          hover:bg-[#35654d]
+          hover:bg-[#123126]
           active:scale-95
         "
       >
         +
       </button>
 
-      {/* Bottom Sheet */}
+      {/* =======================================================
+          ADD GOAL BOTTOM SHEET
+      ======================================================= */}
+
       {showAddGoal && (
         <div className="fixed inset-0 z-50">
-          {/* Overlay */}
+          {/* ===================================================
+              OVERLAY
+          =================================================== */}
+
           <button
             type="button"
             aria-label="বন্ধ করুন"
@@ -89,7 +156,10 @@ export default function GoalsPage() {
             "
           />
 
-          {/* Sheet */}
+          {/* ===================================================
+              SHEET
+          =================================================== */}
+
           <div
             className="
               absolute
@@ -98,8 +168,8 @@ export default function GoalsPage() {
               right-0
               max-h-[92vh]
               overflow-y-auto
-              rounded-t-[32px]
-              bg-[#f7f9f6]
+              rounded-t-[28px]
+              bg-white
               px-5
               pb-8
               pt-4
@@ -111,12 +181,25 @@ export default function GoalsPage() {
               sm:-translate-x-1/2
             "
           >
-            {/* Top Handle */}
+            {/* =================================================
+                HANDLE
+            ================================================= */}
+
             <div className="mb-5 flex justify-center">
-              <div className="h-1.5 w-12 rounded-full bg-[#d5ddd5]" />
+              <div
+                className="
+                  h-1.5
+                  w-12
+                  rounded-full
+                  bg-[#D8DDD8]
+                "
+              />
             </div>
 
-            {/* Close Button */}
+            {/* =================================================
+                CLOSE BUTTON
+            ================================================= */}
+
             <button
               type="button"
               onClick={handleCloseForm}
@@ -131,20 +214,27 @@ export default function GoalsPage() {
                 items-center
                 justify-center
                 rounded-full
-                bg-[#e9eee9]
+                bg-[#F1F3F0]
                 text-xl
-                text-[#66736b]
+                text-[#66736B]
                 transition
-                hover:bg-[#dde5dd]
+                hover:bg-[#E5EAE5]
               "
             >
               ×
             </button>
 
-            {/* Add Goal Form */}
+            {/* =================================================
+                ADD GOAL FORM
+            ================================================= */}
+
             <AddGoalForm
-              onGoalAdded={handleGoalAdded}
-              onCancel={handleCloseForm}
+              onGoalAdded={
+                handleGoalAdded
+              }
+              onCancel={
+                handleCloseForm
+              }
             />
           </div>
         </div>
