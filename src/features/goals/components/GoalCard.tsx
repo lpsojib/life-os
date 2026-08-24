@@ -23,11 +23,21 @@ import {
 
 interface GoalCardProps {
   goal: Goal;
-  onDelete?: (goalId: string) => void;
+  onDelete?: (
+    goalId: string
+  ) => void;
+  onCompletionChange?: (
+    goalId: string,
+    completed: boolean
+  ) => void;
 }
 
-const formatDate = (dateString: string) => {
-  const date = new Date(`${dateString}T00:00:00`);
+const formatDate = (
+  dateString: string
+) => {
+  const date = new Date(
+    `${dateString}T00:00:00`
+  );
 
   const months = [
     "জানু",
@@ -44,20 +54,37 @@ const formatDate = (dateString: string) => {
     "ডিসে",
   ];
 
-  return `${date.getDate()} ${months[date.getMonth()]}`;
+  return `${date.getDate()} ${
+    months[date.getMonth()]
+  }`;
 };
 
-const getDaysLeft = (endDate: string) => {
+const getDaysLeft = (
+  endDate: string
+) => {
   const today = new Date();
 
-  today.setHours(0, 0, 0, 0);
+  today.setHours(
+    0,
+    0,
+    0,
+    0
+  );
 
-  const end = new Date(`${endDate}T00:00:00`);
+  const end = new Date(
+    `${endDate}T00:00:00`
+  );
 
-  end.setHours(0, 0, 0, 0);
+  end.setHours(
+    0,
+    0,
+    0,
+    0
+  );
 
   const diff = Math.ceil(
-    (end.getTime() - today.getTime()) /
+    (end.getTime() -
+      today.getTime()) /
       (1000 * 60 * 60 * 24)
   );
 
@@ -75,30 +102,38 @@ const getDaysLeft = (endDate: string) => {
 export default function GoalCard({
   goal,
   onDelete,
+  onCompletionChange,
 }: GoalCardProps) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] =
+    useState(false);
 
-  const [tasks, setTasks] = useState<GoalTask[]>([]);
+  const [tasks, setTasks] =
+    useState<GoalTask[]>([]);
 
-  const [loadingTasks, setLoadingTasks] = useState(false);
+  const [loadingTasks, setLoadingTasks] =
+    useState(false);
 
-  const [taskError, setTaskError] = useState("");
+  const [taskError, setTaskError] =
+    useState("");
 
-  const [newTask, setNewTask] = useState("");
+  const [newTask, setNewTask] =
+    useState("");
 
   const [editingTaskId, setEditingTaskId] =
     useState<string | null>(null);
 
-  const [editingText, setEditingText] = useState("");
+  const [editingText, setEditingText] =
+    useState("");
 
-  /*
-   * Goal edit
-   */
-  const [editingGoal, setEditingGoal] = useState(false);
+  /* =========================================================
+     GOAL EDIT
+  ========================================================= */
 
-  const [editTitle, setEditTitle] = useState(
-    goal.title
-  );
+  const [editingGoal, setEditingGoal] =
+    useState(false);
+
+  const [editTitle, setEditTitle] =
+    useState(goal.title);
 
   const [editDescription, setEditDescription] =
     useState(goal.description);
@@ -109,53 +144,52 @@ export default function GoalCard({
   const [editEndDate, setEditEndDate] =
     useState(goal.endDate);
 
-  const [savingGoal, setSavingGoal] = useState(false);
+  const [savingGoal, setSavingGoal] =
+    useState(false);
 
-  /*
-   * Load Goal Tasks
-   *
-   * IMPORTANT:
-   * এই function নিজে কোনো effect-এর body থেকে
-   * automatically call করা হচ্ছে না।
-   *
-   * তাই React cascading-render warning হবে না।
-   */
-  const loadTasks = useCallback(async () => {
-    try {
-      setLoadingTasks(true);
-      setTaskError("");
+  /* =========================================================
+     LOAD GOAL TASKS
+  ========================================================= */
 
-      const data = await getGoalTasks(goal.id);
+  const loadTasks =
+    useCallback(async () => {
+      try {
+        setLoadingTasks(true);
+        setTaskError("");
 
-      setTasks(data);
-    } catch (error) {
-      console.error(
-        "Load goal tasks error:",
-        error
-      );
+        const data =
+          await getGoalTasks(
+            goal.id
+          );
 
-      setTaskError(
-        "লক্ষ্যের টাস্কগুলো লোড করা যায়নি।"
-      );
-    } finally {
-      setLoadingTasks(false);
-    }
-  }, [goal.id]);
+        setTasks(data);
+      } catch (error) {
+        console.error(
+          "Load goal tasks error:",
+          error
+        );
 
-  /*
-   * Reload when another Goal component changes.
-   *
-   * এখানে effect শুধু external browser event-এর
-   * subscription করছে।
-   */
-  useEffect(() => {
-    const handleChange = () => {
-      if (!expanded) {
-        return;
+        setTaskError(
+          "লক্ষ্যের টাস্কগুলো লোড করা যায়নি।"
+        );
+      } finally {
+        setLoadingTasks(false);
       }
+    }, [goal.id]);
 
-      void loadTasks();
-    };
+  /* =========================================================
+     GOAL CHANGE EVENT
+  ========================================================= */
+
+  useEffect(() => {
+    const handleChange =
+      () => {
+        if (!expanded) {
+          return;
+        }
+
+        void loadTasks();
+      };
 
     window.addEventListener(
       "life-os-goal-changed",
@@ -168,60 +202,93 @@ export default function GoalCard({
         handleChange
       );
     };
-  }, [expanded, loadTasks]);
+  }, [
+    expanded,
+    loadTasks,
+  ]);
 
-  /*
-   * Expand / Collapse
-   *
-   * Task loading এখানে user action-এর পরে হচ্ছে।
-   * ফলে React effect warning হবে না।
-   */
+  /* =========================================================
+     EXPAND / COLLAPSE
+  ========================================================= */
+
   const handleExpand = () => {
-    setExpanded((current) => {
-      const next = !current;
+    setExpanded(
+      (current) => {
+        const next =
+          !current;
 
-      if (next) {
-        void loadTasks();
+        if (next) {
+          void loadTasks();
+        }
+
+        return next;
       }
-
-      return next;
-    });
+    );
   };
 
-  /*
-   * Progress
-   */
-  const completedCount = useMemo(
-    () =>
-      tasks.filter(
-        (task) => task.completed
-      ).length,
-    [tasks]
-  );
+  /* =========================================================
+     PROGRESS
+  ========================================================= */
 
-  const totalCount = tasks.length;
+  const completedCount =
+    useMemo(
+      () =>
+        tasks.filter(
+          (task) =>
+            task.completed
+        ).length,
+      [tasks]
+    );
+
+  const totalCount =
+    tasks.length;
 
   const progress =
     totalCount > 0
       ? Math.round(
-          (completedCount / totalCount) * 100
+          (completedCount /
+            totalCount) *
+            100
         )
       : 0;
 
+  const isCompleted =
+    progress === 100 &&
+    totalCount > 0;
+
   const status =
-    progress === 100 && totalCount > 0
+    isCompleted
       ? "সম্পন্ন"
       : "চলছে";
 
-  const daysLeft = getDaysLeft(
-    goal.endDate
-  );
+  const daysLeft =
+    getDaysLeft(
+      goal.endDate
+    );
 
-  /*
-   * Goal Edit
-   */
+  /* =========================================================
+     INFORM GOAL LIST ABOUT COMPLETION
+  ========================================================= */
+
+  useEffect(() => {
+    onCompletionChange?.(
+      goal.id,
+      isCompleted
+    );
+  }, [
+    goal.id,
+    isCompleted,
+    onCompletionChange,
+  ]);
+
+  /* =========================================================
+     GOAL EDIT
+  ========================================================= */
+
   const startGoalEdit = () => {
-    setEditTitle(goal.title);
+    setEditTitle(
+      goal.title
+    );
 
     setEditDescription(
       goal.description
@@ -231,7 +298,9 @@ export default function GoalCard({
       goal.startDate
     );
 
-    setEditEndDate(goal.endDate);
+    setEditEndDate(
+      goal.endDate
+    );
 
     setEditingGoal(true);
   };
@@ -240,296 +309,367 @@ export default function GoalCard({
     setEditingGoal(false);
   };
 
-  const saveGoalEdit = async () => {
-    if (!editTitle.trim()) {
-      return;
-    }
+  const saveGoalEdit =
+    async () => {
+      if (
+        !editTitle.trim()
+      ) {
+        return;
+      }
 
-    if (!editStartDate || !editEndDate) {
-      return;
-    }
+      if (
+        !editStartDate ||
+        !editEndDate
+      ) {
+        return;
+      }
 
-    if (editEndDate < editStartDate) {
-      return;
-    }
+      if (
+        editEndDate <
+        editStartDate
+      ) {
+        return;
+      }
 
-    try {
-      setSavingGoal(true);
-      setTaskError("");
+      try {
+        setSavingGoal(true);
+        setTaskError("");
 
-      await updateGoal(
-        goal.id,
-        editTitle.trim(),
-        editDescription.trim(),
-        editStartDate,
-        editEndDate
+        await updateGoal(
+          goal.id,
+          editTitle.trim(),
+          editDescription.trim(),
+          editStartDate,
+          editEndDate
+        );
+
+        setEditingGoal(false);
+
+        window.dispatchEvent(
+          new CustomEvent(
+            "life-os-goal-changed"
+          )
+        );
+      } catch (error) {
+        console.error(
+          "Update goal error:",
+          error
+        );
+
+        setTaskError(
+          "লক্ষ্য আপডেট করা যায়নি।"
+        );
+      } finally {
+        setSavingGoal(false);
+      }
+    };
+
+  /* =========================================================
+     DELETE GOAL
+  ========================================================= */
+
+  const handleDeleteGoal =
+    () => {
+      const confirmed =
+        window.confirm(
+          `“${goal.title}” লক্ষ্যটি মুছে ফেলতে চান? এর সব Goal Task-ও মুছে যাবে।`
+        );
+
+      if (!confirmed) {
+        return;
+      }
+
+      onDelete?.(
+        goal.id
       );
+    };
 
-      setEditingGoal(false);
+  /* =========================================================
+     TOGGLE TASK
+  ========================================================= */
 
-      window.dispatchEvent(
-        new CustomEvent(
-          "life-os-goal-changed"
-        )
-      );
-    } catch (error) {
-      console.error(
-        "Update goal error:",
-        error
-      );
-
-      setTaskError(
-        "লক্ষ্য আপডেট করা যায়নি।"
-      );
-    } finally {
-      setSavingGoal(false);
-    }
-  };
-
-  /*
-   * Goal Delete
-   */
-  const handleDeleteGoal = () => {
-    const confirmed = window.confirm(
-      `“${goal.title}” লক্ষ্যটি মুছে ফেলতে চান? এর সব Goal Task-ও মুছে যাবে।`
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    onDelete?.(goal.id);
-  };
-
-  /*
-   * Toggle Task
-   */
-  const handleToggleTask = async (
-    task: GoalTask
-  ) => {
-    const completed = !task.completed;
-
-    /*
-     * UI first
-     */
-    setTasks((current) =>
-      current.map((item) =>
-        item.id === task.id
-          ? {
-              ...item,
-              completed,
-              completedAt: completed
-                ? new Date().toISOString()
-                : null,
-            }
-          : item
-      )
-    );
-
-    try {
-      setTaskError("");
-
-      await toggleGoalTask(
-        task.id,
-        completed
-      );
-
-      window.dispatchEvent(
-        new CustomEvent(
-          "life-os-goal-changed"
-        )
-      );
-    } catch (error) {
-      console.error(
-        "Toggle goal task error:",
-        error
-      );
+  const handleToggleTask =
+    async (
+      task: GoalTask
+    ) => {
+      const completed =
+        !task.completed;
 
       /*
-       * Server/local state থেকে আবার load
+       * UI first
        */
-      void loadTasks();
-
-      setTaskError(
-        "টাস্কের অবস্থা পরিবর্তন করা যায়নি।"
+      setTasks(
+        (current) =>
+          current.map(
+            (item) =>
+              item.id ===
+              task.id
+                ? {
+                    ...item,
+                    completed,
+                    completedAt:
+                      completed
+                        ? new Date().toISOString()
+                        : null,
+                  }
+                : item
+          )
       );
-    }
-  };
 
-  /*
-   * Task edit
-   */
-  const startEdit = (task: GoalTask) => {
-    setEditingTaskId(task.id);
-    setEditingText(task.title);
+      try {
+        setTaskError("");
+
+        await toggleGoalTask(
+          task.id,
+          completed
+        );
+
+        window.dispatchEvent(
+          new CustomEvent(
+            "life-os-goal-changed"
+          )
+        );
+      } catch (error) {
+        console.error(
+          "Toggle goal task error:",
+          error
+        );
+
+        void loadTasks();
+
+        setTaskError(
+          "টাস্কের অবস্থা পরিবর্তন করা যায়নি।"
+        );
+      }
+    };
+
+  /* =========================================================
+     TASK EDIT
+  ========================================================= */
+
+  const startEdit = (
+    task: GoalTask
+  ) => {
+    setEditingTaskId(
+      task.id
+    );
+
+    setEditingText(
+      task.title
+    );
   };
 
   const cancelEdit = () => {
-    setEditingTaskId(null);
+    setEditingTaskId(
+      null
+    );
+
     setEditingText("");
   };
 
-  const saveEdit = async () => {
-    if (!editingTaskId) {
-      return;
-    }
+  const saveEdit =
+    async () => {
+      if (
+        !editingTaskId
+      ) {
+        return;
+      }
 
-    const value = editingText.trim();
+      const value =
+        editingText.trim();
 
-    if (!value) {
-      return;
-    }
+      if (!value) {
+        return;
+      }
 
-    const currentTaskId = editingTaskId;
+      const currentTaskId =
+        editingTaskId;
 
-    /*
-     * UI first
-     */
-    setTasks((current) =>
-      current.map((task) =>
-        task.id === currentTaskId
-          ? {
-              ...task,
-              title: value,
-            }
-          : task
-      )
-    );
-
-    try {
-      setTaskError("");
-
-      await updateGoalTask(
-        currentTaskId,
-        value
+      /*
+       * UI first
+       */
+      setTasks(
+        (current) =>
+          current.map(
+            (task) =>
+              task.id ===
+              currentTaskId
+                ? {
+                    ...task,
+                    title: value,
+                  }
+                : task
+          )
       );
 
-      cancelEdit();
+      try {
+        setTaskError("");
 
-      window.dispatchEvent(
-        new CustomEvent(
-          "life-os-goal-changed"
-        )
-      );
-    } catch (error) {
-      console.error(
-        "Update goal task error:",
-        error
-      );
-
-      void loadTasks();
-
-      setTaskError(
-        "টাস্ক আপডেট করা যায়নি।"
-      );
-    }
-  };
-
-  /*
-   * Add Task
-   */
-  const handleAddTask = async () => {
-    const value = newTask.trim();
-
-    if (!value) {
-      return;
-    }
-
-    try {
-      setTaskError("");
-
-      const taskId =
-        await addGoalTask(
-          goal.id,
+        await updateGoalTask(
+          currentTaskId,
           value
         );
 
-      const now =
-        new Date().toISOString();
+        cancelEdit();
 
-      setTasks((current) => [
-        ...current,
-        {
-          id: taskId,
-          goalId: goal.id,
-          title: value,
-          completed: false,
-          createdAt: now,
-          completedAt: null,
-          updatedAt: now,
-        },
-      ]);
+        window.dispatchEvent(
+          new CustomEvent(
+            "life-os-goal-changed"
+          )
+        );
+      } catch (error) {
+        console.error(
+          "Update goal task error:",
+          error
+        );
 
-      setNewTask("");
+        void loadTasks();
 
-      window.dispatchEvent(
-        new CustomEvent(
-          "life-os-goal-changed"
-        )
+        setTaskError(
+          "টাস্ক আপডেট করা যায়নি।"
+        );
+      }
+    };
+
+  /* =========================================================
+     ADD TASK
+  ========================================================= */
+
+  const handleAddTask =
+    async () => {
+      const value =
+        newTask.trim();
+
+      if (!value) {
+        return;
+      }
+
+      try {
+        setTaskError("");
+
+        const taskId =
+          await addGoalTask(
+            goal.id,
+            value
+          );
+
+        const now =
+          new Date().toISOString();
+
+        setTasks(
+          (current) => [
+            ...current,
+            {
+              id: taskId,
+              goalId: goal.id,
+              title: value,
+              completed: false,
+              createdAt: now,
+              completedAt: null,
+              updatedAt: now,
+            },
+          ]
+        );
+
+        setNewTask("");
+
+        window.dispatchEvent(
+          new CustomEvent(
+            "life-os-goal-changed"
+          )
+        );
+      } catch (error) {
+        console.error(
+          "Add goal task error:",
+          error
+        );
+
+        setTaskError(
+          "টাস্ক যোগ করা যায়নি।"
+        );
+      }
+    };
+
+  /* =========================================================
+     DELETE TASK
+  ========================================================= */
+
+  const handleDeleteTask =
+    async (
+      taskId: string
+    ) => {
+      const confirmed =
+        window.confirm(
+          "এই টাস্কটি মুছে ফেলতে চান?"
+        );
+
+      if (!confirmed) {
+        return;
+      }
+
+      /*
+       * UI first
+       */
+      setTasks(
+        (current) =>
+          current.filter(
+            (task) =>
+              task.id !==
+              taskId
+          )
       );
-    } catch (error) {
-      console.error(
-        "Add goal task error:",
-        error
-      );
 
-      setTaskError(
-        "টাস্ক যোগ করা যায়নি।"
-      );
-    }
-  };
+      try {
+        setTaskError("");
 
-  /*
-   * Delete Task
-   */
-  const handleDeleteTask = async (
-    taskId: string
-  ) => {
-    const confirmed = window.confirm(
-      "এই টাস্কটি মুছে ফেলতে চান?"
-    );
+        await deleteGoalTask(
+          taskId
+        );
 
-    if (!confirmed) {
-      return;
-    }
+        window.dispatchEvent(
+          new CustomEvent(
+            "life-os-goal-changed"
+          )
+        );
+      } catch (error) {
+        console.error(
+          "Delete goal task error:",
+          error
+        );
 
-    /*
-     * UI first
-     */
-    setTasks((current) =>
-      current.filter(
-        (task) => task.id !== taskId
-      )
-    );
+        void loadTasks();
 
-    try {
-      setTaskError("");
+        setTaskError(
+          "টাস্ক মুছে ফেলা যায়নি।"
+        );
+      }
+    };
 
-      await deleteGoalTask(taskId);
-
-      window.dispatchEvent(
-        new CustomEvent(
-          "life-os-goal-changed"
-        )
-      );
-    } catch (error) {
-      console.error(
-        "Delete goal task error:",
-        error
-      );
-
-      void loadTasks();
-
-      setTaskError(
-        "টাস্ক মুছে ফেলা যায়নি।"
-      );
-    }
-  };
+  /* =========================================================
+     RENDER
+  ========================================================= */
 
   return (
-    <article className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-      {/* Main Goal */}
-      <div className="flex items-center gap-4 p-4">
+    <article
+      className={`overflow-hidden rounded-2xl border shadow-sm transition-all duration-300 ${
+        isCompleted
+          ? "border-green-200 bg-green-50"
+          : "border-gray-200 bg-white"
+      }`}
+    >
+      {/* =====================================================
+          MAIN GOAL
+      ===================================================== */}
+
+      <div
+        className={`flex items-center gap-4 p-4 ${
+          isCompleted
+            ? "bg-green-50/80"
+            : "bg-white"
+        }`}
+      >
+        {/* Progress Circle */}
+
         <div className="relative h-14 w-14 shrink-0">
           <svg
             viewBox="0 0 54 54"
@@ -542,7 +682,11 @@ export default function GoalCard({
               fill="none"
               stroke="currentColor"
               strokeWidth="4"
-              className="text-gray-200"
+              className={
+                isCompleted
+                  ? "text-green-100"
+                  : "text-gray-200"
+              }
             />
 
             <circle
@@ -554,57 +698,108 @@ export default function GoalCard({
               strokeWidth="4"
               strokeLinecap="round"
               strokeDasharray={
-                2 * Math.PI * 24
+                2 *
+                Math.PI *
+                24
               }
               strokeDashoffset={
-                2 * Math.PI * 24 -
-                (progress / 100) *
-                  (2 * Math.PI * 24)
+                2 *
+                  Math.PI *
+                  24 -
+                (progress /
+                  100) *
+                  (2 *
+                    Math.PI *
+                    24)
               }
-              className="text-blue-600 transition-all"
+              className={
+                isCompleted
+                  ? "text-green-500 transition-all"
+                  : "text-blue-600 transition-all"
+              }
             />
           </svg>
 
-          <div className="absolute inset-0 flex items-center justify-center text-xs font-semibold text-gray-700">
+          <div
+            className={`absolute inset-0 flex items-center justify-center text-xs font-semibold ${
+              isCompleted
+                ? "text-green-700"
+                : "text-gray-700"
+            }`}
+          >
             {progress}%
           </div>
         </div>
 
+        {/* Goal Info */}
+
         <div className="min-w-0 flex-1">
-          <p className="font-semibold text-gray-900">
+          <p
+            className={`font-semibold ${
+              isCompleted
+                ? "text-green-900"
+                : "text-gray-900"
+            }`}
+          >
             {goal.title}
           </p>
 
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-gray-500">
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
             <span
               className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                status === "সম্পন্ন"
-                  ? "bg-green-50 text-green-600"
+                isCompleted
+                  ? "bg-green-100 text-green-700"
                   : "bg-blue-50 text-blue-600"
               }`}
             >
-              {status}
+              {isCompleted
+                ? "✓ সম্পন্ন"
+                : "চলছে"}
             </span>
 
             <span className="h-1 w-1 rounded-full bg-gray-300" />
 
-            <span>
+            <span
+              className={
+                isCompleted
+                  ? "text-green-700"
+                  : "text-gray-500"
+              }
+            >
               {completedCount}/
               {totalCount} টাস্ক
             </span>
 
             <span className="h-1 w-1 rounded-full bg-gray-300" />
 
-            <span>{daysLeft}</span>
+            <span
+              className={
+                isCompleted
+                  ? "text-green-700"
+                  : "text-gray-500"
+              }
+            >
+              {daysLeft}
+            </span>
           </div>
         </div>
 
+        {/* Expand */}
+
         <button
           type="button"
-          onClick={handleExpand}
+          onClick={
+            handleExpand
+          }
           aria-label="টাস্ক দেখাও"
-          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 ${
-            expanded ? "rotate-180" : ""
+          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition ${
+            isCompleted
+              ? "text-green-600 hover:bg-green-100"
+              : "text-gray-500 hover:bg-gray-100"
+          } ${
+            expanded
+              ? "rotate-180"
+              : ""
           }`}
         >
           <svg
@@ -619,15 +814,29 @@ export default function GoalCard({
         </button>
       </div>
 
+      {/* =====================================================
+          EXPANDED CONTENT
+      ===================================================== */}
+
       {expanded && (
-        <div className="border-t bg-gray-50">
+        <div
+          className={`border-t ${
+            isCompleted
+              ? "border-green-100 bg-green-50/50"
+              : "bg-gray-50"
+          }`}
+        >
           <div className="p-4">
+
             {/* Goal Actions */}
+
             {!editingGoal && (
               <div className="mb-4 flex gap-2">
                 <button
                   type="button"
-                  onClick={startGoalEdit}
+                  onClick={
+                    startGoalEdit
+                  }
                   className="flex-1 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-600 hover:bg-blue-100"
                 >
                   ✏️ Edit Goal
@@ -646,14 +855,20 @@ export default function GoalCard({
             )}
 
             {/* Goal Edit */}
+
             {editingGoal && (
               <div className="mb-4 space-y-3 rounded-2xl border border-blue-100 bg-white p-4">
                 <input
                   type="text"
-                  value={editTitle}
-                  onChange={(event) =>
+                  value={
+                    editTitle
+                  }
+                  onChange={(
+                    event
+                  ) =>
                     setEditTitle(
-                      event.target.value
+                      event.target
+                        .value
                     )
                   }
                   className="w-full rounded-xl border px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
@@ -661,10 +876,15 @@ export default function GoalCard({
                 />
 
                 <textarea
-                  value={editDescription}
-                  onChange={(event) =>
+                  value={
+                    editDescription
+                  }
+                  onChange={(
+                    event
+                  ) =>
                     setEditDescription(
-                      event.target.value
+                      event.target
+                        .value
                     )
                   }
                   rows={3}
@@ -675,10 +895,15 @@ export default function GoalCard({
                 <div className="grid grid-cols-2 gap-2">
                   <input
                     type="date"
-                    value={editStartDate}
-                    onChange={(event) =>
+                    value={
+                      editStartDate
+                    }
+                    onChange={(
+                      event
+                    ) =>
                       setEditStartDate(
-                        event.target.value
+                        event.target
+                          .value
                       )
                     }
                     className="rounded-xl border px-3 py-3 text-sm"
@@ -690,10 +915,15 @@ export default function GoalCard({
                       editStartDate ||
                       undefined
                     }
-                    value={editEndDate}
-                    onChange={(event) =>
+                    value={
+                      editEndDate
+                    }
+                    onChange={(
+                      event
+                    ) =>
                       setEditEndDate(
-                        event.target.value
+                        event.target
+                          .value
                       )
                     }
                     className="rounded-xl border px-3 py-3 text-sm"
@@ -706,7 +936,9 @@ export default function GoalCard({
                     onClick={
                       saveGoalEdit
                     }
-                    disabled={savingGoal}
+                    disabled={
+                      savingGoal
+                    }
                     className="flex-1 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
                   >
                     {savingGoal
@@ -719,7 +951,9 @@ export default function GoalCard({
                     onClick={
                       cancelGoalEdit
                     }
-                    disabled={savingGoal}
+                    disabled={
+                      savingGoal
+                    }
                     className="flex-1 rounded-xl bg-gray-100 px-4 py-2.5 text-sm font-semibold text-gray-600"
                   >
                     Cancel
@@ -728,13 +962,16 @@ export default function GoalCard({
               </div>
             )}
 
+            {/* Error */}
+
             {taskError && (
               <div className="mb-3 rounded-xl bg-red-50 p-3 text-sm text-red-600">
                 {taskError}
               </div>
             )}
 
-            {/* Task Loading */}
+            {/* Loading */}
+
             {loadingTasks && (
               <div className="py-5 text-center text-sm text-gray-400">
                 টাস্ক লোড হচ্ছে...
@@ -742,144 +979,155 @@ export default function GoalCard({
             )}
 
             {/* Tasks */}
+
             {!loadingTasks &&
               tasks.length > 0 && (
                 <div className="space-y-1">
-                  {tasks.map((task) => {
-                    const editing =
-                      editingTaskId ===
-                      task.id;
+                  {tasks.map(
+                    (task) => {
+                      const editing =
+                        editingTaskId ===
+                        task.id;
 
-                    if (editing) {
+                      if (editing) {
+                        return (
+                          <div
+                            key={
+                              task.id
+                            }
+                            className="flex items-center gap-2 rounded-xl bg-white p-2"
+                          >
+                            <input
+                              autoFocus
+                              type="text"
+                              value={
+                                editingText
+                              }
+                              onChange={(
+                                event
+                              ) =>
+                                setEditingText(
+                                  event
+                                    .target
+                                    .value
+                                )
+                              }
+                              onKeyDown={(
+                                event
+                              ) => {
+                                if (
+                                  event.key ===
+                                  "Enter"
+                                ) {
+                                  void saveEdit();
+                                }
+
+                                if (
+                                  event.key ===
+                                  "Escape"
+                                ) {
+                                  cancelEdit();
+                                }
+                              }}
+                              className="min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                void saveEdit()
+                              }
+                              className="rounded-lg px-3 py-2 text-green-600 hover:bg-green-50"
+                            >
+                              ✓
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={
+                                cancelEdit
+                              }
+                              className="rounded-lg px-3 py-2 text-gray-500 hover:bg-gray-100"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        );
+                      }
+
                       return (
                         <div
-                          key={task.id}
-                          className="flex items-center gap-2 rounded-xl bg-white p-2"
+                          key={
+                            task.id
+                          }
+                          className="flex items-center gap-3 rounded-xl bg-white px-3 py-2.5"
                         >
-                          <input
-                            autoFocus
-                            type="text"
-                            value={
-                              editingText
-                            }
-                            onChange={(
-                              event
-                            ) =>
-                              setEditingText(
-                                event
-                                  .target
-                                  .value
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void handleToggleTask(
+                                task
                               )
                             }
-                            onKeyDown={(
-                              event
-                            ) => {
-                              if (
-                                event.key ===
-                                "Enter"
-                              ) {
-                                void saveEdit();
-                              }
-
-                              if (
-                                event.key ===
-                                "Escape"
-                              ) {
-                                cancelEdit();
-                              }
-                            }}
-                            className="min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                          />
+                            className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border ${
+                              task.completed
+                                ? "border-green-500 bg-green-500 text-white"
+                                : "border-gray-300 bg-white"
+                            }`}
+                          >
+                            {task.completed &&
+                              "✓"}
+                          </button>
 
                           <button
                             type="button"
                             onClick={() =>
-                              void saveEdit()
+                              startEdit(
+                                task
+                              )
                             }
-                            className="rounded-lg px-3 py-2 text-green-600 hover:bg-green-50"
+                            className={`min-w-0 flex-1 text-left text-sm ${
+                              task.completed
+                                ? "text-gray-400 line-through"
+                                : "text-gray-700"
+                            }`}
                           >
-                            ✓
+                            {
+                              task.title
+                            }
                           </button>
 
                           <button
                             type="button"
-                            onClick={
-                              cancelEdit
+                            onClick={() =>
+                              startEdit(
+                                task
+                              )
                             }
-                            className="rounded-lg px-3 py-2 text-gray-500 hover:bg-gray-100"
+                            className="rounded-lg px-2 py-1 text-gray-400 hover:bg-gray-100"
                           >
-                            ×
+                            ✏️
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void handleDeleteTask(
+                                task.id
+                              )
+                            }
+                            className="rounded-lg px-2 py-1 text-gray-400 hover:bg-red-50 hover:text-red-500"
+                          >
+                            🗑️
                           </button>
                         </div>
                       );
                     }
-
-                    return (
-                      <div
-                        key={task.id}
-                        className="flex items-center gap-3 rounded-xl bg-white px-3 py-2.5"
-                      >
-                        <button
-                          type="button"
-                          onClick={() =>
-                            void handleToggleTask(
-                              task
-                            )
-                          }
-                          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border ${
-                            task.completed
-                              ? "border-green-500 bg-green-500 text-white"
-                              : "border-gray-300 bg-white"
-                          }`}
-                        >
-                          {task.completed &&
-                            "✓"}
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            startEdit(
-                              task
-                            )
-                          }
-                          className={`min-w-0 flex-1 text-left text-sm ${
-                            task.completed
-                              ? "text-gray-400 line-through"
-                              : "text-gray-700"
-                          }`}
-                        >
-                          {task.title}
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            startEdit(
-                              task
-                            )
-                          }
-                          className="rounded-lg px-2 py-1 text-gray-400 hover:bg-gray-100"
-                        >
-                          ✏️
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            void handleDeleteTask(
-                              task.id
-                            )
-                          }
-                          className="rounded-lg px-2 py-1 text-gray-400 hover:bg-red-50 hover:text-red-500"
-                        >
-                          🗑️
-                        </button>
-                      </div>
-                    );
-                  })}
+                  )}
                 </div>
               )}
+
+            {/* Empty Tasks */}
 
             {!loadingTasks &&
               tasks.length === 0 && (
@@ -889,16 +1137,24 @@ export default function GoalCard({
               )}
 
             {/* Add Task */}
+
             <div className="mt-3 flex items-center gap-2">
               <input
                 type="text"
-                value={newTask}
-                onChange={(event) =>
+                value={
+                  newTask
+                }
+                onChange={(
+                  event
+                ) =>
                   setNewTask(
-                    event.target.value
+                    event.target
+                      .value
                   )
                 }
-                onKeyDown={(event) => {
+                onKeyDown={(
+                  event
+                ) => {
                   if (
                     event.key ===
                     "Enter"
@@ -922,6 +1178,7 @@ export default function GoalCard({
             </div>
 
             {/* Timeline */}
+
             <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-gray-500">
               <span>
                 শুরু:{" "}
@@ -939,6 +1196,20 @@ export default function GoalCard({
                 )}
               </span>
             </div>
+
+            {/* Completed Message */}
+
+            {isCompleted && (
+              <div className="mt-4 rounded-xl border border-green-200 bg-green-100/70 px-4 py-3 text-center">
+                <p className="text-sm font-semibold text-green-700">
+                  🎉 লক্ষ্যটি সম্পূর্ণ হয়েছে!
+                </p>
+
+                <p className="mt-1 text-xs text-green-600">
+                  এই লক্ষ্যটি আপনার সম্পন্ন লক্ষ্যগুলোর তালিকায় থাকবে।
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}
