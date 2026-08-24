@@ -183,26 +183,88 @@ function daysInRange(
 }
 
 /* =========================================================
-   SAFE TASK DATE
+   SAFE DATE
+========================================================= */
+
+function normalizeDate(
+  value?: string | null
+): string | null {
+  if (
+    typeof value !== "string" ||
+    value.length < 10
+  ) {
+    return null;
+  }
+
+  const date = value.slice(0, 10);
+
+  /*
+   * Basic YYYY-MM-DD validation
+   */
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(date)
+  ) {
+    return null;
+  }
+
+  return date;
+}
+
+/* =========================================================
+   TASK DATE
 ========================================================= */
 
 function getTaskDate(
   task: ActivityTask
 ): string | null {
-  const possibleDate =
-    task.dueDate ??
-    task.scheduledDate ??
-    task.date ??
-    null;
+  /*
+   * Priority:
+   *
+   * 1. dueDate
+   * 2. scheduledDate
+   * 3. date
+   * 4. completedAt
+   *
+   * শেষের completedAt মূলত daily task-এর জন্য
+   * fallback হিসেবে কাজ করবে।
+   */
 
-  if (
-    typeof possibleDate !== "string" ||
-    possibleDate.length < 10
-  ) {
-    return null;
+  const dueDate =
+    normalizeDate(task.dueDate);
+
+  if (dueDate) {
+    return dueDate;
   }
 
-  return possibleDate.slice(0, 10);
+  const scheduledDate =
+    normalizeDate(
+      task.scheduledDate
+    );
+
+  if (scheduledDate) {
+    return scheduledDate;
+  }
+
+  const date =
+    normalizeDate(task.date);
+
+  if (date) {
+    return date;
+  }
+
+  /*
+   * Daily task-এর dueDate না থাকলে
+   * completedAt থেকে date নেওয়া হবে।
+   */
+  if (
+    task.status === "completed"
+  ) {
+    return normalizeDate(
+      task.completedAt
+    );
+  }
+
+  return null;
 }
 
 /* =========================================================
@@ -480,6 +542,8 @@ function MonthlyLineChart({
             }
           )}
 
+          {/* HABIT LINE */}
+
           <path
             d={habitPath}
             fill="none"
@@ -490,6 +554,8 @@ function MonthlyLineChart({
             strokeLinecap="round"
             strokeLinejoin="round"
           />
+
+          {/* TASK LINE */}
 
           <path
             d={taskPath}
@@ -502,6 +568,8 @@ function MonthlyLineChart({
             strokeLinecap="round"
             strokeLinejoin="round"
           />
+
+          {/* HABIT POINTS */}
 
           {data.map(
             (item, index) => (
@@ -522,6 +590,8 @@ function MonthlyLineChart({
             )
           )}
 
+          {/* TASK POINTS */}
+
           {data.map(
             (item, index) => (
               <circle
@@ -540,6 +610,8 @@ function MonthlyLineChart({
               />
             )
           )}
+
+          {/* DATE LABELS */}
 
           {data.map(
             (item, index) => {
@@ -653,6 +725,8 @@ function YearBarChart({
               className="flex-1 min-w-0 h-full flex flex-col justify-end"
             >
               <div className="flex items-end justify-center gap-0.5 sm:gap-1 h-[220px]">
+                {/* HABIT BAR */}
+
                 <div
                   className="w-full max-w-[16px] rounded-t-md transition-all duration-500"
                   style={{
@@ -671,6 +745,8 @@ function YearBarChart({
                   }}
                   title={`Habit ${month.habitPercentage}%`}
                 />
+
+                {/* TASK BAR */}
 
                 <div
                   className="w-full max-w-[16px] rounded-t-md transition-all duration-500"
@@ -763,16 +839,16 @@ export default function ActivityGraph() {
   const [
     monthlyData,
     setMonthlyData,
-  ] = useState<
-    DailyReport[]
-  >([]);
+  ] = useState<DailyReport[]>(
+    []
+  );
 
   const [
     yearlyData,
     setYearlyData,
-  ] = useState<
-    MonthlyReport[]
-  >([]);
+  ] = useState<MonthlyReport[]>(
+    []
+  );
 
   const [
     loading,
@@ -799,10 +875,6 @@ export default function ActivityGraph() {
         year: number,
         month: number
       ) => {
-        /*
-         * Auth ready না হলে Firebase
-         * request করা হবে না।
-         */
         if (
           !initialized ||
           !user
@@ -818,7 +890,7 @@ export default function ActivityGraph() {
           setError(null);
 
           /* ===============================================
-             TASKS + HABITS
+             LOAD TASKS + HABITS
           =============================================== */
 
           const [
@@ -885,12 +957,6 @@ export default function ActivityGraph() {
                       return [];
                     }
 
-                    /*
-                     * এখানে কোনো type predicate
-                     * ব্যবহার করা হচ্ছে না।
-                     *
-                     * তাই TS2677 হবে না।
-                     */
                     return result as ActivityHabitCompletion[];
                   } catch (
                     completionError
@@ -914,7 +980,7 @@ export default function ActivityGraph() {
           }
 
           /* ===============================================
-             HABITS BY DATE
+             HABIT BY DATE
           =============================================== */
 
           const habitByDate =
@@ -934,25 +1000,14 @@ export default function ActivityGraph() {
                     return;
                   }
 
-                  if (
-                    typeof completion.date !==
-                    "string"
-                  ) {
-                    return;
-                  }
-
-                  if (
-                    completion.date.length <
-                    10
-                  ) {
-                    return;
-                  }
-
                   const dateKey =
-                    completion.date.slice(
-                      0,
-                      10
+                    normalizeDate(
+                      completion.date
                     );
+
+                  if (!dateKey) {
+                    return;
+                  }
 
                   const current =
                     habitByDate.get(
@@ -969,8 +1024,14 @@ export default function ActivityGraph() {
           );
 
           /* ===============================================
-             TASKS BY DATE
+             TASK BY DATE
           =============================================== */
+
+          const totalTasksByDate =
+            new Map<
+              string,
+              number
+            >();
 
           const completedTasksByDate =
             new Map<
@@ -978,57 +1039,53 @@ export default function ActivityGraph() {
               number
             >();
 
-          const dueTasksByDate =
-            new Map<
-              string,
-              number
-            >();
+          /*
+           * IMPORTANT:
+           *
+           * আগে completedAt দিয়ে completed
+           * count করা হচ্ছিল।
+           *
+           * এখন Task-এর actual task date
+           * (`dueDate`, `scheduledDate`, `date`)
+           * ধরে total + completed দুটোই
+           * একই date-এর মধ্যে count হচ্ছে।
+           */
 
           tasks.forEach(
             (task) => {
-              /*
-               * Completed task
-               */
-              if (
-                task.status ===
-                  "completed" &&
-                typeof task.completedAt ===
-                  "string" &&
-                task.completedAt.length >=
-                  10
-              ) {
-                const completedDate =
-                  task.completedAt.slice(
-                    0,
-                    10
-                  );
-
-                const current =
-                  completedTasksByDate.get(
-                    completedDate
-                  ) ?? 0;
-
-                completedTasksByDate.set(
-                  completedDate,
-                  current + 1
-                );
-              }
-
-              /*
-               * Task due date
-               */
               const taskDate =
                 getTaskDate(task);
 
-              if (taskDate) {
-                const current =
-                  dueTasksByDate.get(
+              if (!taskDate) {
+                return;
+              }
+
+              /* TOTAL TASK */
+
+              const total =
+                totalTasksByDate.get(
+                  taskDate
+                ) ?? 0;
+
+              totalTasksByDate.set(
+                taskDate,
+                total + 1
+              );
+
+              /* COMPLETED TASK */
+
+              if (
+                task.status ===
+                "completed"
+              ) {
+                const completed =
+                  completedTasksByDate.get(
                     taskDate
                   ) ?? 0;
 
-                dueTasksByDate.set(
+                completedTasksByDate.set(
                   taskDate,
-                  current + 1
+                  completed + 1
                 );
               }
             }
@@ -1062,13 +1119,13 @@ export default function ActivityGraph() {
             const key =
               formatDate(date);
 
-            const completedTasks =
-              completedTasksByDate.get(
+            const totalTasks =
+              totalTasksByDate.get(
                 key
               ) ?? 0;
 
-            const dueTasks =
-              dueTasksByDate.get(
+            const completedTasks =
+              completedTasksByDate.get(
                 key
               ) ?? 0;
 
@@ -1087,18 +1144,16 @@ export default function ActivityGraph() {
                 : 0;
 
             const taskPercentage =
-              dueTasks > 0
+              totalTasks > 0
                 ? calculatePercentage(
                     completedTasks,
-                    dueTasks
+                    totalTasks
                   )
                 : 0;
 
             days.push({
               key,
-              label: String(
-                day
-              ),
+              label: String(day),
               taskPercentage,
               habitPercentage,
             });
@@ -1146,21 +1201,29 @@ export default function ActivityGraph() {
                 endKey
               );
 
+            let taskCompletedTotal =
+              0;
+
             let taskTotal = 0;
+
+            let habitCompletedTotal =
+              0;
+
             let habitTotal = 0;
 
-            let taskDays = 0;
-            let habitDays = 0;
+            /*
+             * TASK monthly aggregate
+             */
 
             monthDays.forEach(
               (dateKey) => {
-                const completedTasks =
-                  completedTasksByDate.get(
+                const totalTasks =
+                  totalTasksByDate.get(
                     dateKey
                   ) ?? 0;
 
-                const dueTasks =
-                  dueTasksByDate.get(
+                const completedTasks =
+                  completedTasksByDate.get(
                     dateKey
                   ) ?? 0;
 
@@ -1169,46 +1232,42 @@ export default function ActivityGraph() {
                     dateKey
                   ) ?? 0;
 
-                if (
-                  dueTasks > 0
-                ) {
-                  taskTotal +=
-                    calculatePercentage(
-                      completedTasks,
-                      dueTasks
-                    );
+                taskTotal +=
+                  totalTasks;
 
-                  taskDays++;
-                }
+                taskCompletedTotal +=
+                  completedTasks;
 
+                habitCompletedTotal +=
+                  completedHabits;
+
+                /*
+                 * প্রতিদিন active habits-এর
+                 * completion target থাকবে।
+                 */
                 if (
                   activeHabits.length >
                   0
                 ) {
                   habitTotal +=
-                    calculatePercentage(
-                      completedHabits,
-                      activeHabits.length
-                    );
-
-                  habitDays++;
+                    activeHabits.length;
                 }
               }
             );
 
             const taskPercentage =
-              taskDays > 0
-                ? Math.round(
-                    taskTotal /
-                      taskDays
+              taskTotal > 0
+                ? calculatePercentage(
+                    taskCompletedTotal,
+                    taskTotal
                   )
                 : 0;
 
             const habitPercentage =
-              habitDays > 0
-                ? Math.round(
-                    habitTotal /
-                      habitDays
+              habitTotal > 0
+                ? calculatePercentage(
+                    habitCompletedTotal,
+                    habitTotal
                   )
                 : 0;
 
@@ -1240,16 +1299,14 @@ export default function ActivityGraph() {
             return;
           }
 
-          /*
-           * IMPORTANT:
-           * Firebase থেকে valid data আসার পরেই
-           * state replace হবে।
-           *
-           * Loading শুরু হওয়ার সময় data clear
-           * করা হচ্ছে না।
-           */
-          setMonthlyData(days);
-          setYearlyData(months);
+          setMonthlyData(
+            days
+          );
+
+          setYearlyData(
+            months
+          );
+
           setError(null);
         } catch (
           loadError
@@ -1266,10 +1323,6 @@ export default function ActivityGraph() {
             return;
           }
 
-          /*
-           * Existing graph data রেখে
-           * শুধু error দেখানো হবে।
-           */
           setError(
             "রিপোর্টের ডাটা লোড করা যায়নি।"
           );
@@ -1286,36 +1339,27 @@ export default function ActivityGraph() {
     );
 
   /* =======================================================
-     INITIAL LOAD
+     INITIAL / PERIOD LOAD
   ======================================================= */
 
   useEffect(() => {
-    /*
-     * Auth এখনো initialize না হলে
-     * কিছু করা হবে না।
-     */
     if (!initialized) {
       return;
     }
 
-    /*
-     * User না থাকলে database request নয়।
-     */
     if (!user) {
-      const timer = window.setTimeout(() => {
-        setLoading(false);
-      }, 0);
+      const timer =
+        window.setTimeout(() => {
+          setLoading(false);
+        }, 0);
 
       return () => {
-        window.clearTimeout(timer);
+        window.clearTimeout(
+          timer
+        );
       };
     }
 
-    /*
-     * Effect-এর body থেকে সরাসরি
-     * async state update trigger না করে
-     * browser task queue ব্যবহার করা হচ্ছে।
-     */
     const timer =
       window.setTimeout(() => {
         void loadReport(
@@ -1325,11 +1369,10 @@ export default function ActivityGraph() {
       }, 0);
 
     return () => {
-      window.clearTimeout(timer);
+      window.clearTimeout(
+        timer
+      );
 
-      /*
-       * পুরোনো request invalidate।
-       */
       requestIdRef.current += 1;
     };
   }, [
@@ -1345,7 +1388,10 @@ export default function ActivityGraph() {
   ======================================================= */
 
   useEffect(() => {
-    if (!initialized || !user) {
+    if (
+      !initialized ||
+      !user
+    ) {
       return;
     }
 
@@ -1443,14 +1489,16 @@ export default function ActivityGraph() {
         setSelectedMonth(11);
 
         setSelectedYear(
-          (year) => year - 1
+          (year) =>
+            year - 1
         );
 
         return;
       }
 
       setSelectedMonth(
-        (month) => month - 1
+        (month) =>
+          month - 1
       );
     }, [selectedMonth]);
 
@@ -1462,14 +1510,16 @@ export default function ActivityGraph() {
         setSelectedMonth(0);
 
         setSelectedYear(
-          (year) => year + 1
+          (year) =>
+            year + 1
         );
 
         return;
       }
 
       setSelectedMonth(
-        (month) => month + 1
+        (month) =>
+          month + 1
       );
     }, [selectedMonth]);
 
@@ -1480,14 +1530,16 @@ export default function ActivityGraph() {
   const goPreviousYear =
     useCallback(() => {
       setSelectedYear(
-        (year) => year - 1
+        (year) =>
+          year - 1
       );
     }, []);
 
   const goNextYear =
     useCallback(() => {
       setSelectedYear(
-        (year) => year + 1
+        (year) =>
+          year + 1
       );
     }, []);
 
@@ -1498,7 +1550,8 @@ export default function ActivityGraph() {
   const monthlySummary =
     useMemo(() => {
       if (
-        monthlyData.length === 0
+        monthlyData.length ===
+        0
       ) {
         return {
           habit: 0,
@@ -1542,7 +1595,8 @@ export default function ActivityGraph() {
   const yearlySummary =
     useMemo(() => {
       if (
-        yearlyData.length === 0
+        yearlyData.length ===
+        0
       ) {
         return {
           habit: 0,
@@ -1610,7 +1664,9 @@ export default function ActivityGraph() {
           <button
             type="button"
             onClick={() =>
-              setMode("monthly")
+              setMode(
+                "monthly"
+              )
             }
             className="px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all"
             style={{
@@ -1631,7 +1687,9 @@ export default function ActivityGraph() {
           <button
             type="button"
             onClick={() =>
-              setMode("yearly")
+              setMode(
+                "yearly"
+              )
             }
             className="px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all"
             style={{
@@ -1855,11 +1913,15 @@ export default function ActivityGraph() {
       <div className="relative">
         {mode === "monthly" ? (
           <MonthlyLineChart
-            data={monthlyData}
+            data={
+              monthlyData
+            }
           />
         ) : (
           <YearBarChart
-            data={yearlyData}
+            data={
+              yearlyData
+            }
           />
         )}
 
