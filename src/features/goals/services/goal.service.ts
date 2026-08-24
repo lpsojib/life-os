@@ -49,7 +49,8 @@ const GOALS_STORE = "goals";
 const TASKS_STORE = "tasks";
 const QUEUE_STORE = "queue";
 
-let databasePromise: Promise<IDBDatabase> | null = null;
+let databasePromise: Promise<IDBDatabase> | null =
+  null;
 
 /* =========================================================
    USER
@@ -59,7 +60,9 @@ const getCurrentUser = () => {
   const user = auth.currentUser;
 
   if (!user) {
-    throw new Error("User is not authenticated.");
+    throw new Error(
+      "User is not authenticated."
+    );
   }
 
   return user;
@@ -100,7 +103,8 @@ const createId = (
 ): string => {
   if (
     typeof crypto !== "undefined" &&
-    typeof crypto.randomUUID === "function"
+    typeof crypto.randomUUID ===
+      "function"
   ) {
     return `${prefix}-${crypto.randomUUID()}`;
   }
@@ -111,125 +115,128 @@ const createId = (
 };
 
 /* =========================================================
-   INDEXED DB OPEN
+   INDEXED DB
 ========================================================= */
 
-const openDatabase = (): Promise<IDBDatabase> => {
-  if (typeof window === "undefined") {
-    return Promise.reject(
-      new Error(
-        "IndexedDB is only available in the browser."
-      )
-    );
-  }
-
-  if (databasePromise) {
-    return databasePromise;
-  }
-
-  databasePromise = new Promise(
-    (resolve, reject) => {
-      const request = indexedDB.open(
-        DB_NAME,
-        DB_VERSION
+const openDatabase =
+  (): Promise<IDBDatabase> => {
+    if (typeof window === "undefined") {
+      return Promise.reject(
+        new Error(
+          "IndexedDB is only available in the browser."
+        )
       );
-
-      request.onupgradeneeded = () => {
-        const database =
-          request.result;
-
-        if (
-          !database.objectStoreNames.contains(
-            GOALS_STORE
-          )
-        ) {
-          database.createObjectStore(
-            GOALS_STORE,
-            {
-              keyPath: "id",
-            }
-          );
-        }
-
-        if (
-          !database.objectStoreNames.contains(
-            TASKS_STORE
-          )
-        ) {
-          const store =
-            database.createObjectStore(
-              TASKS_STORE,
-              {
-                keyPath: "id",
-              }
-            );
-
-          store.createIndex(
-            "goalId",
-            "goalId",
-            {
-              unique: false,
-            }
-          );
-        }
-
-        if (
-          !database.objectStoreNames.contains(
-            QUEUE_STORE
-          )
-        ) {
-          const store =
-            database.createObjectStore(
-              QUEUE_STORE,
-              {
-                keyPath: "id",
-              }
-            );
-
-          store.createIndex(
-            "createdAt",
-            "createdAt",
-            {
-              unique: false,
-            }
-          );
-        }
-      };
-
-      request.onsuccess = () => {
-        const database =
-          request.result;
-
-        database.onversionchange = () => {
-          database.close();
-          databasePromise = null;
-        };
-
-        database.onclose = () => {
-          databasePromise = null;
-        };
-
-        resolve(database);
-      };
-
-      request.onerror = () => {
-        databasePromise = null;
-
-        reject(
-          request.error ??
-            new Error(
-              "Failed to open Goal IndexedDB."
-            )
-        );
-      };
     }
-  );
 
-  return databasePromise;
-};
+    if (databasePromise) {
+      return databasePromise;
+    }
+
+    databasePromise = new Promise(
+      (resolve, reject) => {
+        const request =
+          indexedDB.open(
+            DB_NAME,
+            DB_VERSION
+          );
+
+        request.onupgradeneeded = () => {
+          const database =
+            request.result;
+
+          if (
+            !database.objectStoreNames.contains(
+              GOALS_STORE
+            )
+          ) {
+            database.createObjectStore(
+              GOALS_STORE,
+              {
+                keyPath: "id",
+              }
+            );
+          }
+
+          if (
+            !database.objectStoreNames.contains(
+              TASKS_STORE
+            )
+          ) {
+            const store =
+              database.createObjectStore(
+                TASKS_STORE,
+                {
+                  keyPath: "id",
+                }
+              );
+
+            store.createIndex(
+              "goalId",
+              "goalId",
+              {
+                unique: false,
+              }
+            );
+          }
+
+          if (
+            !database.objectStoreNames.contains(
+              QUEUE_STORE
+            )
+          ) {
+            const store =
+              database.createObjectStore(
+                QUEUE_STORE,
+                {
+                  keyPath: "id",
+                }
+              );
+
+            store.createIndex(
+              "createdAt",
+              "createdAt",
+              {
+                unique: false,
+              }
+            );
+          }
+        };
+
+        request.onsuccess = () => {
+          const database =
+            request.result;
+
+          database.onversionchange =
+            () => {
+              database.close();
+              databasePromise = null;
+            };
+
+          database.onclose = () => {
+            databasePromise = null;
+          };
+
+          resolve(database);
+        };
+
+        request.onerror = () => {
+          databasePromise = null;
+
+          reject(
+            request.error ??
+              new Error(
+                "Failed to open Goal IndexedDB."
+              )
+          );
+        };
+      }
+    );
+
+    return databasePromise;
+  };
 
 /* =========================================================
-   INDEXED DB HELPERS
+   LOCAL HELPERS
 ========================================================= */
 
 const putLocal = async <T>(
@@ -251,8 +258,8 @@ const putLocal = async <T>(
         .objectStore(storeName)
         .put(data);
 
-      transaction.oncomplete = () =>
-        resolve();
+      transaction.oncomplete =
+        () => resolve();
 
       transaction.onerror = () =>
         reject(
@@ -292,8 +299,8 @@ const deleteLocal = async (
         .objectStore(storeName)
         .delete(id);
 
-      transaction.oncomplete = () =>
-        resolve();
+      transaction.oncomplete =
+        () => resolve();
 
       transaction.onerror = () =>
         reject(
@@ -439,7 +446,9 @@ const getQueue =
 const emitGoalEvent = (
   eventName: string
 ): void => {
-  if (typeof window === "undefined") {
+  if (
+    typeof window === "undefined"
+  ) {
     return;
   }
 
@@ -449,7 +458,7 @@ const emitGoalEvent = (
 };
 
 /* =========================================================
-   FIREBASE DATA CONVERTERS
+   FIREBASE CONVERTERS
 ========================================================= */
 
 const goalToFirestore = (
@@ -457,23 +466,40 @@ const goalToFirestore = (
 ) => {
   return {
     title: goal.title,
-    description: goal.description,
-    startDate: goal.startDate,
-    endDate: goal.endDate,
-    status: goal.status,
-    totalTasks: goal.totalTasks,
+
+    description:
+      goal.description,
+
+    startDate:
+      goal.startDate,
+
+    endDate:
+      goal.endDate,
+
+    status:
+      goal.status,
+
+    totalTasks:
+      goal.totalTasks,
+
     completedTasks:
       goal.completedTasks,
-    progress: goal.progress,
+
+    progress:
+      goal.progress,
 
     createdAt:
       Timestamp.fromDate(
-        new Date(goal.createdAt)
+        new Date(
+          goal.createdAt
+        )
       ),
 
     updatedAt:
       Timestamp.fromDate(
-        new Date(goal.updatedAt)
+        new Date(
+          goal.updatedAt
+        )
       ),
   };
 };
@@ -482,19 +508,25 @@ const taskToFirestore = (
   task: GoalTask
 ) => {
   return {
-    goalId: task.goalId,
-    title: task.title,
+    goalId:
+      task.goalId,
 
-    status: task.completed
-      ? "completed"
-      : "pending",
+    title:
+      task.title,
+
+    status:
+      task.completed
+        ? "completed"
+        : "pending",
 
     completed:
       task.completed,
 
     createdAt:
       Timestamp.fromDate(
-        new Date(task.createdAt)
+        new Date(
+          task.createdAt
+        )
       ),
 
     completedAt:
@@ -508,20 +540,23 @@ const taskToFirestore = (
 
     updatedAt:
       Timestamp.fromDate(
-        new Date(task.updatedAt)
+        new Date(
+          task.updatedAt
+        )
       ),
   };
 };
 
 /* =========================================================
-   FIREBASE VALUE HELPERS
+   FIREBASE HELPERS
 ========================================================= */
 
 const getStringValue = (
   value: unknown,
   fallback = ""
 ): string => {
-  return typeof value === "string"
+  return typeof value ===
+    "string"
     ? value
     : fallback;
 };
@@ -530,7 +565,8 @@ const getNumberValue = (
   value: unknown,
   fallback = 0
 ): number => {
-  return typeof value === "number"
+  return typeof value ===
+    "number"
     ? value
     : fallback;
 };
@@ -559,18 +595,25 @@ const getISOString = (
     typeof value.toDate ===
       "function"
   ) {
-    const date = value.toDate();
+    const date =
+      value.toDate();
 
-    if (date instanceof Date) {
+    if (
+      date instanceof Date
+    ) {
       return date.toISOString();
     }
   }
 
-  if (value instanceof Date) {
+  if (
+    value instanceof Date
+  ) {
     return value.toISOString();
   }
 
-  if (typeof value === "string") {
+  if (
+    typeof value === "string"
+  ) {
     return value;
   }
 
@@ -578,7 +621,7 @@ const getISOString = (
 };
 
 /* =========================================================
-   UPDATE LOCAL PROGRESS
+   UPDATE GOAL PROGRESS
 ========================================================= */
 
 const updateLocalGoalProgress =
@@ -624,6 +667,18 @@ const updateLocalGoalProgress =
               100
           );
 
+    /*
+     * IMPORTANT:
+     *
+     * Goal নিজে complete হবে
+     * শুধুমাত্র যখন সব task
+     * complete হবে।
+     */
+    const isCompleted =
+      totalTasks > 0 &&
+      completedTasks ===
+        totalTasks;
+
     const updatedGoal: Goal = {
       ...goal,
 
@@ -633,12 +688,9 @@ const updateLocalGoalProgress =
 
       progress,
 
-      status:
-        totalTasks > 0 &&
-        completedTasks ===
-          totalTasks
-          ? "completed"
-          : "active",
+      status: isCompleted
+        ? "completed"
+        : "active",
 
       updatedAt:
         new Date().toISOString(),
@@ -654,143 +706,168 @@ const updateLocalGoalProgress =
    ADD GOAL
 ========================================================= */
 
-export const addGoal = async (
-  title: string,
-  description: string,
-  startDate: string,
-  endDate: string,
-  taskTitles: string[] = []
-): Promise<string> => {
-  getCurrentUser();
+export const addGoal =
+  async (
+    title: string,
+    description: string,
+    startDate: string,
+    endDate: string,
+    taskTitles: string[] = []
+  ): Promise<string> => {
+    getCurrentUser();
 
-  const cleanTitle =
-    title.trim();
+    const cleanTitle =
+      title.trim();
 
-  const cleanDescription =
-    description.trim();
+    const cleanDescription =
+      description.trim();
 
-  if (!cleanTitle) {
-    throw new Error(
-      "লক্ষ্যের নাম লিখুন।"
-    );
-  }
+    if (!cleanTitle) {
+      throw new Error(
+        "লক্ষ্যের নাম লিখুন।"
+      );
+    }
 
-  if (!startDate || !endDate) {
-    throw new Error(
-      "শুরু ও শেষের তারিখ দিন।"
-    );
-  }
+    if (
+      !startDate ||
+      !endDate
+    ) {
+      throw new Error(
+        "শুরু ও শেষের তারিখ দিন।"
+      );
+    }
 
-  if (endDate < startDate) {
-    throw new Error(
-      "শেষের তারিখ শুরুর তারিখের পরে হতে হবে।"
-    );
-  }
+    if (
+      endDate < startDate
+    ) {
+      throw new Error(
+        "শেষের তারিখ শুরুর তারিখের পরে হতে হবে।"
+      );
+    }
 
-  const cleanTasks =
-    taskTitles
-      .map((task) =>
-        task.trim()
-      )
-      .filter(Boolean);
+    const cleanTasks =
+      taskTitles
+        .map((task) =>
+          task.trim()
+        )
+        .filter(Boolean);
 
-  const now =
-    new Date().toISOString();
+    const now =
+      new Date().toISOString();
 
-  const goalId =
-    createId("goal");
+    const goalId =
+      createId("goal");
 
-  const goal: Goal = {
-    id: goalId,
+    const goal: Goal = {
+      id: goalId,
 
-    title: cleanTitle,
+      title:
+        cleanTitle,
 
-    description:
-      cleanDescription,
+      description:
+        cleanDescription,
 
-    startDate,
+      startDate,
 
-    endDate,
+      endDate,
 
-    status: "active",
+      status:
+        "active",
 
-    totalTasks:
-      cleanTasks.length,
+      totalTasks:
+        cleanTasks.length,
 
-    completedTasks: 0,
+      completedTasks:
+        0,
 
-    progress: 0,
+      progress:
+        0,
 
-    createdAt: now,
+      createdAt:
+        now,
 
-    updatedAt: now,
-  };
-
-  await putLocal(
-    GOALS_STORE,
-    goal
-  );
-
-  await queueOperation(
-    "create-goal",
-    goalId,
-    goal
-  );
-
-  for (
-    const taskTitle of cleanTasks
-  ) {
-    const task: GoalTask = {
-      id: createId(
-        "goal-task"
-      ),
-
-      goalId,
-
-      title: taskTitle,
-
-      completed: false,
-
-      createdAt: now,
-
-      completedAt: null,
-
-      updatedAt: now,
+      updatedAt:
+        now,
     };
 
     await putLocal(
-      TASKS_STORE,
-      task
+      GOALS_STORE,
+      goal
     );
 
     await queueOperation(
-      "create-task",
-      task.id,
-      task,
-      goalId
+      "create-goal",
+      goalId,
+      goal
     );
-  }
 
-  emitGoalEvent(
-    "life-os-goal-changed"
-  );
+    for (
+      const taskTitle of
+        cleanTasks
+    ) {
+      const task: GoalTask = {
+        id: createId(
+          "goal-task"
+        ),
 
-  if (
-    typeof window !== "undefined" &&
-    navigator.onLine
-  ) {
-    void syncPendingGoals();
-  }
+        goalId,
 
-  return goalId;
-};
+        title:
+          taskTitle,
+
+        completed:
+          false,
+
+        createdAt:
+          now,
+
+        completedAt:
+          null,
+
+        updatedAt:
+          now,
+      };
+
+      await putLocal(
+        TASKS_STORE,
+        task
+      );
+
+      await queueOperation(
+        "create-task",
+        task.id,
+        task,
+        goalId
+      );
+    }
+
+    emitGoalEvent(
+      "life-os-goal-added"
+    );
+
+    emitGoalEvent(
+      "life-os-goal-changed"
+    );
+
+    if (
+      typeof window !==
+        "undefined" &&
+      navigator.onLine
+    ) {
+      void syncPendingGoals();
+    }
+
+    return goalId;
+  };
 
 /* =========================================================
    GET ACTIVE GOALS
 ========================================================= */
 
 export const getGoals =
-  async (): Promise<Goal[]> => {
+  async (): Promise<
+    Goal[]
+  > => {
     getCurrentUser();
 
     const goals =
@@ -817,7 +894,9 @@ export const getGoals =
 ========================================================= */
 
 export const getCompletedGoals =
-  async (): Promise<Goal[]> => {
+  async (): Promise<
+    Goal[]
+  > => {
     getCurrentUser();
 
     const goals =
@@ -833,8 +912,8 @@ export const getCompletedGoals =
       )
       .sort(
         (a, b) =>
-          b.createdAt.localeCompare(
-            a.createdAt
+          b.updatedAt.localeCompare(
+            a.updatedAt
           )
       );
   };
@@ -844,7 +923,9 @@ export const getCompletedGoals =
 ========================================================= */
 
 export const getExpiredGoals =
-  async (): Promise<Goal[]> => {
+  async (): Promise<
+    Goal[]
+  > => {
     getCurrentUser();
 
     const goals =
@@ -860,8 +941,8 @@ export const getExpiredGoals =
       )
       .sort(
         (a, b) =>
-          b.createdAt.localeCompare(
-            a.createdAt
+          b.updatedAt.localeCompare(
+            a.updatedAt
           )
       );
   };
@@ -910,27 +991,31 @@ export const updateGoal =
       );
     }
 
-    if (endDate < startDate) {
+    if (
+      endDate < startDate
+    ) {
       throw new Error(
         "শেষের তারিখ শুরুর তারিখের আগে হতে পারবে না।"
       );
     }
 
-    const updatedGoal: Goal = {
-      ...oldGoal,
+    const updatedGoal: Goal =
+      {
+        ...oldGoal,
 
-      title: cleanTitle,
+        title:
+          cleanTitle,
 
-      description:
-        description.trim(),
+        description:
+          description.trim(),
 
-      startDate,
+        startDate,
 
-      endDate,
+        endDate,
 
-      updatedAt:
-        new Date().toISOString(),
-    };
+        updatedAt:
+          new Date().toISOString(),
+      };
 
     await putLocal(
       GOALS_STORE,
@@ -948,7 +1033,8 @@ export const updateGoal =
     );
 
     if (
-      typeof window !== "undefined" &&
+      typeof window !==
+        "undefined" &&
       navigator.onLine
     ) {
       void syncPendingGoals();
@@ -973,7 +1059,8 @@ export const deleteGoal =
     const goalTasks =
       tasks.filter(
         (task) =>
-          task.goalId === goalId
+          task.goalId ===
+          goalId
       );
 
     for (
@@ -1007,7 +1094,8 @@ export const deleteGoal =
     );
 
     if (
-      typeof window !== "undefined" &&
+      typeof window !==
+        "undefined" &&
       navigator.onLine
     ) {
       void syncPendingGoals();
@@ -1034,16 +1122,57 @@ export const completeGoal =
       return;
     }
 
-    const updatedGoal: Goal = {
-      ...goal,
+    const tasks =
+      await getAllLocal<GoalTask>(
+        TASKS_STORE
+      );
 
-      status: "completed",
+    const goalTasks =
+      tasks.filter(
+        (task) =>
+          task.goalId ===
+          goalId
+      );
 
-      progress: 100,
+    /*
+     * Manual complete করার পরিবর্তে
+     * task status-এর উপর নির্ভর করবো।
+     */
+    const total =
+      goalTasks.length;
 
-      updatedAt:
-        new Date().toISOString(),
-    };
+    const completed =
+      goalTasks.filter(
+        (task) =>
+          task.completed
+      ).length;
+
+    if (
+      total === 0 ||
+      completed !== total
+    ) {
+      return;
+    }
+
+    const updatedGoal: Goal =
+      {
+        ...goal,
+
+        status:
+          "completed",
+
+        totalTasks:
+          total,
+
+        completedTasks:
+          completed,
+
+        progress:
+          100,
+
+        updatedAt:
+          new Date().toISOString(),
+      };
 
     await putLocal(
       GOALS_STORE,
@@ -1057,11 +1186,16 @@ export const completeGoal =
     );
 
     emitGoalEvent(
+      "life-os-goal-completed"
+    );
+
+    emitGoalEvent(
       "life-os-goal-changed"
     );
 
     if (
-      typeof window !== "undefined" &&
+      typeof window !==
+        "undefined" &&
       navigator.onLine
     ) {
       void syncPendingGoals();
@@ -1110,15 +1244,20 @@ export const addGoalTask =
 
       goalId,
 
-      title: cleanTitle,
+      title:
+        cleanTitle,
 
-      completed: false,
+      completed:
+        false,
 
-      createdAt: now,
+      createdAt:
+        now,
 
-      completedAt: null,
+      completedAt:
+        null,
 
-      updatedAt: now,
+      updatedAt:
+        now,
     };
 
     await putLocal(
@@ -1142,7 +1281,8 @@ export const addGoalTask =
     );
 
     if (
-      typeof window !== "undefined" &&
+      typeof window !==
+        "undefined" &&
       navigator.onLine
     ) {
       void syncPendingGoals();
@@ -1158,7 +1298,9 @@ export const addGoalTask =
 export const getGoalTasks =
   async (
     goalId: string
-  ): Promise<GoalTask[]> => {
+  ): Promise<
+    GoalTask[]
+  > => {
     getCurrentUser();
 
     const tasks =
@@ -1169,7 +1311,8 @@ export const getGoalTasks =
     return tasks
       .filter(
         (task) =>
-          task.goalId === goalId
+          task.goalId ===
+          goalId
       )
       .sort(
         (a, b) =>
@@ -1202,27 +1345,41 @@ export const toggleGoalTask =
       );
     }
 
-    const updatedTask: GoalTask = {
-      ...task,
+    const updatedTask: GoalTask =
+      {
+        ...task,
 
-      completed,
+        completed,
 
-      completedAt: completed
-        ? new Date().toISOString()
-        : null,
+        completedAt:
+          completed
+            ? new Date().toISOString()
+            : null,
 
-      updatedAt:
-        new Date().toISOString(),
-    };
+        updatedAt:
+          new Date().toISOString(),
+      };
 
     await putLocal(
       TASKS_STORE,
       updatedTask
     );
 
+    /*
+     * প্রথমে progress update।
+     *
+     * সব task complete হলে
+     * Goal status completed হবে।
+     */
     await updateLocalGoalProgress(
       task.goalId
     );
+
+    const updatedGoal =
+      await getLocal<Goal>(
+        GOALS_STORE,
+        task.goalId
+      );
 
     await queueOperation(
       "update-task",
@@ -1231,12 +1388,33 @@ export const toggleGoalTask =
       task.goalId
     );
 
+    /*
+     * Goal completed হলে
+     * Firebase-এ Goal update queue হবে।
+     */
+    if (
+      updatedGoal &&
+      updatedGoal.status ===
+        "completed"
+    ) {
+      await queueOperation(
+        "update-goal",
+        updatedGoal.id,
+        updatedGoal
+      );
+
+      emitGoalEvent(
+        "life-os-goal-completed"
+      );
+    }
+
     emitGoalEvent(
       "life-os-goal-changed"
     );
 
     if (
-      typeof window !== "undefined" &&
+      typeof window !==
+        "undefined" &&
       navigator.onLine
     ) {
       void syncPendingGoals();
@@ -1275,14 +1453,16 @@ export const updateGoalTask =
       );
     }
 
-    const updatedTask: GoalTask = {
-      ...task,
+    const updatedTask: GoalTask =
+      {
+        ...task,
 
-      title: cleanTitle,
+        title:
+          cleanTitle,
 
-      updatedAt:
-        new Date().toISOString(),
-    };
+        updatedAt:
+          new Date().toISOString(),
+      };
 
     await putLocal(
       TASKS_STORE,
@@ -1301,7 +1481,8 @@ export const updateGoalTask =
     );
 
     if (
-      typeof window !== "undefined" &&
+      typeof window !==
+        "undefined" &&
       navigator.onLine
     ) {
       void syncPendingGoals();
@@ -1349,7 +1530,8 @@ export const deleteGoalTask =
     );
 
     if (
-      typeof window !== "undefined" &&
+      typeof window !==
+        "undefined" &&
       navigator.onLine
     ) {
       void syncPendingGoals();
@@ -1365,101 +1547,94 @@ export const refreshGoalsFromFirebase =
     emitEvent = true
   ): Promise<void> => {
     if (
-      typeof window === "undefined" ||
+      typeof window ===
+        "undefined" ||
       !navigator.onLine ||
       !auth.currentUser
     ) {
       return;
     }
 
-    try {
-      const snapshot =
-        await getDocs(
-          getGoalsCollection()
-        );
-
-      for (
-        const item of snapshot.docs
-      ) {
-        const data = item.data();
-
-        const goal: Goal = {
-          id: item.id,
-
-          title:
-            getStringValue(
-              data.title
-            ),
-
-          description:
-            getStringValue(
-              data.description
-            ),
-
-          startDate:
-            getStringValue(
-              data.startDate
-            ),
-
-          endDate:
-            getStringValue(
-              data.endDate
-            ),
-
-          status:
-            getGoalStatus(
-              data.status
-            ),
-
-          totalTasks:
-            getNumberValue(
-              data.totalTasks
-            ),
-
-          completedTasks:
-            getNumberValue(
-              data.completedTasks
-            ),
-
-          progress:
-            getNumberValue(
-              data.progress
-            ),
-
-          createdAt:
-            getISOString(
-              data.createdAt
-            ),
-
-          updatedAt:
-            getISOString(
-              data.updatedAt
-            ),
-        };
-
-        await putLocal(
-          GOALS_STORE,
-          goal
-        );
-      }
-
-      if (emitEvent) {
-        emitGoalEvent(
-          "life-os-goal-changed"
-        );
-      }
-    } catch (error) {
-      console.error(
-        "Goal refresh failed:",
-        error
+    const snapshot =
+      await getDocs(
+        getGoalsCollection()
       );
 
-      throw error;
+    for (
+      const item of snapshot.docs
+    ) {
+      const data =
+        item.data();
+
+      const goal: Goal = {
+        id: item.id,
+
+        title:
+          getStringValue(
+            data.title
+          ),
+
+        description:
+          getStringValue(
+            data.description
+          ),
+
+        startDate:
+          getStringValue(
+            data.startDate
+          ),
+
+        endDate:
+          getStringValue(
+            data.endDate
+          ),
+
+        status:
+          getGoalStatus(
+            data.status
+          ),
+
+        totalTasks:
+          getNumberValue(
+            data.totalTasks
+          ),
+
+        completedTasks:
+          getNumberValue(
+            data.completedTasks
+          ),
+
+        progress:
+          getNumberValue(
+            data.progress
+          ),
+
+        createdAt:
+          getISOString(
+            data.createdAt
+          ),
+
+        updatedAt:
+          getISOString(
+            data.updatedAt
+          ),
+      };
+
+      await putLocal(
+        GOALS_STORE,
+        goal
+      );
+    }
+
+    if (emitEvent) {
+      emitGoalEvent(
+        "life-os-goal-changed"
+      );
     }
   };
 
 /* =========================================================
-   REFRESH GOAL TASKS FROM FIREBASE
+   REFRESH GOAL TASKS
 ========================================================= */
 
 export const refreshGoalTasksFromFirebase =
@@ -1467,82 +1642,93 @@ export const refreshGoalTasksFromFirebase =
     emitEvent = true
   ): Promise<void> => {
     if (
-      typeof window === "undefined" ||
+      typeof window ===
+        "undefined" ||
       !navigator.onLine ||
       !auth.currentUser
     ) {
       return;
     }
 
-    try {
-      const snapshot =
-        await getDocs(
-          getGoalTasksCollection()
-        );
-
-      for (
-        const item of snapshot.docs
-      ) {
-        const data = item.data();
-
-        const completed =
-          typeof data.completed ===
-          "boolean"
-            ? data.completed
-            : data.status ===
-              "completed";
-
-        const task: GoalTask = {
-          id: item.id,
-
-          goalId:
-            getStringValue(
-              data.goalId
-            ),
-
-          title:
-            getStringValue(
-              data.title
-            ),
-
-          completed,
-
-          createdAt:
-            getISOString(
-              data.createdAt
-            ),
-
-          completedAt:
-            data.completedAt
-              ? getISOString(
-                  data.completedAt
-                )
-              : null,
-
-          updatedAt:
-            getISOString(
-              data.updatedAt
-            ),
-        };
-
-        await putLocal(
-          TASKS_STORE,
-          task
-        );
-      }
-
-      if (emitEvent) {
-        emitGoalEvent(
-          "life-os-goal-changed"
-        );
-      }
-    } catch (error) {
-      console.error(
-        "Goal task refresh failed:",
-        error
+    const snapshot =
+      await getDocs(
+        getGoalTasksCollection()
       );
 
-      throw error;
+    for (
+      const item of snapshot.docs
+    ) {
+      const data =
+        item.data();
+
+      const completed =
+        typeof data.completed ===
+        "boolean"
+          ? data.completed
+          : data.status ===
+            "completed";
+
+      const task: GoalTask = {
+        id: item.id,
+
+        goalId:
+          getStringValue(
+            data.goalId
+          ),
+
+        title:
+          getStringValue(
+            data.title
+          ),
+
+        completed,
+
+        createdAt:
+          getISOString(
+            data.createdAt
+          ),
+
+        completedAt:
+          data.completedAt
+            ? getISOString(
+                data.completedAt
+              )
+            : null,
+
+        updatedAt:
+          getISOString(
+            data.updatedAt
+          ),
+      };
+
+      await putLocal(
+        TASKS_STORE,
+        task
+      );
+    }
+
+    /*
+     * Firebase tasks update হওয়ার
+     * পরে local goal progress আবার
+     * calculate করা হবে।
+     */
+    const goals =
+      await getAllLocal<Goal>(
+        GOALS_STORE
+      );
+
+    for (
+      const goal of goals
+    ) {
+      await updateLocalGoalProgress(
+        goal.id
+      );
+    }
+
+    if (emitEvent) {
+      emitGoalEvent(
+        "life-os-goal-changed"
+      );
     }
   };
 
@@ -1559,7 +1745,8 @@ export const syncPendingGoals =
     }
 
     if (
-      typeof window !== "undefined" &&
+      typeof window !==
+        "undefined" &&
       !navigator.onLine
     ) {
       return;
@@ -1589,10 +1776,6 @@ export const syncPendingGoals =
           switch (
             item.operation
           ) {
-            /* =========================================
-               CREATE GOAL
-            ========================================= */
-
             case "create-goal": {
               const goal =
                 item.data as Goal;
@@ -1612,10 +1795,6 @@ export const syncPendingGoals =
 
               break;
             }
-
-            /* =========================================
-               UPDATE GOAL
-            ========================================= */
 
             case "update-goal": {
               const goal =
@@ -1640,10 +1819,6 @@ export const syncPendingGoals =
               break;
             }
 
-            /* =========================================
-               DELETE GOAL
-            ========================================= */
-
             case "delete-goal": {
               await deleteDoc(
                 doc(
@@ -1657,10 +1832,6 @@ export const syncPendingGoals =
 
               break;
             }
-
-            /* =========================================
-               CREATE TASK
-            ========================================= */
 
             case "create-task": {
               const task =
@@ -1681,10 +1852,6 @@ export const syncPendingGoals =
 
               break;
             }
-
-            /* =========================================
-               UPDATE TASK
-            ========================================= */
 
             case "update-task": {
               const task =
@@ -1708,10 +1875,6 @@ export const syncPendingGoals =
 
               break;
             }
-
-            /* =========================================
-               DELETE TASK
-            ========================================= */
 
             case "delete-task": {
               await deleteDoc(
@@ -1743,8 +1906,8 @@ export const syncPendingGoals =
       }
 
       /*
-       * Sync শেষ হওয়ার পরে Firebase থেকে
-       * latest data আবার local cache-এ আনা হবে।
+       * Sync শেষে Firebase-এর
+       * latest data local-এ আনা হবে।
        */
       await refreshGoalsFromFirebase(
         false
@@ -1756,6 +1919,15 @@ export const syncPendingGoals =
 
       emitGoalEvent(
         "life-os-goal-synced"
+      );
+
+      emitGoalEvent(
+        "life-os-goal-changed"
+      );
+    } catch (error) {
+      console.error(
+        "Goal sync failed:",
+        error
       );
     } finally {
       syncing = false;
