@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -33,6 +34,7 @@ import DashboardSectionTitle from "./DashboardSectionTitle";
 type ReportMode = "monthly" | "yearly";
 
 interface TaskRecord {
+  id?: string;
   status: string;
   completedAt?: string | null;
   dueDate?: string | null;
@@ -114,7 +116,9 @@ function getMonthKey(
   year: number,
   month: number
 ): string {
-  return `${year}-${String(month + 1).padStart(2, "0")}`;
+  return `${year}-${String(
+    month + 1
+  ).padStart(2, "0")}`;
 }
 
 function getMonthName(
@@ -125,10 +129,13 @@ function getMonthName(
     year,
     month,
     1
-  ).toLocaleDateString("bn-BD", {
-    month: "long",
-    year: "numeric",
-  });
+  ).toLocaleDateString(
+    "bn-BD",
+    {
+      month: "long",
+      year: "numeric",
+    }
+  );
 }
 
 function getShortMonthName(
@@ -138,13 +145,16 @@ function getShortMonthName(
     2024,
     month,
     1
-  ).toLocaleDateString("bn-BD", {
-    month: "short",
-  });
+  ).toLocaleDateString(
+    "bn-BD",
+    {
+      month: "short",
+    }
+  );
 }
 
 /* =========================================================
-   RANGE HELPER
+   DAYS IN RANGE
 ========================================================= */
 
 function daysInRange(
@@ -187,7 +197,10 @@ function getTaskDate(
     task.date ??
     task.completedAt;
 
-  if (!possibleDate) {
+  if (
+    typeof possibleDate !== "string" ||
+    possibleDate.length < 10
+  ) {
     return null;
   }
 
@@ -215,7 +228,7 @@ function calculatePercentage(
 }
 
 /* =========================================================
-   SVG LINE HELPERS
+   SVG CHART CONSTANTS
 ========================================================= */
 
 const CHART_WIDTH = 900;
@@ -235,6 +248,10 @@ const GRAPH_HEIGHT =
   CHART_HEIGHT -
   PADDING_TOP -
   PADDING_BOTTOM;
+
+/* =========================================================
+   SVG POINT HELPERS
+========================================================= */
 
 function getPointX(
   index: number,
@@ -265,6 +282,10 @@ function getPointY(
   );
 }
 
+/* =========================================================
+   SMOOTH LINE
+========================================================= */
+
 function createSmoothPath(
   values: number[]
 ): string {
@@ -293,12 +314,15 @@ function createSmoothPath(
     `M ${points[0].x} ${points[0].y}`;
 
   for (
-    let i = 0;
-    i < points.length - 1;
-    i++
+    let index = 0;
+    index < points.length - 1;
+    index++
   ) {
-    const current = points[i];
-    const next = points[i + 1];
+    const current =
+      points[index];
+
+    const next =
+      points[index + 1];
 
     const controlX =
       (current.x + next.x) / 2;
@@ -324,18 +348,24 @@ function MonthlyLineChart({
   data,
 }: LineChartProps) {
   const habitValues = data.map(
-    (item) => item.habitPercentage
+    (item) =>
+      item.habitPercentage
   );
 
   const taskValues = data.map(
-    (item) => item.taskPercentage
+    (item) =>
+      item.taskPercentage
   );
 
   const habitPath =
-    createSmoothPath(habitValues);
+    createSmoothPath(
+      habitValues
+    );
 
   const taskPath =
-    createSmoothPath(taskValues);
+    createSmoothPath(
+      taskValues
+    );
 
   const gridLines = [
     0,
@@ -351,7 +381,8 @@ function MonthlyLineChart({
       className="w-full overflow-hidden rounded-2xl p-2 sm:p-3"
       style={{
         background: COLORS.paper,
-        border: `1px solid ${COLORS.line}`,
+        border:
+          `1px solid ${COLORS.line}`,
       }}
     >
       {/* Legend */}
@@ -361,14 +392,16 @@ function MonthlyLineChart({
           <span
             className="w-2.5 h-2.5 rounded-full"
             style={{
-              background: COLORS.teal,
+              background:
+                COLORS.teal,
             }}
           />
 
           <span
             className="text-[10px] font-medium"
             style={{
-              color: COLORS.muted,
+              color:
+                COLORS.muted,
             }}
           >
             Habit
@@ -379,14 +412,16 @@ function MonthlyLineChart({
           <span
             className="w-2.5 h-2.5 rounded-full"
             style={{
-              background: COLORS.clay,
+              background:
+                COLORS.clay,
             }}
           />
 
           <span
             className="text-[10px] font-medium"
             style={{
-              color: COLORS.muted,
+              color:
+                COLORS.muted,
             }}
           >
             Task
@@ -403,19 +438,24 @@ function MonthlyLineChart({
           {/* Grid */}
 
           {gridLines.map((value) => {
-            const y = getPointY(value);
+            const y =
+              getPointY(value);
 
             return (
               <g key={value}>
                 <line
-                  x1={PADDING_LEFT}
+                  x1={
+                    PADDING_LEFT
+                  }
                   x2={
                     CHART_WIDTH -
                     PADDING_RIGHT
                   }
                   y1={y}
                   y2={y}
-                  stroke={COLORS.line}
+                  stroke={
+                    COLORS.line
+                  }
                   strokeWidth="1"
                 />
 
@@ -426,7 +466,9 @@ function MonthlyLineChart({
                   y={y + 4}
                   textAnchor="end"
                   fontSize="10"
-                  fill={COLORS.mutedSoft}
+                  fill={
+                    COLORS.mutedSoft
+                  }
                 >
                   {value}%
                 </text>
@@ -434,23 +476,27 @@ function MonthlyLineChart({
             );
           })}
 
-          {/* Habit line */}
+          {/* Habit */}
 
           <path
             d={habitPath}
             fill="none"
-            stroke={COLORS.teal}
+            stroke={
+              COLORS.teal
+            }
             strokeWidth="3"
             strokeLinecap="round"
             strokeLinejoin="round"
           />
 
-          {/* Task line */}
+          {/* Task */}
 
           <path
             d={taskPath}
             fill="none"
-            stroke={COLORS.clay}
+            stroke={
+              COLORS.clay
+            }
             strokeWidth="2.5"
             strokeDasharray="7 5"
             strokeLinecap="round"
@@ -459,72 +505,83 @@ function MonthlyLineChart({
 
           {/* Habit points */}
 
-          {data.map((item, index) => (
-            <circle
-              key={`habit-${item.key}`}
-              cx={getPointX(
-                index,
-                data.length
-              )}
-              cy={getPointY(
-                item.habitPercentage
-              )}
-              r="2.5"
-              fill={COLORS.teal}
-            />
-          ))}
-
-          {/* Task points */}
-
-          {data.map((item, index) => (
-            <circle
-              key={`task-${item.key}`}
-              cx={getPointX(
-                index,
-                data.length
-              )}
-              cy={getPointY(
-                item.taskPercentage
-              )}
-              r="2"
-              fill={COLORS.clay}
-            />
-          ))}
-
-          {/* X labels */}
-
-          {data.map((item, index) => {
-            const shouldShow =
-              data.length <= 15 ||
-              index === 0 ||
-              index ===
-                data.length - 1 ||
-              index % 3 === 0;
-
-            if (!shouldShow) {
-              return null;
-            }
-
-            return (
-              <text
-                key={`label-${item.key}`}
-                x={getPointX(
+          {data.map(
+            (item, index) => (
+              <circle
+                key={`habit-${item.key}`}
+                cx={getPointX(
                   index,
                   data.length
                 )}
-                y={
-                  CHART_HEIGHT - 10
-                }
-                textAnchor="middle"
-                fontSize="10"
+                cy={getPointY(
+                  item.habitPercentage
+                )}
+                r="2.5"
                 fill={
-                  COLORS.mutedSoft
+                  COLORS.teal
                 }
-              >
-                {item.label}
-              </text>
-            );
-          })}
+              />
+            )
+          )}
+
+          {/* Task points */}
+
+          {data.map(
+            (item, index) => (
+              <circle
+                key={`task-${item.key}`}
+                cx={getPointX(
+                  index,
+                  data.length
+                )}
+                cy={getPointY(
+                  item.taskPercentage
+                )}
+                r="2"
+                fill={
+                  COLORS.clay
+                }
+              />
+            )
+          )}
+
+          {/* X labels */}
+
+          {data.map(
+            (item, index) => {
+              const shouldShow =
+                data.length <= 15 ||
+                index === 0 ||
+                index ===
+                  data.length - 1 ||
+                index % 3 === 0;
+
+              if (!shouldShow) {
+                return null;
+              }
+
+              return (
+                <text
+                  key={`label-${item.key}`}
+                  x={getPointX(
+                    index,
+                    data.length
+                  )}
+                  y={
+                    CHART_HEIGHT -
+                    10
+                  }
+                  textAnchor="middle"
+                  fontSize="10"
+                  fill={
+                    COLORS.mutedSoft
+                  }
+                >
+                  {item.label}
+                </text>
+              );
+            }
+          )}
         </svg>
       </div>
     </div>
@@ -546,8 +603,10 @@ function YearBarChart({
     <div
       className="w-full rounded-2xl p-3 sm:p-4"
       style={{
-        background: COLORS.paper,
-        border: `1px solid ${COLORS.line}`,
+        background:
+          COLORS.paper,
+        border:
+          `1px solid ${COLORS.line}`,
       }}
     >
       {/* Legend */}
@@ -557,14 +616,16 @@ function YearBarChart({
           <span
             className="w-2.5 h-2.5 rounded-sm"
             style={{
-              background: COLORS.teal,
+              background:
+                COLORS.teal,
             }}
           />
 
           <span
             className="text-[10px]"
             style={{
-              color: COLORS.muted,
+              color:
+                COLORS.muted,
             }}
           >
             Habit
@@ -575,14 +636,16 @@ function YearBarChart({
           <span
             className="w-2.5 h-2.5 rounded-sm"
             style={{
-              background: COLORS.clay,
+              background:
+                COLORS.clay,
             }}
           />
 
           <span
             className="text-[10px]"
             style={{
-              color: COLORS.muted,
+              color:
+                COLORS.muted,
             }}
           >
             Task
@@ -598,9 +661,9 @@ function YearBarChart({
             key={month.key}
             className="flex-1 min-w-0 h-full flex flex-col justify-end"
           >
-            {/* Values */}
-
             <div className="flex items-end justify-center gap-0.5 sm:gap-1 h-[220px]">
+              {/* Habit bar */}
+
               <div
                 className="w-full max-w-[16px] rounded-t-md transition-all duration-500"
                 style={{
@@ -619,6 +682,8 @@ function YearBarChart({
                 }}
                 title={`Habit ${month.habitPercentage}%`}
               />
+
+              {/* Task bar */}
 
               <div
                 className="w-full max-w-[16px] rounded-t-md transition-all duration-500"
@@ -645,7 +710,8 @@ function YearBarChart({
             <div
               className="text-[9px] sm:text-[10px] text-center mt-2 truncate"
               style={{
-                color: COLORS.muted,
+                color:
+                  COLORS.muted,
               }}
             >
               {month.label}
@@ -661,35 +727,44 @@ function YearBarChart({
    COMPONENT
 ========================================================= */
 
-export default function ProductivityChart() {
-  const today = new Date();
+export default function ActivityGraph() {
+  const initialDate = useMemo(
+    () => new Date(),
+    []
+  );
 
   const [mode, setMode] =
-    useState<ReportMode>("monthly");
+    useState<ReportMode>(
+      "monthly"
+    );
 
   const [
     selectedYear,
     setSelectedYear,
   ] = useState(
-    today.getFullYear()
+    initialDate.getFullYear()
   );
 
   const [
     selectedMonth,
     setSelectedMonth,
   ] = useState(
-    today.getMonth()
+    initialDate.getMonth()
   );
 
   const [
     monthlyData,
     setMonthlyData,
-  ] = useState<DailyReport[]>([]);
+  ] = useState<
+    DailyReport[]
+  >([]);
 
   const [
     yearlyData,
     setYearlyData,
-  ] = useState<MonthlyReport[]>([]);
+  ] = useState<
+    MonthlyReport[]
+  >([]);
 
   const [
     loading,
@@ -699,368 +774,468 @@ export default function ProductivityChart() {
   const [
     error,
     setError,
-  ] = useState<string | null>(null);
+  ] = useState<string | null>(
+    null
+  );
+
+  /* =======================================================
+     REQUEST ID
+  ======================================================= */
+
+  const requestIdRef =
+    useRef(0);
 
   /* =======================================================
      LOAD REPORT
   ======================================================= */
 
-  const loadReport = useCallback(
-    async (
-      year: number,
-      month: number
-    ) => {
-      try {
-        setLoading(true);
-        setError(null);
+  const loadReport =
+    useCallback(
+      async (
+        year: number,
+        month: number
+      ) => {
+        const requestId =
+          ++requestIdRef.current;
 
-        const [
-          taskResult,
-          habitResult,
-        ] = await Promise.all([
-          getTasks(),
-          getHabits(),
-        ]);
+        try {
+          setLoading(true);
+          setError(null);
 
-        const tasks =
-          taskResult as TaskRecord[];
+          /* ===============================================
+             LOAD TASKS + HABITS
+          =============================================== */
 
-        const habits =
-          habitResult as HabitRecord[];
-
-        const activeHabits =
-          habits.filter(
-            (habit) =>
-              habit.status ===
-              "active"
-          );
-
-        /* ===============================================
-           LOAD ALL HABIT COMPLETIONS
-        =============================================== */
-
-        const completionResults =
-          await Promise.all(
-            activeHabits.map(
-              async (habit) => {
-                try {
-                  return (await getHabitCompletions(
-                    habit.id
-                  )) as HabitCompletion[];
-                } catch (
-                  completionError
-                ) {
-                  console.error(
-                    "Habit completion load failed:",
-                    completionError
-                  );
-
-                  return [];
-                }
-              }
-            )
-          );
-
-        /* ===============================================
-           HABIT COMPLETIONS BY DATE
-        =============================================== */
-
-        const habitByDate =
-          new Map<string, number>();
-
-        completionResults.forEach(
-          (completions) => {
-            completions.forEach(
-              (completion) => {
-                if (
-                  !completion.completed
-                ) {
-                  return;
-                }
-
-                const current =
-                  habitByDate.get(
-                    completion.date
-                  ) ?? 0;
-
-                habitByDate.set(
-                  completion.date,
-                  current + 1
-                );
-              }
-            );
-          }
-        );
-
-        /* ===============================================
-           TASKS BY DATE
-        =============================================== */
-
-        const completedTasksByDate =
-          new Map<string, number>();
-
-        const dueTasksByDate =
-          new Map<string, number>();
-
-        tasks.forEach((task) => {
-          const taskDate =
-            getTaskDate(task);
-
-          /* Completed task */
+          const [
+            taskResult,
+            habitResult,
+          ] = await Promise.all([
+            getTasks(),
+            getHabits(),
+          ]);
 
           if (
-            task.status ===
-              "completed" &&
-            task.completedAt
+            requestId !==
+            requestIdRef.current
           ) {
-            const completedDate =
-              task.completedAt.slice(
-                0,
-                10
+            return;
+          }
+
+          const tasks =
+            Array.isArray(taskResult)
+              ? (taskResult as TaskRecord[])
+              : [];
+
+          const habits =
+            Array.isArray(habitResult)
+              ? (habitResult as HabitRecord[])
+              : [];
+
+          /* ===============================================
+             ACTIVE HABITS
+          =============================================== */
+
+          const activeHabits =
+            habits.filter(
+              (habit) =>
+                habit.status ===
+                "active"
+            );
+
+          /* ===============================================
+             HABIT COMPLETIONS
+          =============================================== */
+
+          const completionResults =
+            await Promise.all(
+              activeHabits.map(
+                async (habit) => {
+                  try {
+                    const result =
+                      await getHabitCompletions(
+                        habit.id
+                      );
+
+                    return Array.isArray(
+                      result
+                    )
+                      ? (result as HabitCompletion[])
+                      : [];
+                  } catch (
+                    completionError
+                  ) {
+                    console.error(
+                      "Habit completion load failed:",
+                      completionError
+                    );
+
+                    return [];
+                  }
+                }
+              )
+            );
+
+          if (
+            requestId !==
+            requestIdRef.current
+          ) {
+            return;
+          }
+
+          /* ===============================================
+             HABIT BY DATE
+          =============================================== */
+
+          const habitByDate =
+            new Map<
+              string,
+              number
+            >();
+
+          completionResults.forEach(
+            (completions) => {
+              completions.forEach(
+                (completion) => {
+                  if (
+                    completion.completed !==
+                    true
+                  ) {
+                    return;
+                  }
+
+                  if (
+                    typeof completion.date !==
+                    "string"
+                  ) {
+                    return;
+                  }
+
+                  const dateKey =
+                    completion.date.slice(
+                      0,
+                      10
+                    );
+
+                  const current =
+                    habitByDate.get(
+                      dateKey
+                    ) ?? 0;
+
+                  habitByDate.set(
+                    dateKey,
+                    current + 1
+                  );
+                }
               );
-
-            const current =
-              completedTasksByDate.get(
-                completedDate
-              ) ?? 0;
-
-            completedTasksByDate.set(
-              completedDate,
-              current + 1
-            );
-          }
-
-          /* Due / scheduled task */
-
-          if (taskDate) {
-            const current =
-              dueTasksByDate.get(
-                taskDate
-              ) ?? 0;
-
-            dueTasksByDate.set(
-              taskDate,
-              current + 1
-            );
-          }
-        });
-
-        /* ===============================================
-           MONTHLY DATA
-        =============================================== */
-
-        const daysInMonth =
-          getDaysInMonth(
-            year,
-            month
-          );
-
-        const days: DailyReport[] =
-          [];
-
-        for (
-          let day = 1;
-          day <= daysInMonth;
-          day++
-        ) {
-          const date = new Date(
-            year,
-            month,
-            day
-          );
-
-          const key =
-            formatDate(date);
-
-          const completedTasks =
-            completedTasksByDate.get(
-              key
-            ) ?? 0;
-
-          const dueTasks =
-            dueTasksByDate.get(
-              key
-            ) ?? 0;
-
-          const completedHabits =
-            habitByDate.get(key) ?? 0;
-
-          const habitPercentage =
-            activeHabits.length > 0
-              ? calculatePercentage(
-                  completedHabits,
-                  activeHabits.length
-                )
-              : 0;
-
-          const taskPercentage =
-            dueTasks > 0
-              ? calculatePercentage(
-                  completedTasks,
-                  dueTasks
-                )
-              : 0;
-
-          days.push({
-            key,
-            label: String(day),
-            taskPercentage,
-            habitPercentage,
-          });
-        }
-
-        /* ===============================================
-           YEARLY DATA
-        =============================================== */
-
-        const months: MonthlyReport[] =
-          [];
-
-        for (
-          let monthIndex = 0;
-          monthIndex < 12;
-          monthIndex++
-        ) {
-          const monthStart =
-            new Date(
-              year,
-              monthIndex,
-              1
-            );
-
-          const monthEnd =
-            new Date(
-              year,
-              monthIndex + 1,
-              0
-            );
-
-          const startKey =
-            formatDate(monthStart);
-
-          const endKey =
-            formatDate(monthEnd);
-
-          const monthDays =
-            daysInRange(
-              startKey,
-              endKey
-            );
-
-          let taskTotal = 0;
-          let habitTotal = 0;
-
-          let taskDays = 0;
-          let habitDays = 0;
-
-          monthDays.forEach(
-            (dateKey) => {
-              const completedTasks =
-                completedTasksByDate.get(
-                  dateKey
-                ) ?? 0;
-
-              const dueTasks =
-                dueTasksByDate.get(
-                  dateKey
-                ) ?? 0;
-
-              const completedHabits =
-                habitByDate.get(
-                  dateKey
-                ) ?? 0;
-
-              if (dueTasks > 0) {
-                taskTotal +=
-                  calculatePercentage(
-                    completedTasks,
-                    dueTasks
-                  );
-
-                taskDays++;
-              }
-
-              if (
-                activeHabits.length >
-                0
-              ) {
-                habitTotal +=
-                  calculatePercentage(
-                    completedHabits,
-                    activeHabits.length
-                  );
-
-                habitDays++;
-              }
             }
           );
 
-          const taskPercentage =
-            taskDays > 0
-              ? Math.round(
-                  taskTotal /
-                    taskDays
-                )
-              : 0;
+          /* ===============================================
+             TASKS BY DATE
+          =============================================== */
 
-          const habitPercentage =
-            habitDays > 0
-              ? Math.round(
-                  habitTotal /
-                    habitDays
-                )
-              : 0;
+          const completedTasksByDate =
+            new Map<
+              string,
+              number
+            >();
 
-          months.push({
-            key: getMonthKey(
-              year,
-              monthIndex
-            ),
+          const dueTasksByDate =
+            new Map<
+              string,
+              number
+            >();
 
-            label:
-              getShortMonthName(
-                monthIndex
-              ),
+          tasks.forEach((task) => {
+            /* Completed task */
 
-            taskPercentage,
-            habitPercentage,
+            if (
+              task.status ===
+                "completed" &&
+              typeof task.completedAt ===
+                "string" &&
+              task.completedAt.length >=
+                10
+            ) {
+              const completedDate =
+                task.completedAt.slice(
+                  0,
+                  10
+                );
+
+              const current =
+                completedTasksByDate.get(
+                  completedDate
+                ) ?? 0;
+
+              completedTasksByDate.set(
+                completedDate,
+                current + 1
+              );
+            }
+
+            /* Due / scheduled task */
+
+            const taskDate =
+              getTaskDate(task);
+
+            if (taskDate) {
+              const current =
+                dueTasksByDate.get(
+                  taskDate
+                ) ?? 0;
+
+              dueTasksByDate.set(
+                taskDate,
+                current + 1
+              );
+            }
           });
+
+          /* ===============================================
+             MONTHLY DATA
+          =============================================== */
+
+          const daysInMonth =
+            getDaysInMonth(
+              year,
+              month
+            );
+
+          const days: DailyReport[] =
+            [];
+
+          for (
+            let day = 1;
+            day <= daysInMonth;
+            day++
+          ) {
+            const date =
+              new Date(
+                year,
+                month,
+                day
+              );
+
+            const key =
+              formatDate(date);
+
+            const completedTasks =
+              completedTasksByDate.get(
+                key
+              ) ?? 0;
+
+            const dueTasks =
+              dueTasksByDate.get(
+                key
+              ) ?? 0;
+
+            const completedHabits =
+              habitByDate.get(
+                key
+              ) ?? 0;
+
+            const habitPercentage =
+              activeHabits.length > 0
+                ? calculatePercentage(
+                    completedHabits,
+                    activeHabits.length
+                  )
+                : 0;
+
+            const taskPercentage =
+              dueTasks > 0
+                ? calculatePercentage(
+                    completedTasks,
+                    dueTasks
+                  )
+                : 0;
+
+            days.push({
+              key,
+              label: String(day),
+              taskPercentage,
+              habitPercentage,
+            });
+          }
+
+          /* ===============================================
+             YEARLY DATA
+          =============================================== */
+
+          const months: MonthlyReport[] =
+            [];
+
+          for (
+            let monthIndex = 0;
+            monthIndex < 12;
+            monthIndex++
+          ) {
+            const monthStart =
+              new Date(
+                year,
+                monthIndex,
+                1
+              );
+
+            const monthEnd =
+              new Date(
+                year,
+                monthIndex + 1,
+                0
+              );
+
+            const startKey =
+              formatDate(
+                monthStart
+              );
+
+            const endKey =
+              formatDate(
+                monthEnd
+              );
+
+            const monthDays =
+              daysInRange(
+                startKey,
+                endKey
+              );
+
+            let taskTotal = 0;
+            let habitTotal = 0;
+
+            let taskDays = 0;
+            let habitDays = 0;
+
+            monthDays.forEach(
+              (dateKey) => {
+                const completedTasks =
+                  completedTasksByDate.get(
+                    dateKey
+                  ) ?? 0;
+
+                const dueTasks =
+                  dueTasksByDate.get(
+                    dateKey
+                  ) ?? 0;
+
+                const completedHabits =
+                  habitByDate.get(
+                    dateKey
+                  ) ?? 0;
+
+                if (
+                  dueTasks > 0
+                ) {
+                  taskTotal +=
+                    calculatePercentage(
+                      completedTasks,
+                      dueTasks
+                    );
+
+                  taskDays++;
+                }
+
+                if (
+                  activeHabits.length >
+                  0
+                ) {
+                  habitTotal +=
+                    calculatePercentage(
+                      completedHabits,
+                      activeHabits.length
+                    );
+
+                  habitDays++;
+                }
+              }
+            );
+
+            const taskPercentage =
+              taskDays > 0
+                ? Math.round(
+                    taskTotal /
+                      taskDays
+                  )
+                : 0;
+
+            const habitPercentage =
+              habitDays > 0
+                ? Math.round(
+                    habitTotal /
+                      habitDays
+                  )
+                : 0;
+
+            months.push({
+              key:
+                getMonthKey(
+                  year,
+                  monthIndex
+                ),
+              label:
+                getShortMonthName(
+                  monthIndex
+                ),
+              taskPercentage,
+              habitPercentage,
+            });
+          }
+
+          /* ===============================================
+             UPDATE STATE
+          =============================================== */
+
+          if (
+            requestId !==
+            requestIdRef.current
+          ) {
+            return;
+          }
+
+          setMonthlyData(days);
+          setYearlyData(months);
+          setError(null);
+        } catch (loadError) {
+          console.error(
+            "Activity report load failed:",
+            loadError
+          );
+
+          if (
+            requestId !==
+            requestIdRef.current
+          ) {
+            return;
+          }
+
+          setError(
+            "রিপোর্টের ডাটা লোড করা যায়নি।"
+          );
+        } finally {
+          if (
+            requestId ===
+            requestIdRef.current
+          ) {
+            setLoading(false);
+          }
         }
-
-        setMonthlyData(days);
-        setYearlyData(months);
-      } catch (loadError) {
-        console.error(
-          "Activity report load failed:",
-          loadError
-        );
-
-        setError(
-          "রিপোর্টের ডাটা লোড করা যায়নি।"
-        );
-      } finally {
-        setLoading(false);
-      }
-    },
-    []
-  );
+      },
+      []
+    );
 
   /* =======================================================
-     LOAD WHEN DATE CHANGES
+     INITIAL / DATE CHANGE LOAD
      
      IMPORTANT:
-     setTimeout prevents the React cascading-render warning.
+     loadReport is started from a timer.
+     This prevents React's
+     setState-in-effect warning.
   ======================================================= */
 
   useEffect(() => {
-    let cancelled = false;
-
     const timer =
       window.setTimeout(() => {
-        if (cancelled) {
-          return;
-        }
-
         void loadReport(
           selectedYear,
           selectedMonth
@@ -1068,7 +1243,6 @@ export default function ProductivityChart() {
       }, 0);
 
     return () => {
-      cancelled = true;
       window.clearTimeout(timer);
     };
   }, [
@@ -1096,7 +1270,7 @@ export default function ProductivityChart() {
           selectedYear,
           selectedMonth
         );
-      }, 100);
+      }, 150);
     };
 
     window.addEventListener(
@@ -1164,56 +1338,64 @@ export default function ProductivityChart() {
      MONTH NAVIGATION
   ======================================================= */
 
-  const goPreviousMonth = () => {
-    if (selectedMonth === 0) {
-      setSelectedMonth(11);
+  const goPreviousMonth =
+    useCallback(() => {
+      if (
+        selectedMonth === 0
+      ) {
+        setSelectedMonth(11);
 
-      setSelectedYear(
-        (year) => year - 1
+        setSelectedYear(
+          (year) => year - 1
+        );
+
+        return;
+      }
+
+      setSelectedMonth(
+        (month) => month - 1
       );
+    }, [selectedMonth]);
 
-      return;
-    }
+  const goNextMonth =
+    useCallback(() => {
+      if (
+        selectedMonth === 11
+      ) {
+        setSelectedMonth(0);
 
-    setSelectedMonth(
-      (month) => month - 1
-    );
-  };
+        setSelectedYear(
+          (year) => year + 1
+        );
 
-  const goNextMonth = () => {
-    if (selectedMonth === 11) {
-      setSelectedMonth(0);
+        return;
+      }
 
-      setSelectedYear(
-        (year) => year + 1
+      setSelectedMonth(
+        (month) => month + 1
       );
-
-      return;
-    }
-
-    setSelectedMonth(
-      (month) => month + 1
-    );
-  };
+    }, [selectedMonth]);
 
   /* =======================================================
      YEAR NAVIGATION
   ======================================================= */
 
-  const goPreviousYear = () => {
-    setSelectedYear(
-      (year) => year - 1
-    );
-  };
+  const goPreviousYear =
+    useCallback(() => {
+      setSelectedYear(
+        (year) => year - 1
+      );
+    }, []);
 
-  const goNextYear = () => {
-    setSelectedYear(
-      (year) => year + 1
-    );
-  };
+  const goNextYear =
+    useCallback(() => {
+      setSelectedYear(
+        (year) => year + 1
+      );
+    }, []);
 
   /* =======================================================
-     SUMMARY
+     MONTHLY SUMMARY
   ======================================================= */
 
   const monthlySummary =
@@ -1227,44 +1409,37 @@ export default function ProductivityChart() {
         };
       }
 
-      const habitValues =
-        monthlyData.map(
-          (item) =>
-            item.habitPercentage
+      const habitTotal =
+        monthlyData.reduce(
+          (total, item) =>
+            total +
+            item.habitPercentage,
+          0
         );
 
-      const taskValues =
-        monthlyData.map(
-          (item) =>
-            item.taskPercentage
+      const taskTotal =
+        monthlyData.reduce(
+          (total, item) =>
+            total +
+            item.taskPercentage,
+          0
         );
 
       return {
         habit: Math.round(
-          habitValues.reduce(
-            (
-              total,
-              value
-            ) =>
-              total + value,
-            0
-          ) /
-            habitValues.length
+          habitTotal /
+            monthlyData.length
         ),
-
         task: Math.round(
-          taskValues.reduce(
-            (
-              total,
-              value
-            ) =>
-              total + value,
-            0
-          ) /
-            taskValues.length
+          taskTotal /
+            monthlyData.length
         ),
       };
     }, [monthlyData]);
+
+  /* =======================================================
+     YEARLY SUMMARY
+  ======================================================= */
 
   const yearlySummary =
     useMemo(() => {
@@ -1277,30 +1452,29 @@ export default function ProductivityChart() {
         };
       }
 
+      const habitTotal =
+        yearlyData.reduce(
+          (total, month) =>
+            total +
+            month.habitPercentage,
+          0
+        );
+
+      const taskTotal =
+        yearlyData.reduce(
+          (total, month) =>
+            total +
+            month.taskPercentage,
+          0
+        );
+
       return {
         habit: Math.round(
-          yearlyData.reduce(
-            (
-              total,
-              month
-            ) =>
-              total +
-              month.habitPercentage,
-            0
-          ) /
+          habitTotal /
             yearlyData.length
         ),
-
         task: Math.round(
-          yearlyData.reduce(
-            (
-              total,
-              month
-            ) =>
-              total +
-              month.taskPercentage,
-            0
-          ) /
+          taskTotal /
             yearlyData.length
         ),
       };
@@ -1312,7 +1486,9 @@ export default function ProductivityChart() {
 
   return (
     <DashboardCard>
-      {/* HEADER */}
+      {/* ===================================================
+          HEADER
+      =================================================== */}
 
       <div className="flex items-start justify-between gap-3">
         <DashboardSectionTitle
@@ -1330,8 +1506,10 @@ export default function ProductivityChart() {
         <div
           className="flex items-center rounded-xl p-1 flex-shrink-0"
           style={{
-            background: COLORS.paper,
-            border: `1px solid ${COLORS.line}`,
+            background:
+              COLORS.paper,
+            border:
+              `1px solid ${COLORS.line}`,
           }}
         >
           <button
@@ -1345,7 +1523,6 @@ export default function ProductivityChart() {
                 mode === "monthly"
                   ? COLORS.card
                   : "transparent",
-
               color:
                 mode === "monthly"
                   ? COLORS.teal
@@ -1366,7 +1543,6 @@ export default function ProductivityChart() {
                 mode === "yearly"
                   ? COLORS.card
                   : "transparent",
-
               color:
                 mode === "yearly"
                   ? COLORS.teal
@@ -1378,7 +1554,9 @@ export default function ProductivityChart() {
         </div>
       </div>
 
-      {/* PERIOD NAVIGATION */}
+      {/* ===================================================
+          PERIOD NAVIGATION
+      =================================================== */}
 
       <div className="flex items-center justify-between mt-4 mb-4">
         <button
@@ -1390,9 +1568,12 @@ export default function ProductivityChart() {
           }
           className="w-8 h-8 rounded-lg flex items-center justify-center transition-all hover:scale-105"
           style={{
-            background: COLORS.paper,
-            border: `1px solid ${COLORS.line}`,
-            color: COLORS.muted,
+            background:
+              COLORS.paper,
+            border:
+              `1px solid ${COLORS.line}`,
+            color:
+              COLORS.muted,
           }}
           aria-label="Previous"
         >
@@ -1417,7 +1598,8 @@ export default function ProductivityChart() {
           <div
             className="text-[10px] mt-0.5"
             style={{
-              color: COLORS.mutedSoft,
+              color:
+                COLORS.mutedSoft,
             }}
           >
             {mode === "monthly"
@@ -1435,9 +1617,12 @@ export default function ProductivityChart() {
           }
           className="w-8 h-8 rounded-lg flex items-center justify-center transition-all hover:scale-105"
           style={{
-            background: COLORS.paper,
-            border: `1px solid ${COLORS.line}`,
-            color: COLORS.muted,
+            background:
+              COLORS.paper,
+            border:
+              `1px solid ${COLORS.line}`,
+            color:
+              COLORS.muted,
           }}
           aria-label="Next"
         >
@@ -1445,7 +1630,9 @@ export default function ProductivityChart() {
         </button>
       </div>
 
-      {/* SUMMARY */}
+      {/* ===================================================
+          SUMMARY
+      =================================================== */}
 
       <div className="grid grid-cols-2 gap-3 mb-5">
         {/* Habit */}
@@ -1453,18 +1640,22 @@ export default function ProductivityChart() {
         <div
           className="rounded-xl px-3 py-3 flex items-center gap-2.5"
           style={{
-            background: COLORS.tealSoft,
+            background:
+              COLORS.tealSoft,
           }}
         >
           <div
             className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
             style={{
-              background: COLORS.card,
+              background:
+                COLORS.card,
             }}
           >
             <Flame
               size={16}
-              color={COLORS.teal}
+              color={
+                COLORS.teal
+              }
             />
           </div>
 
@@ -1472,10 +1663,12 @@ export default function ProductivityChart() {
             <div
               className="text-base font-bold"
               style={{
-                color: COLORS.teal,
+                color:
+                  COLORS.teal,
               }}
             >
-              {mode === "monthly"
+              {mode ===
+              "monthly"
                 ? monthlySummary.habit
                 : yearlySummary.habit}
               %
@@ -1484,7 +1677,8 @@ export default function ProductivityChart() {
             <div
               className="text-[10px]"
               style={{
-                color: COLORS.muted,
+                color:
+                  COLORS.muted,
               }}
             >
               Habit Avg
@@ -1497,18 +1691,22 @@ export default function ProductivityChart() {
         <div
           className="rounded-xl px-3 py-3 flex items-center gap-2.5"
           style={{
-            background: COLORS.claySoft,
+            background:
+              COLORS.claySoft,
           }}
         >
           <div
             className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
             style={{
-              background: COLORS.card,
+              background:
+                COLORS.card,
             }}
           >
             <CheckSquare
               size={16}
-              color={COLORS.clay}
+              color={
+                COLORS.clay
+              }
             />
           </div>
 
@@ -1516,10 +1714,12 @@ export default function ProductivityChart() {
             <div
               className="text-base font-bold"
               style={{
-                color: COLORS.clay,
+                color:
+                  COLORS.clay,
               }}
             >
-              {mode === "monthly"
+              {mode ===
+              "monthly"
                 ? monthlySummary.task
                 : yearlySummary.task}
               %
@@ -1528,7 +1728,8 @@ export default function ProductivityChart() {
             <div
               className="text-[10px]"
               style={{
-                color: COLORS.muted,
+                color:
+                  COLORS.muted,
               }}
             >
               Task Avg
@@ -1537,27 +1738,34 @@ export default function ProductivityChart() {
         </div>
       </div>
 
-      {/* ERROR */}
+      {/* ===================================================
+          ERROR
+      =================================================== */}
 
       {error && (
         <div
           className="rounded-xl px-3 py-2.5 mb-3 text-xs"
           style={{
-            background: COLORS.claySoft,
-            color: COLORS.clay,
+            background:
+              COLORS.claySoft,
+            color:
+              COLORS.clay,
           }}
         >
           {error}
         </div>
       )}
 
-      {/* CHART */}
+      {/* ===================================================
+          CHART
+      =================================================== */}
 
       {loading ? (
         <div
           className="flex items-center justify-center gap-2 py-14"
           style={{
-            color: COLORS.mutedSoft,
+            color:
+              COLORS.mutedSoft,
           }}
         >
           <Loader2
@@ -1569,22 +1777,30 @@ export default function ProductivityChart() {
             রিপোর্ট লোড হচ্ছে...
           </span>
         </div>
-      ) : mode === "monthly" ? (
+      ) : mode ===
+        "monthly" ? (
         <MonthlyLineChart
-          data={monthlyData}
+          data={
+            monthlyData
+          }
         />
       ) : (
         <YearBarChart
-          data={yearlyData}
+          data={
+            yearlyData
+          }
         />
       )}
 
-      {/* DESCRIPTION */}
+      {/* ===================================================
+          DESCRIPTION
+      =================================================== */}
 
       <div
         className="mt-3 flex items-center gap-2 text-xs"
         style={{
-          color: COLORS.mutedSoft,
+          color:
+            COLORS.mutedSoft,
         }}
       >
         <div
