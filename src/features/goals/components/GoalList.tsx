@@ -2,8 +2,6 @@
 
 import {
   Check,
-  CheckCircle2,
-  ChevronRight,
   Flame,
   Target,
   Trophy,
@@ -39,26 +37,6 @@ interface GoalListProps {
    HELPERS
 ========================================================= */
 
-const getDaysLeft = (
-  endDate: string
-): number => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const end = new Date(endDate);
-  end.setHours(0, 0, 0, 0);
-
-  const diff =
-    end.getTime() - today.getTime();
-
-  return Math.max(
-    0,
-    Math.ceil(
-      diff / (1000 * 60 * 60 * 24)
-    )
-  );
-};
-
 const getBanglaNumber = (
   value: number
 ): string => {
@@ -79,9 +57,7 @@ const getBanglaNumber = (
     .split("")
     .map(
       (char) =>
-        numbers[
-          Number(char)
-        ] ?? char
+        numbers[Number(char)] ?? char
     )
     .join("");
 };
@@ -96,8 +72,10 @@ export default function GoalList({
   const [goals, setGoals] =
     useState<Goal[]>([]);
 
-  const [completedGoals, setCompletedGoals] =
-    useState<Goal[]>([]);
+  const [
+    completedGoals,
+    setCompletedGoals,
+  ] = useState<Goal[]>([]);
 
   const [loading, setLoading] =
     useState(true);
@@ -106,7 +84,7 @@ export default function GoalList({
     useState("");
 
   /* =======================================================
-     LOAD
+     LOAD GOALS
   ======================================================= */
 
   const loadGoals = useCallback(
@@ -121,6 +99,10 @@ export default function GoalList({
 
         setError("");
 
+        /*
+         * Online হলে Firebase থেকে
+         * latest data local cache-এ আনা হবে।
+         */
         if (
           syncFromFirebase &&
           typeof window !== "undefined" &&
@@ -152,6 +134,7 @@ export default function GoalList({
         ]);
 
         setGoals(activeGoals);
+
         setCompletedGoals(
           finishedGoals
         );
@@ -186,9 +169,11 @@ export default function GoalList({
             setGoals([]);
             setCompletedGoals([]);
             setLoading(false);
+
             setError(
               "লক্ষ্য দেখতে আগে লগইন করুন।"
             );
+
             return;
           }
 
@@ -200,10 +185,13 @@ export default function GoalList({
       );
 
     return unsubscribe;
-  }, [loadGoals, refreshKey]);
+  }, [
+    loadGoals,
+    refreshKey,
+  ]);
 
   /* =======================================================
-     EVENTS
+     GOAL EVENTS
   ======================================================= */
 
   useEffect(() => {
@@ -258,7 +246,7 @@ export default function GoalList({
   }, [loadGoals]);
 
   /* =======================================================
-     DELETE
+     DELETE GOAL
   ======================================================= */
 
   const handleDeleteGoal = async (
@@ -267,6 +255,9 @@ export default function GoalList({
     try {
       setError("");
 
+      /*
+       * Instant UI update
+       */
       setGoals((current) =>
         current.filter(
           (goal) =>
@@ -310,7 +301,7 @@ export default function GoalList({
     completedGoals.length === 0
   ) {
     return (
-      <div className="flex items-center justify-center py-12">
+      <div className="flex items-center justify-center py-10">
         <div className="h-7 w-7 animate-spin rounded-full border-2 border-[#173C30] border-t-transparent" />
       </div>
     );
@@ -322,7 +313,7 @@ export default function GoalList({
 
   if (error) {
     return (
-      <div className="mx-5 rounded-2xl border border-red-100 bg-red-50 px-4 py-4 text-center text-sm font-medium text-red-600">
+      <div className="rounded-2xl bg-red-50 px-4 py-4 text-center text-sm font-medium text-red-600">
         {error}
       </div>
     );
@@ -337,43 +328,40 @@ export default function GoalList({
     completedGoals.length === 0
   ) {
     return (
-      <div className="px-5 py-10">
-        <div className="rounded-[20px] border border-[#E7E3D8] bg-white px-6 py-12 text-center">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#173C30]">
-            <Target className="h-7 w-7 text-white" />
-          </div>
-
-          <h3 className="mt-4 text-lg font-extrabold text-[#22261F]">
-            এখনো কোনো লক্ষ্য নেই
-          </h3>
-
-          <p className="mx-auto mt-1 max-w-xs text-sm leading-6 text-[#767C70]">
-            আপনার গুরুত্বপূর্ণ লক্ষ্য
-            নির্ধারণ করুন এবং ধাপে ধাপে
-            এগিয়ে যান।
-          </p>
+      <div className="rounded-3xl border border-dashed border-[#E7E3D8] bg-white px-5 py-12 text-center">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[#173C30]">
+          <Target className="h-8 w-8 text-white" />
         </div>
+
+        <p className="mt-4 text-base font-extrabold text-[#22261F]">
+          এখনো কোনো লক্ষ্য নেই
+        </p>
+
+        <p className="mt-1 text-sm text-[#767C70]">
+          নতুন একটি লক্ষ্য তৈরি করে
+          নিজের যাত্রা শুরু করো।
+        </p>
       </div>
     );
   }
 
   /* =======================================================
-     UI
+     MAIN UI
   ======================================================= */
 
   return (
-    <div className="space-y-6 bg-[#F3F1EA] pb-8">
+    <div className="space-y-7">
 
       {/* ===================================================
           HERO
       =================================================== */}
 
-      <section className="px-5 pt-5">
-        <h1 className="text-[28px] font-extrabold leading-tight tracking-[-0.5px] text-[#22261F]">
+      <section>
+        <h1 className="text-[28px] font-extrabold leading-tight text-[#22261F]">
           আমার লক্ষ্য
         </h1>
 
-        <p className="mt-1.5 max-w-[34ch] text-[14px] leading-6 text-[#767C70]">
+        <p className="mt-1.5 max-w-[34ch] text-sm leading-6 text-[#767C70]">
           আপনার গুরুত্বপূর্ণ লক্ষ্য
           নির্ধারণ করুন এবং ধাপে ধাপে
           এগিয়ে যান।
@@ -382,12 +370,16 @@ export default function GoalList({
 
       {/* ===================================================
           ACTIVE GOALS
+          
+          IMPORTANT:
+          এখানে আগের GoalCard-ই থাকবে।
+          নতুন duplicate card নেই।
       =================================================== */}
 
       {goals.length > 0 && (
         <section>
-          <div className="mb-3 flex items-center gap-2 px-5">
-            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#173C30]">
+          <div className="mb-3 flex items-center gap-2">
+            <div className="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-[#173C30]">
               <Target className="h-3.5 w-3.5 text-white" />
             </div>
 
@@ -395,39 +387,39 @@ export default function GoalList({
               চলমান লক্ষ্য
             </h2>
 
-            <span className="ml-auto rounded-full bg-[#EDEAE0] px-2.5 py-1 text-[11px] text-[#767C70]">
+            <span className="ml-auto rounded-full bg-[#EDEAE0] px-2.5 py-1 text-[11.5px] text-[#767C70]">
               {getBanglaNumber(
                 goals.length
-              )} টি
+              )}{" "}
+              টি
             </span>
           </div>
 
-          <div className="space-y-3 px-5">
-            {goals.map((goal) => (
-              <ActiveGoalPreview
-                key={goal.id}
-                goal={goal}
-              >
+          <div className="space-y-4">
+            {goals.map(
+              (goal) => (
                 <GoalCard
+                  key={goal.id}
                   goal={goal}
                   onDelete={
                     handleDeleteGoal
                   }
                 />
-              </ActiveGoalPreview>
-            ))}
+              )
+            )}
           </div>
         </section>
       )}
 
       {/* ===================================================
-          ACHIEVEMENT HEADER
+          ACHIEVEMENT
       =================================================== */}
 
       {completedGoals.length > 0 && (
         <>
-          <section className="mx-5 overflow-hidden rounded-[18px] bg-gradient-to-br from-[#15251E] to-[#1D362B]">
+          <section className="overflow-hidden rounded-[18px] bg-gradient-to-br from-[#15251E] to-[#1D362B]">
             <div className="relative flex items-center gap-3 px-4 py-3.5">
+
               <div className="absolute -right-5 -top-5 h-20 w-20 rounded-full bg-[#D9A441]/15" />
 
               <div className="relative z-10 flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[13px] bg-[#D9A441]/15">
@@ -464,7 +456,7 @@ export default function GoalList({
           ================================================= */}
 
           <section>
-            <div className="mb-3 flex items-center gap-2 px-5">
+            <div className="mb-3 flex items-center gap-2">
               <div className="h-1.5 w-1.5 rounded-full bg-[#D9A441]" />
 
               <h2 className="text-[15px] font-extrabold text-[#22261F]">
@@ -472,7 +464,7 @@ export default function GoalList({
               </h2>
             </div>
 
-            <div className="space-y-3 px-5">
+            <div className="space-y-3">
               {completedGoals.map(
                 (goal) => (
                   <CompletedGoalCard
@@ -491,12 +483,12 @@ export default function GoalList({
               MOTIVATION
           ================================================= */}
 
-          <section className="mx-5 rounded-[18px] border border-[#E7E3D8] bg-white px-5 py-5 text-center">
+          <section className="rounded-[18px] border border-[#E7E3D8] bg-white px-5 py-5 text-center">
             <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-[#F3E3C2]">
               <Flame className="h-5 w-5 text-[#C97F1E]" />
             </div>
 
-            <p className="mt-2.5 text-[14px] font-bold text-[#22261F]">
+            <p className="mt-2.5 text-sm font-bold text-[#22261F]">
               Keep going.
             </p>
 
@@ -514,162 +506,12 @@ export default function GoalList({
 }
 
 /* =========================================================
-   ACTIVE GOAL PREVIEW
-========================================================= */
-
-interface ActiveGoalPreviewProps {
-  goal: Goal;
-  children: React.ReactNode;
-}
-
-function ActiveGoalPreview({
-  goal,
-  children,
-}: ActiveGoalPreviewProps) {
-  /*
-   * GoalCard already contains the
-   * full goal functionality.
-   *
-   * এই wrapper শুধু visual container
-   * হিসেবে কাজ করছে।
-   */
-  return (
-    <div className="overflow-hidden rounded-[18px] border border-[#E7E3D8] bg-white shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
-      <div className="hidden">
-        {children}
-      </div>
-
-      <ActiveGoalCompact
-        goal={goal}
-      />
-
-      <div className="px-3 pb-3">
-        {children}
-      </div>
-    </div>
-  );
-}
-
-/* =========================================================
-   ACTIVE GOAL COMPACT HEADER
-========================================================= */
-
-function ActiveGoalCompact({
-  goal,
-}: {
-  goal: Goal;
-}) {
-  const progress = Math.min(
-    100,
-    Math.max(0, goal.progress)
-  );
-
-  const daysLeft = getDaysLeft(
-    goal.endDate
-  );
-
-  const circumference =
-    2 * Math.PI * 25;
-
-  const offset =
-    circumference -
-    (circumference * progress) /
-      100;
-
-  return (
-    <div className="px-[18px] pt-[18px]">
-      <div className="flex items-center gap-3.5">
-        {/* Ring */}
-
-        <div className="relative h-[58px] w-[58px] shrink-0">
-          <svg
-            width="58"
-            height="58"
-            viewBox="0 0 58 58"
-            className="-rotate-90"
-          >
-            <circle
-              cx="29"
-              cy="29"
-              r="25"
-              fill="none"
-              stroke="#EDEAE0"
-              strokeWidth="6"
-            />
-
-            <circle
-              cx="29"
-              cy="29"
-              r="25"
-              fill="none"
-              stroke="#173C30"
-              strokeWidth="6"
-              strokeLinecap="round"
-              strokeDasharray={
-                circumference
-              }
-              strokeDashoffset={
-                offset
-              }
-            />
-          </svg>
-
-          <div className="absolute inset-0 flex items-center justify-center text-[14px] font-extrabold text-[#22261F]">
-            {getBanglaNumber(
-              progress
-            )}%
-          </div>
-        </div>
-
-        {/* Content */}
-
-        <div className="min-w-0 flex-1">
-          <h3 className="truncate text-[15.5px] font-bold text-[#22261F]">
-            {goal.title}
-          </h3>
-
-          <div className="mt-1.5 flex items-center gap-2">
-            <span className="rounded-full bg-[#EAF1FB] px-2.5 py-1 text-[11.5px] font-bold text-[#3B6FC4]">
-              চলছে
-            </span>
-
-            <span className="text-[12px] text-[#767C70]">
-              •
-            </span>
-
-            <span className="text-[12px] text-[#767C70]">
-              {getBanglaNumber(
-                goal.completedTasks
-              )}
-              /
-              {getBanglaNumber(
-                goal.totalTasks
-              )}{" "}
-              টাস্ক
-            </span>
-          </div>
-        </div>
-
-        <ChevronRight className="h-[18px] w-[18px] shrink-0 text-[#767C70]" />
-      </div>
-
-      <div className="pb-3 pt-2 text-[13px] text-[#767C70]">
-        {daysLeft === 0
-          ? "আজ শেষ দিন"
-          : `${getBanglaNumber(
-              daysLeft
-            )} দিন বাকি`}
-      </div>
-    </div>
-  );
-}
-
-/* =========================================================
    COMPLETED GOAL CARD
 ========================================================= */
 
 interface CompletedGoalCardProps {
   goal: Goal;
+
   onDelete: (
     goalId: string
   ) => void;
@@ -681,14 +523,17 @@ function CompletedGoalCard({
 }: CompletedGoalCardProps) {
   return (
     <div className="relative overflow-hidden rounded-[18px] border border-[#E7E3D8] bg-white">
-      {/* Gold Shine */}
+
+      {/* Gold top line */}
 
       <div className="absolute left-0 right-0 top-0 h-1 bg-gradient-to-r from-[#D9A441] via-[#EBC372] to-[#D9A441]" />
 
       <div className="px-3.5 pb-3 pt-4">
+
         {/* Header */}
 
         <div className="flex items-center gap-2.5">
+
           <div className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[11px] bg-[#F3E3C2]">
             <Trophy className="h-[18px] w-[18px] text-[#C97F1E]" />
           </div>
@@ -724,12 +569,11 @@ function CompletedGoalCard({
         {/* Footer */}
 
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
-            <span className="flex items-center gap-1 rounded-full bg-[#E4F5EA] px-2 py-0.5 text-[11px] font-bold text-[#1E8E4C]">
-              <Check className="h-3 w-3" />
-              Completed
-            </span>
-          </div>
+
+          <span className="flex items-center gap-1 rounded-full bg-[#E4F5EA] px-2 py-0.5 text-[11px] font-bold text-[#1E8E4C]">
+            <Check className="h-3 w-3" />
+            Completed
+          </span>
 
           <button
             type="button"
