@@ -36,9 +36,6 @@ export default function GoalsPage() {
         {/* Goals */}
         <section>
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-xl font-semibold text-[#17261e]">
-              চলমান লক্ষ্য
-            </h2>
           </div>
 
           <GoalList refreshKey={refreshKey} />
