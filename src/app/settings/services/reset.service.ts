@@ -3,7 +3,9 @@
 import {
   collection,
   deleteDoc,
+  doc,
   getDocs,
+  setDoc,
 } from "firebase/firestore";
 
 import { auth, db } from "@/lib/firebase";
@@ -16,17 +18,6 @@ import {
 import type {
   ResetModule,
 } from "../types/settings.types";
-
-/* =========================================================
-   TYPES
-========================================================= */
-
-interface OfflineTaskData {
-  operation?: string;
-  task?: {
-    id?: string;
-  };
-}
 
 /* =========================================================
    AUTH
@@ -45,7 +36,7 @@ const getCurrentUser = () => {
 };
 
 /* =========================================================
-   FIREBASE
+   FIRESTORE COLLECTION DELETE
 ========================================================= */
 
 const deleteFirebaseCollection = async (
@@ -67,10 +58,6 @@ const deleteFirebaseCollection = async (
     return;
   }
 
-  /*
-   * Delete all documents belonging to
-   * the current authenticated user.
-   */
   await Promise.all(
     snapshot.docs.map((item) =>
       deleteDoc(item.ref),
@@ -80,6 +67,84 @@ const deleteFirebaseCollection = async (
 
 /* =========================================================
    INDEXED DB
+========================================================= */
+
+const openExistingDatabase = (
+  databaseName: string,
+): Promise<IDBDatabase | null> => {
+  return new Promise(
+    (resolve, reject) => {
+      if (
+        typeof window === "undefined" ||
+        !("indexedDB" in window)
+      ) {
+        resolve(null);
+        return;
+      }
+
+      const request =
+        window.indexedDB.open(
+          databaseName,
+        );
+
+      let databaseDidNotExist = false;
+
+      request.onupgradeneeded = () => {
+        /*
+         * Don't create a new database
+         * just because reset was clicked.
+         */
+        databaseDidNotExist = true;
+
+        try {
+          request.transaction?.abort();
+        } catch {
+          // Ignore abort error.
+        }
+      };
+
+      request.onsuccess = () => {
+        const database = request.result;
+
+        if (databaseDidNotExist) {
+          database.close();
+          resolve(null);
+          return;
+        }
+
+        resolve(database);
+      };
+
+      request.onerror = () => {
+        if (
+          request.error?.name ===
+          "NotFoundError"
+        ) {
+          resolve(null);
+          return;
+        }
+
+        reject(
+          request.error ??
+            new Error(
+              `Unable to open IndexedDB: ${databaseName}`,
+            ),
+        );
+      };
+
+      request.onblocked = () => {
+        reject(
+          new Error(
+            `IndexedDB "${databaseName}" is blocked.`,
+          ),
+        );
+      };
+    },
+  );
+};
+
+/* =========================================================
+   CLEAR INDEXED DB STORE
 ========================================================= */
 
 const clearIndexedDBStore = async (
@@ -153,85 +218,6 @@ const clearIndexedDBStore = async (
   );
 };
 
-/**
- * Open an existing database without creating
- * a new database during reset.
- */
-const openExistingDatabase = (
-  databaseName: string,
-): Promise<IDBDatabase | null> => {
-  return new Promise(
-    (resolve, reject) => {
-      if (
-        typeof window === "undefined" ||
-        !("indexedDB" in window)
-      ) {
-        resolve(null);
-        return;
-      }
-
-      const request =
-        window.indexedDB.open(
-          databaseName,
-        );
-
-      let databaseDidNotExist = false;
-
-      request.onupgradeneeded = () => {
-        /*
-         * If the database didn't exist before,
-         * don't create an empty database just
-         * because Reset was clicked.
-         */
-        databaseDidNotExist = true;
-
-        try {
-          request.transaction?.abort();
-        } catch {
-          // Ignore abort error.
-        }
-      };
-
-      request.onsuccess = () => {
-        const database = request.result;
-
-        if (databaseDidNotExist) {
-          database.close();
-          resolve(null);
-          return;
-        }
-
-        resolve(database);
-      };
-
-      request.onerror = () => {
-        if (
-          request.error?.name ===
-          "NotFoundError"
-        ) {
-          resolve(null);
-          return;
-        }
-
-        reject(
-          request.error ??
-            new Error(
-              `Unable to open ${databaseName}.`,
-            ),
-        );
-      };
-
-      request.onblocked = () => {
-        reject(
-          new Error(
-            `IndexedDB "${databaseName}" is blocked.`,
-          ),
-        );
-      };
-    },
-  );
-};
-
 /* =========================================================
    TASKS
 ========================================================= */
@@ -253,18 +239,11 @@ const resetTasks = async (): Promise<void> => {
 
   /*
    * -------------------------------------------------------
-   * LOCAL TASKS
+   * OFFLINE
    *
-   * Existing task service uses:
+   * Existing task system:
    *
-   * collection:
    * tasks:{uid}
-   *
-   * record ID:
-   * task:{uid}:{taskId}
-   *
-   * We delete every local task record belonging
-   * to this user.
    * -------------------------------------------------------
    */
 
@@ -291,7 +270,7 @@ const resetTasks = async (): Promise<void> => {
 const resetHabits = async (): Promise<void> => {
   /*
    * -------------------------------------------------------
-   * FIREBASE
+   * FIREBASE HABITS
    * -------------------------------------------------------
    */
 
@@ -299,15 +278,19 @@ const resetHabits = async (): Promise<void> => {
     "habits",
   );
 
+  /*
+   * -------------------------------------------------------
+   * FIREBASE COMPLETIONS
+   * -------------------------------------------------------
+   */
+
   await deleteFirebaseCollection(
     "habitCompletions",
   );
 
   /*
    * -------------------------------------------------------
-   * LOCAL
-   *
-   * Existing habit service uses:
+   * LOCAL HABIT DATABASE
    *
    * life-os-db
    *
@@ -341,9 +324,6 @@ const resetGoals = async (): Promise<void> => {
   /*
    * -------------------------------------------------------
    * FIREBASE
-   *
-   * users/{uid}/goals
-   * users/{uid}/goalTasks
    * -------------------------------------------------------
    */
 
@@ -358,8 +338,6 @@ const resetGoals = async (): Promise<void> => {
   /*
    * -------------------------------------------------------
    * LOCAL
-   *
-   * Clear only stores that already exist.
    * -------------------------------------------------------
    */
 
@@ -384,12 +362,27 @@ const resetGoals = async (): Promise<void> => {
 ========================================================= */
 
 const resetNotebook = async (): Promise<void> => {
+  const user = getCurrentUser();
+
   /*
-   * Notebook local database from the
-   * existing Life OS offline architecture:
+   * -------------------------------------------------------
+   * FIREBASE
+   *
+   * users/{uid}/notes
+   * -------------------------------------------------------
+   */
+
+  await deleteFirebaseCollection(
+    "notes",
+  );
+
+  /*
+   * -------------------------------------------------------
+   * LOCAL
    *
    * life-os-notebook
    * └── notes
+   * -------------------------------------------------------
    */
 
   await clearIndexedDBStore(
@@ -397,83 +390,56 @@ const resetNotebook = async (): Promise<void> => {
     "notes",
   );
 
-  /*
-   * NOTE:
-   * Firebase Notebook deletion is NOT guessed.
-   *
-   * If your Notebook service has a Firebase
-   * collection, we will connect that exact
-   * collection separately.
-   */
+  void user;
 };
 
 /* =========================================================
-   FOCUS
+   FOCUS TIMER
 ========================================================= */
 
 const resetFocus = async (): Promise<void> => {
+  const user = getCurrentUser();
+
   /*
-   * Clear only stores that actually exist.
-   * Missing stores are ignored.
-   */
-
-  await clearIndexedDBStore(
-    "life-os-offline",
-    "focus",
-  );
-
-  await clearIndexedDBStore(
-    "life-os-offline",
-    "focusSessions",
-  );
-
-  await clearIndexedDBStore(
-    "life-os-offline",
-    "timer",
-  );
-};
-
-/* =========================================================
-   FINANCE
-========================================================= */
-
-const resetFinance = async (): Promise<void> => {
-  /*
-   * We intentionally don't guess a Firebase
-   * collection name.
+   * -------------------------------------------------------
+   * FIREBASE
    *
-   * Only existing local stores are cleared.
+   * Exact structure from your Focus service:
+   *
+   * users/{uid}/focusTimer/main
+   * -------------------------------------------------------
    */
 
-  await clearIndexedDBStore(
-    "life-os-offline",
-    "finance",
+  const focusTimerRef = doc(
+    db,
+    "users",
+    user.uid,
+    "focusTimer",
+    "main",
   );
 
-  await clearIndexedDBStore(
-    "life-os-offline",
-    "transactions",
-  );
-};
-
-/* =========================================================
-   REMINDER
-========================================================= */
-
-const resetReminder = async (): Promise<void> => {
   /*
-   * Clear local reminder/alarm data if
-   * these stores exist.
+   * Restore the timer to its original
+   * default/reset state.
+   *
+   * We do NOT delete the document because
+   * your Focus service expects this timer
+   * document to exist and loads it by "main".
    */
 
-  await clearIndexedDBStore(
-    "life-os-offline",
-    "reminders",
-  );
-
-  await clearIndexedDBStore(
-    "life-os-offline",
-    "alarms",
+  await setDoc(
+    focusTimerRef,
+    {
+      id: "main",
+      title: "Focus Timer",
+      startedAt: null,
+      elapsed: 0,
+      running: false,
+      createdAt: Date.now(),
+    },
+    {
+      merge: true,
+    },
   );
 };
 
@@ -482,15 +448,15 @@ const resetReminder = async (): Promise<void> => {
 ========================================================= */
 
 const resetAI = async (): Promise<void> => {
-  await clearIndexedDBStore(
-    "life-os-offline",
-    "ai",
-  );
-
-  await clearIndexedDBStore(
-    "life-os-offline",
-    "aiData",
-  );
+  /*
+   * AI reset intentionally does nothing for now.
+   *
+   * We need the actual AI service/storage code
+   * before deleting anything.
+   *
+   * This prevents accidental deletion of a
+   * wrong Firebase collection.
+   */
 };
 
 /* =========================================================
@@ -500,11 +466,11 @@ const resetAI = async (): Promise<void> => {
 export const resetSelectedData = async (
   selectedModules: ResetModule[],
 ): Promise<void> => {
-  /*
-   * Authentication is required.
-   */
   const user = getCurrentUser();
 
+  /*
+   * Prevent empty reset.
+   */
   if (
     !selectedModules ||
     selectedModules.length === 0
@@ -523,12 +489,11 @@ export const resetSelectedData = async (
     );
 
   /*
-   * -------------------------------------------------------
-   * RESET ONE BY ONE
+   * Reset selected modules one by one.
    *
-   * Doing this sequentially makes it easier
-   * to identify which module failed.
-   * -------------------------------------------------------
+   * IMPORTANT:
+   * We use resetModule instead of module
+   * to avoid the Next.js ESLint error.
    */
 
   for (const resetModule of uniqueModules) {
@@ -553,16 +518,16 @@ export const resetSelectedData = async (
         await resetFocus();
         break;
 
-      case "finance":
-        await resetFinance();
-        break;
-
-      case "reminder":
-        await resetReminder();
-        break;
-
       case "ai":
         await resetAI();
+        break;
+
+      /*
+       * Finance and Reminder are intentionally
+       * not handled at this stage.
+       */
+      case "finance":
+      case "reminder":
         break;
 
       default:
@@ -572,11 +537,12 @@ export const resetSelectedData = async (
 
   /*
    * -------------------------------------------------------
-   * RESET EVENTS
+   * RESET EVENT
    * -------------------------------------------------------
    *
-   * Other Life OS components can listen to
-   * these events and reload their state.
+   * Components can listen to this event and
+   * reload their current state without a
+   * complete page refresh.
    */
 
   if (typeof window !== "undefined") {
@@ -633,16 +599,6 @@ export const resetNotebookData =
 export const resetFocusData =
   async (): Promise<void> => {
     await resetFocus();
-  };
-
-export const resetFinanceData =
-  async (): Promise<void> => {
-    await resetFinance();
-  };
-
-export const resetReminderData =
-  async (): Promise<void> => {
-    await resetReminder();
   };
 
 export const resetAIData =
