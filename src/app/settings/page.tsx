@@ -6,6 +6,8 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
+import LanguageSetting from "@/components/LanguageSetting";
+
 import ResetDataModal from "./components/ResetDataModal";
 import ResetConfirmModal from "./components/ResetConfirmModal";
 
@@ -136,12 +138,14 @@ export default function SettingsPage() {
   return (
     <main className="min-h-screen bg-background text-foreground">
       <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 lg:px-8">
+
         {/* ==================================================
             HEADER
         ================================================== */}
 
         <div className="mb-8">
           <div className="flex items-center gap-3">
+
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10">
               <SettingsIcon className="h-5 w-5 text-primary" />
             </div>
@@ -155,6 +159,7 @@ export default function SettingsPage() {
                 Personalize and manage your Life OS
               </p>
             </div>
+
           </div>
         </div>
 
@@ -183,11 +188,13 @@ export default function SettingsPage() {
         )}
 
         <div className="space-y-6">
+
           {/* ==================================================
               APPEARANCE
           ================================================== */}
 
           <section className="rounded-2xl border bg-card p-5 shadow-sm">
+
             <div className="mb-5">
               <h2 className="text-base font-semibold">
                 Appearance
@@ -198,7 +205,10 @@ export default function SettingsPage() {
               </p>
             </div>
 
+            {/* Theme */}
+
             <div className="divide-y rounded-xl border">
+
               <button
                 type="button"
                 className="flex w-full items-center justify-between p-4 text-left transition hover:bg-muted/50"
@@ -216,23 +226,14 @@ export default function SettingsPage() {
                 <ChevronRight className="h-4 w-4 text-muted-foreground" />
               </button>
 
-              <button
-                type="button"
-                className="flex w-full items-center justify-between p-4 text-left transition hover:bg-muted/50"
-              >
-                <div>
-                  <p className="text-sm font-medium">
-                    Language
-                  </p>
-
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Choose your interface language
-                  </p>
-                </div>
-
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
-              </button>
             </div>
+
+            {/* Language */}
+
+            <div className="mt-4">
+              <LanguageSetting />
+            </div>
+
           </section>
 
           {/* ==================================================
@@ -240,6 +241,7 @@ export default function SettingsPage() {
           ================================================== */}
 
           <section className="rounded-2xl border bg-card p-5 shadow-sm">
+
             <div className="mb-5">
               <h2 className="text-base font-semibold">
                 Account
@@ -251,6 +253,7 @@ export default function SettingsPage() {
             </div>
 
             <div className="rounded-xl border p-4">
+
               <p className="text-sm font-medium">
                 Account data
               </p>
@@ -259,7 +262,9 @@ export default function SettingsPage() {
                 Your account and login information will
                 not be affected by data reset.
               </p>
+
             </div>
+
           </section>
 
           {/* ==================================================
@@ -267,7 +272,9 @@ export default function SettingsPage() {
           ================================================== */}
 
           <section className="rounded-2xl border border-red-500/20 bg-red-500/[0.03] p-5 shadow-sm">
+
             <div className="mb-5">
+
               <h2 className="text-base font-semibold text-red-600 dark:text-red-400">
                 Danger Zone
               </h2>
@@ -276,6 +283,7 @@ export default function SettingsPage() {
                 Reset selected Life OS data.
                 Your account and login will remain safe.
               </p>
+
             </div>
 
             <button
@@ -283,7 +291,9 @@ export default function SettingsPage() {
               onClick={handleOpenReset}
               className="flex w-full items-center justify-between rounded-xl border border-red-500/30 bg-background px-4 py-4 text-left transition hover:border-red-500/50 hover:bg-red-500/[0.04]"
             >
+
               <div className="flex items-center gap-3">
+
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-500/10">
                   <span className="text-lg">
                     ↻
@@ -291,6 +301,7 @@ export default function SettingsPage() {
                 </div>
 
                 <div>
+
                   <p className="text-sm font-semibold text-red-600 dark:text-red-400">
                     Reset Life OS
                   </p>
@@ -298,12 +309,17 @@ export default function SettingsPage() {
                   <p className="mt-1 text-xs text-muted-foreground">
                     Choose which data you want to reset
                   </p>
+
                 </div>
+
               </div>
 
               <ChevronRight className="h-5 w-5 text-muted-foreground" />
+
             </button>
+
           </section>
+
         </div>
       </div>
 
@@ -328,6 +344,7 @@ export default function SettingsPage() {
         onCancel={handleCancelConfirmation}
         onConfirm={handleConfirmReset}
       />
+
     </main>
   );
 }
