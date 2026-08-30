@@ -53,6 +53,17 @@ let databasePromise: Promise<IDBDatabase> | null =
   null;
 
 /* =========================================================
+   RESET / SYNC STATE
+========================================================= */
+
+let syncing = false;
+
+/*
+ * Reset চলাকালীন নতুন sync শুরু হতে দেওয়া হবে না।
+ */
+let resettingGoals = false;
+
+/* =========================================================
    USER
 ========================================================= */
 
@@ -343,8 +354,9 @@ const getLocal = async <T>(
 
       request.onsuccess = () => {
         resolve(
-          (request.result ??
-            null) as T | null
+          (request.result ?? null) as
+            | T
+            | null
         );
       };
 
@@ -381,8 +393,7 @@ const getAllLocal = async <T>(
 
       request.onsuccess = () => {
         resolve(
-          (request.result ??
-            []) as T[]
+          (request.result ?? []) as T[]
         );
       };
 
@@ -667,13 +678,6 @@ const updateLocalGoalProgress =
               100
           );
 
-    /*
-     * IMPORTANT:
-     *
-     * Goal নিজে complete হবে
-     * শুধুমাত্র যখন সব task
-     * complete হবে।
-     */
     const isCompleted =
       totalTasks > 0 &&
       completedTasks ===
@@ -1134,10 +1138,6 @@ export const completeGoal =
           goalId
       );
 
-    /*
-     * Manual complete করার পরিবর্তে
-     * task status-এর উপর নির্ভর করবো।
-     */
     const total =
       goalTasks.length;
 
@@ -1365,12 +1365,6 @@ export const toggleGoalTask =
       updatedTask
     );
 
-    /*
-     * প্রথমে progress update।
-     *
-     * সব task complete হলে
-     * Goal status completed হবে।
-     */
     await updateLocalGoalProgress(
       task.goalId
     );
@@ -1388,10 +1382,6 @@ export const toggleGoalTask =
       task.goalId
     );
 
-    /*
-     * Goal completed হলে
-     * Firebase-এ Goal update queue হবে।
-     */
     if (
       updatedGoal &&
       updatedGoal.status ===
@@ -1550,7 +1540,8 @@ export const refreshGoalsFromFirebase =
       typeof window ===
         "undefined" ||
       !navigator.onLine ||
-      !auth.currentUser
+      !auth.currentUser ||
+      resettingGoals
     ) {
       return;
     }
@@ -1559,6 +1550,44 @@ export const refreshGoalsFromFirebase =
       await getDocs(
         getGoalsCollection()
       );
+
+    /*
+     * Firebase-এ যে Goal আর নেই,
+     * local-এও সেটা remove করা হবে।
+     *
+     * এতে local stale data থাকবে না।
+     */
+
+    const firebaseGoalIds =
+      new Set(
+        snapshot.docs.map(
+          (item) => item.id
+        )
+      );
+
+    const localGoals =
+      await getAllLocal<Goal>(
+        GOALS_STORE
+      );
+
+    for (
+      const localGoal of localGoals
+    ) {
+      if (
+        !firebaseGoalIds.has(
+          localGoal.id
+        )
+      ) {
+        await deleteLocal(
+          GOALS_STORE,
+          localGoal.id
+        );
+      }
+    }
+
+    /*
+     * Firebase-এর latest Goal local-এ save।
+     */
 
     for (
       const item of snapshot.docs
@@ -1645,7 +1674,8 @@ export const refreshGoalTasksFromFirebase =
       typeof window ===
         "undefined" ||
       !navigator.onLine ||
-      !auth.currentUser
+      !auth.currentUser ||
+      resettingGoals
     ) {
       return;
     }
@@ -1654,6 +1684,46 @@ export const refreshGoalTasksFromFirebase =
       await getDocs(
         getGoalTasksCollection()
       );
+
+    /*
+     * Firebase task IDs.
+     */
+
+    const firebaseTaskIds =
+      new Set(
+        snapshot.docs.map(
+          (item) => item.id
+        )
+      );
+
+    /*
+     * Remove local tasks that no longer
+     * exist in Firebase.
+     */
+
+    const localTasks =
+      await getAllLocal<GoalTask>(
+        TASKS_STORE
+      );
+
+    for (
+      const localTask of localTasks
+    ) {
+      if (
+        !firebaseTaskIds.has(
+          localTask.id
+        )
+      ) {
+        await deleteLocal(
+          TASKS_STORE,
+          localTask.id
+        );
+      }
+    }
+
+    /*
+     * Firebase tasks → local.
+     */
 
     for (
       const item of snapshot.docs
@@ -1708,10 +1778,10 @@ export const refreshGoalTasksFromFirebase =
     }
 
     /*
-     * Firebase tasks update হওয়ার
-     * পরে local goal progress আবার
-     * calculate করা হবে।
+     * Firebase tasks update হওয়ার পরে
+     * local Goal progress calculate।
      */
+
     const goals =
       await getAllLocal<Goal>(
         GOALS_STORE
@@ -1733,13 +1803,267 @@ export const refreshGoalTasksFromFirebase =
   };
 
 /* =========================================================
+   RESET ALL GOALS
+========================================================= */
+
+/**
+ * Completely reset Goal module.
+ *
+ * Deletes:
+ *
+ * Firebase:
+ *   users/{uid}/goals/*
+ *   users/{uid}/goalTasks/*
+ *
+ * IndexedDB:
+ *   goals/*
+ *   tasks/*
+ *   queue/*
+ *
+ * IMPORTANT:
+ * Reset করার পরে Firebase থেকে আবার
+ * পুরোনো data local-এ আনা হবে না।
+ */
+export const resetAllGoals =
+  async (): Promise<void> => {
+    getCurrentUser();
+
+    /*
+     * Reset অবশ্যই online অবস্থায় করা হবে,
+     * কারণ Firebase-এর original data-ও delete
+     * করতে হবে।
+     */
+
+    if (
+      typeof window !==
+        "undefined" &&
+      !navigator.onLine
+    ) {
+      throw new Error(
+        "Goal reset করতে ইন্টারনেট সংযোগ প্রয়োজন।"
+      );
+    }
+
+    /*
+     * Reset lock.
+     *
+     * এই সময় online listener বা অন্য কোনো
+     * operation যেন Firebase data আবার
+     * local-এ না আনে।
+     */
+
+    resettingGoals = true;
+
+    try {
+      /*
+       * ---------------------------------------------------
+       * WAIT FOR CURRENT SYNC
+       * ---------------------------------------------------
+       */
+
+      let waitCount = 0;
+
+      while (
+        syncing &&
+        waitCount < 200
+      ) {
+        await new Promise<void>(
+          (resolve) =>
+            setTimeout(
+              resolve,
+              50
+            )
+        );
+
+        waitCount++;
+      }
+
+      /*
+       * ---------------------------------------------------
+       * USER
+       * ---------------------------------------------------
+       */
+
+      const user =
+        getCurrentUser();
+
+      /*
+       * ---------------------------------------------------
+       * FIREBASE GOALS
+       * ---------------------------------------------------
+       */
+
+      const goalsSnapshot =
+        await getDocs(
+          collection(
+            db,
+            "users",
+            user.uid,
+            "goals"
+          )
+        );
+
+      await Promise.all(
+        goalsSnapshot.docs.map(
+          (goalDoc) =>
+            deleteDoc(
+              goalDoc.ref
+            )
+        )
+      );
+
+      /*
+       * ---------------------------------------------------
+       * FIREBASE GOAL TASKS
+       * ---------------------------------------------------
+       */
+
+      const goalTasksSnapshot =
+        await getDocs(
+          collection(
+            db,
+            "users",
+            user.uid,
+            "goalTasks"
+          )
+        );
+
+      await Promise.all(
+        goalTasksSnapshot.docs.map(
+          (taskDoc) =>
+            deleteDoc(
+              taskDoc.ref
+            )
+        )
+      );
+
+      /*
+       * ---------------------------------------------------
+       * LOCAL GOALS
+       * ---------------------------------------------------
+       */
+
+      const localGoals =
+        await getAllLocal<Goal>(
+          GOALS_STORE
+        );
+
+      await Promise.all(
+        localGoals.map(
+          (goal) =>
+            deleteLocal(
+              GOALS_STORE,
+              goal.id
+            )
+        )
+      );
+
+      /*
+       * ---------------------------------------------------
+       * LOCAL GOAL TASKS
+       * ---------------------------------------------------
+       */
+
+      const localTasks =
+        await getAllLocal<GoalTask>(
+          TASKS_STORE
+        );
+
+      await Promise.all(
+        localTasks.map(
+          (task) =>
+            deleteLocal(
+              TASKS_STORE,
+              task.id
+            )
+        )
+      );
+
+      /*
+       * ---------------------------------------------------
+       * DELETE ALL GOAL QUEUE
+       * ---------------------------------------------------
+       *
+       * এটা খুবই গুরুত্বপূর্ণ।
+       *
+       * যেমন:
+       *
+       * create-goal
+       * update-goal
+       * create-task
+       * update-task
+       * delete-goal
+       *
+       * এগুলো পড়ে থাকলে reset-এর পরে
+       * পুরোনো Goal আবার Firebase-এ
+       * তৈরি হয়ে যেতে পারে।
+       */
+
+      const queue =
+        await getAllLocal<GoalQueueItem>(
+          QUEUE_STORE
+        );
+
+      await Promise.all(
+        queue.map(
+          (item) =>
+            deleteLocal(
+              QUEUE_STORE,
+              item.id
+            )
+        )
+      );
+
+      /*
+       * ---------------------------------------------------
+       * RESET EVENTS
+       * ---------------------------------------------------
+       */
+
+      emitGoalEvent(
+        "life-os-goal-reset"
+      );
+
+      emitGoalEvent(
+        "life-os-goal-changed"
+      );
+
+      emitGoalEvent(
+        "life-os-goal-synced"
+      );
+
+      console.log(
+        "All Goal data reset successfully."
+      );
+    } catch (error) {
+      console.error(
+        "Goal reset failed:",
+        error
+      );
+
+      throw error;
+    } finally {
+      /*
+       * Reset শেষ।
+       */
+
+      resettingGoals = false;
+    }
+  };
+
+/* =========================================================
    SYNC
 ========================================================= */
 
-let syncing = false;
-
 export const syncPendingGoals =
   async (): Promise<void> => {
+    /*
+     * Reset চললে sync নয়।
+     */
+    if (resettingGoals) {
+      return;
+    }
+
     if (syncing) {
       return;
     }
@@ -1765,6 +2089,14 @@ export const syncPendingGoals =
       for (
         const item of queue
       ) {
+        /*
+         * Reset শুরু হলে queue processing বন্ধ।
+         */
+
+        if (resettingGoals) {
+          break;
+        }
+
         try {
           const user =
             auth.currentUser;
@@ -1891,6 +2223,11 @@ export const syncPendingGoals =
             }
           }
 
+          /*
+           * Successful operation হলে
+           * queue item remove।
+           */
+
           await deleteLocal(
             QUEUE_STORE,
             item.id
@@ -1901,29 +2238,37 @@ export const syncPendingGoals =
             error
           );
 
+          /*
+           * এই item fail করলে পরের item
+           * process না করে থামবে।
+           */
+
           break;
         }
       }
 
       /*
-       * Sync শেষে Firebase-এর
-       * latest data local-এ আনা হবে।
+       * Reset চললে Firebase থেকে
+       * কোনো data আবার local-এ আনা যাবে না।
        */
-      await refreshGoalsFromFirebase(
-        false
-      );
 
-      await refreshGoalTasksFromFirebase(
-        false
-      );
+      if (!resettingGoals) {
+        await refreshGoalsFromFirebase(
+          false
+        );
 
-      emitGoalEvent(
-        "life-os-goal-synced"
-      );
+        await refreshGoalTasksFromFirebase(
+          false
+        );
 
-      emitGoalEvent(
-        "life-os-goal-changed"
-      );
+        emitGoalEvent(
+          "life-os-goal-synced"
+        );
+
+        emitGoalEvent(
+          "life-os-goal-changed"
+        );
+      }
     } catch (error) {
       console.error(
         "Goal sync failed:",
@@ -1944,7 +2289,9 @@ if (
   window.addEventListener(
     "online",
     () => {
-      void syncPendingGoals();
+      if (!resettingGoals) {
+        void syncPendingGoals();
+      }
     }
   );
 }
