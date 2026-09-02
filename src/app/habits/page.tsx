@@ -1,11 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import AddHabitForm from "@/features/habits/components/AddHabitForm";
 import HabitHistory from "@/features/habits/components/HabitHistory";
 import HabitList from "@/features/habits/components/HabitList";
 import NotificationPermission from "@/features/habits/components/NotificationPermission";
+
+import {
+  getHabits,
+} from "@/features/habits/services/habit.service";
+
+import {
+  startHabitAlarmRunner,
+  stopHabitAlarmRunner,
+  setAlarmHabits,
+} from "@/features/habits/services/habit-alarm.service";
 
 type HabitTab = "habits" | "history";
 
@@ -16,15 +26,78 @@ export default function HabitsPage() {
   const [refreshKey, setRefreshKey] =
     useState(0);
 
+  /**
+   * যখন নতুন Habit তৈরি হবে
+   * তখন refreshKey পরিবর্তন হবে।
+   */
   const handleHabitAdded = () => {
     setRefreshKey(
       (current) => current + 1
     );
   };
 
+  /**
+   * =======================================================
+   * HABIT ALARM RUNNER
+   * =======================================================
+   *
+   * IndexedDB থেকে active habits load করে
+   * Alarm Runner-এ পাঠানো হচ্ছে।
+   *
+   * এই runner Firebase-এর উপর নির্ভর করে না।
+   */
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadHabitsForAlarm =
+      async () => {
+        try {
+          const habits =
+            await getHabits();
+
+          if (cancelled) {
+            return;
+          }
+
+          /**
+           * Runner-এর current habits update
+           */
+          setAlarmHabits(habits);
+
+          /**
+           * Alarm Runner start
+           */
+          startHabitAlarmRunner(
+            habits
+          );
+        } catch (error) {
+          console.error(
+            "Failed to load habits for alarm runner:",
+            error
+          );
+
+          if (!cancelled) {
+            /**
+             * কোনো habit পাওয়া না গেলে
+             * পুরোনো runner বন্ধ করে দিই।
+             */
+            stopHabitAlarmRunner();
+          }
+        }
+      };
+
+    void loadHabitsForAlarm();
+
+    return () => {
+      cancelled = true;
+      stopHabitAlarmRunner();
+    };
+  }, [refreshKey]);
+
   return (
     <main className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
+
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">
@@ -39,6 +112,7 @@ export default function HabitsPage() {
 
         {/* Tabs */}
         <div className="mb-8 grid grid-cols-2 rounded-xl bg-gray-100 p-1">
+
           <button
             type="button"
             onClick={() =>
@@ -66,11 +140,13 @@ export default function HabitsPage() {
           >
             ইতিহাস
           </button>
+
         </div>
 
         {/* Habits Tab */}
         {activeTab === "habits" && (
           <div className="space-y-8">
+
             {/* Add Habit */}
             <section>
               <AddHabitForm
@@ -92,9 +168,12 @@ export default function HabitsPage() {
               </h2>
 
               <HabitList
-                refreshKey={refreshKey}
+                refreshKey={
+                  refreshKey
+                }
               />
             </section>
+
           </div>
         )}
 
@@ -108,6 +187,7 @@ export default function HabitsPage() {
             <HabitHistory />
           </section>
         )}
+
       </div>
     </main>
   );

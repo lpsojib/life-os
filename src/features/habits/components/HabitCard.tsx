@@ -1,50 +1,82 @@
 "use client";
 
 import {
+  Bell,
+  BellOff,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  Flame,
+  Loader2,
+  Trash2,
+  Volume2,
+  VolumeX,
+} from "lucide-react";
+
+import {
   useMemo,
   useState,
 } from "react";
 
-import {
+import type {
   Habit,
+  HabitAlarm,
   HabitCompletion,
 } from "../types/habit.types";
+
+import {
+  getHabitAlarm,
+  saveHabitAlarmSettings,
+} from "../services/habit-alarm.service";
 
 interface HabitCardProps {
   habit: Habit;
   completions: HabitCompletion[];
+
   onToggle: (
     date: string,
     completed: boolean
   ) => void | Promise<void>;
+
   onDelete: (
     habitId: string
   ) => void | Promise<void>;
 }
 
-/**
- * Date → YYYY-MM-DD
- */
-const getDateKey = (date: Date) => {
-  const year = date.getFullYear();
+/* =========================================================
+   DATE HELPERS
+========================================================= */
 
-  const month = String(
-    date.getMonth() + 1
-  ).padStart(2, "0");
+const getDateKey = (
+  date: Date
+): string => {
+  const year =
+    date.getFullYear();
 
-  const day = String(
-    date.getDate()
-  ).padStart(2, "0");
+  const month =
+    String(
+      date.getMonth() + 1
+    ).padStart(2, "0");
+
+  const day =
+    String(
+      date.getDate()
+    ).padStart(2, "0");
 
   return `${year}-${month}-${day}`;
 };
 
-/**
- * YYYY-MM-DD → Local Date
- */
-const parseDate = (dateString: string) => {
-  const [year, month, day] =
-    dateString.split("-").map(Number);
+const parseDate = (
+  dateString: string
+): Date => {
+  const [
+    year,
+    month,
+    day,
+  ] = dateString
+    .split("-")
+    .map(Number);
 
   return new Date(
     year,
@@ -53,116 +85,99 @@ const parseDate = (dateString: string) => {
   );
 };
 
-/**
- * Current Week
- *
- * Saturday → Friday
- */
-const getCurrentWeekDays = () => {
-  const today = new Date();
+const getCurrentWeekDays =
+  (): Date[] => {
+    const today =
+      new Date();
 
-  today.setHours(0, 0, 0, 0);
-
-  const day = today.getDay();
-
-  /**
-   * JavaScript:
-   *
-   * Sunday = 0
-   * Monday = 1
-   * Tuesday = 2
-   * Wednesday = 3
-   * Thursday = 4
-   * Friday = 5
-   * Saturday = 6
-   */
-
-  const daysFromSaturday =
-    (day + 1) % 7;
-
-  const saturday = new Date(today);
-
-  saturday.setDate(
-    today.getDate() -
-      daysFromSaturday
-  );
-
-  const days: Date[] = [];
-
-  for (
-    let index = 0;
-    index < 7;
-    index++
-  ) {
-    const date = new Date(
-      saturday
+    today.setHours(
+      0,
+      0,
+      0,
+      0
     );
 
-    date.setDate(
-      saturday.getDate() + index
+    const day =
+      today.getDay();
+
+    const saturdayOffset =
+      day === 6
+        ? 0
+        : day + 1;
+
+    const saturday =
+      new Date(today);
+
+    saturday.setDate(
+      today.getDate() -
+        saturdayOffset
     );
 
-    days.push(date);
-  }
+    return Array.from(
+      {
+        length: 7,
+      },
+      (_, index) => {
+        const date =
+          new Date(
+            saturday
+          );
 
-  return days;
-};
+        date.setDate(
+          saturday.getDate() +
+            index
+        );
 
-/**
- * 12-hour time formatter
- *
- * 13:00 → 1:00 PM
- */
-const formatTime12Hour = (
-  time: string
-) => {
-  if (!time) {
-    return "";
-  }
+        return date;
+      }
+    );
+  };
 
-  const parts = time.split(":");
+const formatTime12Hour =
+  (
+    time: string
+  ): string => {
+    const [
+      hourString,
+      minute,
+    ] = time.split(":");
 
-  if (parts.length < 2) {
-    return time;
-  }
+    let hour =
+      Number(hourString);
 
-  const hour = Number(parts[0]);
-  const minute = parts[1];
+    const period =
+      hour >= 12
+        ? "PM"
+        : "AM";
 
-  if (Number.isNaN(hour)) {
-    return time;
-  }
+    hour =
+      hour % 12 || 12;
 
-  const period =
-    hour >= 12 ? "PM" : "AM";
+    return `${hour}:${minute} ${period}`;
+  };
 
-  const displayHour =
-    hour % 12 || 12;
+const formatDate =
+  (
+    dateString: string
+  ): string => {
+    const date =
+      parseDate(
+        dateString
+      );
 
-  return `${displayHour}:${minute} ${period}`;
-};
+    return date.toLocaleDateString(
+      "bn-BD",
+      {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      }
+    );
+  };
 
-/**
- * Bangla Date
- */
-const formatDate = (
-  dateString: string
-) => {
-  if (!dateString) {
-    return "";
-  }
-
-  return parseDate(
-    dateString
-  ).toLocaleDateString(
-    "bn-BD",
-    {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    }
-  );
-};
+/* =========================================================
+   COMPONENT
+========================================================= */
 
 export default function HabitCard({
   habit,
@@ -170,109 +185,109 @@ export default function HabitCard({
   onToggle,
   onDelete,
 }: HabitCardProps) {
-  /**
-   * Expand / Collapse
-   */
   const [expanded, setExpanded] =
     useState(false);
 
-  /**
-   * Delete Loading
-   */
   const [deleting, setDeleting] =
     useState(false);
 
-  /**
-   * Completion Map
-   */
-  const completionMap = useMemo(() => {
-    return new Map(
-      completions.map((item) => [
-        item.date,
-        item.completed,
-      ])
+  const [alarm, setAlarm] =
+    useState<HabitAlarm>(
+      () =>
+        getHabitAlarm(
+          habit
+        )
     );
-  }, [completions]);
 
-  /**
-   * Completed Count
-   */
-  const completedCount = useMemo(() => {
-    return completions.filter(
-      (item) => item.completed
-    ).length;
-  }, [completions]);
+  const [savingAlarm, setSavingAlarm] =
+    useState(false);
 
-  /**
-   * Start Date
-   */
-  const startDate = useMemo(() => {
-    return parseDate(
+  const [showAlarmSettings, setShowAlarmSettings] =
+    useState(false);
+
+  /* =======================================================
+     COMPLETION DATA
+  ======================================================= */
+
+  const completionMap =
+    useMemo(() => {
+      const map =
+        new Map<
+          string,
+          boolean
+        >();
+
+      completions.forEach(
+        (completion) => {
+          map.set(
+            completion.date,
+            completion.completed
+          );
+        }
+      );
+
+      return map;
+    }, [completions]);
+
+  const completedCount =
+    useMemo(
+      () =>
+        completions.filter(
+          (completion) =>
+            completion.completed
+        ).length,
+      [completions]
+    );
+
+  /* =======================================================
+     DATE / PROGRESS
+  ======================================================= */
+
+  const startDate =
+    parseDate(
       habit.startDate
     );
-  }, [habit.startDate]);
 
-  /**
-   * End Date
-   */
-  const endDate = useMemo(() => {
-    return parseDate(
+  const endDate =
+    parseDate(
       habit.endDate
     );
-  }, [habit.endDate]);
 
-  /**
-   * Today
-   */
-  const today = useMemo(() => {
-    const date = new Date();
+  const today =
+    new Date();
 
-    date.setHours(0, 0, 0, 0);
-
-    return date;
-  }, []);
-
-  /**
-   * Elapsed Days
-   */
-  const elapsedDays = useMemo(() => {
-    if (today < startDate) {
-      return 0;
-    }
-
-    if (today >= endDate) {
-      return habit.targetDays;
-    }
-
-    const difference =
-      today.getTime() -
-      startDate.getTime();
-
-    return Math.min(
-      habit.targetDays,
-      Math.floor(
-        difference /
-          (1000 * 60 * 60 * 24)
-      ) + 1
-    );
-  }, [
-    today,
-    startDate,
-    endDate,
-    habit.targetDays,
-  ]);
-
-  /**
-   * Missed Days
-   */
-  const missedCount = Math.max(
+  today.setHours(
     0,
-    elapsedDays - completedCount
+    0,
+    0,
+    0
   );
 
-  /**
-   * Progress
-   */
+  const elapsedDays =
+    Math.max(
+      1,
+      Math.min(
+        habit.targetDays,
+        Math.floor(
+          (
+            today.getTime() -
+            startDate.getTime()
+          ) /
+            (24 *
+              60 *
+              60 *
+              1000)
+        ) + 1
+      )
+    );
+
+  const missedCount =
+    Math.max(
+      0,
+      elapsedDays -
+        completedCount
+    );
+
   const progress =
     habit.targetDays > 0
       ? Math.min(
@@ -285,316 +300,637 @@ export default function HabitCard({
         )
       : 0;
 
-  /**
-   * Current Streak
-   */
-  const currentStreak = useMemo(() => {
-    let streak = 0;
+  /* =======================================================
+     STREAK
+  ======================================================= */
 
-    const currentDate =
-      new Date(today);
+  const currentStreak =
+    useMemo(() => {
+      let streak = 0;
 
-    if (today < startDate) {
-      return 0;
-    }
+      const cursor =
+        new Date();
 
-    if (today > endDate) {
-      currentDate.setTime(
-        endDate.getTime()
+      cursor.setHours(
+        0,
+        0,
+        0,
+        0
       );
-    }
 
-    while (
-      currentDate >= startDate
-    ) {
-      const dateKey =
-        getDateKey(currentDate);
+      while (true) {
+        const key =
+          getDateKey(
+            cursor
+          );
 
-      if (
-        completionMap.get(dateKey)
-      ) {
-        streak++;
+        if (
+          completionMap.get(
+            key
+          )
+        ) {
+          streak++;
 
-        currentDate.setDate(
-          currentDate.getDate() - 1
-        );
-      } else {
-        break;
+          cursor.setDate(
+            cursor.getDate() - 1
+          );
+        } else {
+          break;
+        }
       }
-    }
 
-    return streak;
-  }, [
-    today,
-    startDate,
-    endDate,
-    completionMap,
-  ]);
+      return streak;
+    }, [completionMap]);
 
-  /**
-   * Current Week
-   */
-  const currentWeekDays =
+  /* =======================================================
+     WEEK
+  ======================================================= */
+
+  const weekDays =
     getCurrentWeekDays();
 
-  /**
-   * Delete Habit
-   */
-  const handleDelete = async () => {
-    const confirmed =
-      window.confirm(
-        `আপনি কি "${habit.name}" habit টি delete করতে চান?`
-      );
+  const weekLabels = [
+    "শনি",
+    "রবি",
+    "সোম",
+    "মঙ্গল",
+    "বুধ",
+    "বৃহস্পতি",
+    "শুক্র",
+  ];
 
-    if (!confirmed) {
-      return;
-    }
+  /* =======================================================
+     ALARM SETTINGS
+  ======================================================= */
 
-    try {
+  const updateAlarm =
+    async (
+      changes: Partial<HabitAlarm>
+    ) => {
+      setSavingAlarm(true);
+
+      try {
+        const nextAlarm: HabitAlarm = {
+          ...alarm,
+          ...changes,
+        };
+
+        setAlarm(
+          nextAlarm
+        );
+
+        saveHabitAlarmSettings(
+          habit.id,
+          changes
+        );
+
+        window.dispatchEvent(
+          new CustomEvent(
+            "life-os-habit-alarm-updated",
+            {
+              detail: {
+                habitId:
+                  habit.id,
+                alarm:
+                  nextAlarm,
+              },
+            }
+          )
+        );
+      } catch (error) {
+        console.error(
+          "Alarm settings error:",
+          error
+        );
+      } finally {
+        setSavingAlarm(false);
+      }
+    };
+
+  /* =======================================================
+     DELETE
+  ======================================================= */
+
+  const handleDelete =
+    async () => {
+      const confirmed =
+        window.confirm(
+          `“${habit.name}” অভ্যাসটি delete করতে চান?`
+        );
+
+      if (!confirmed) {
+        return;
+      }
+
       setDeleting(true);
 
-      await onDelete(habit.id);
-    } catch (error) {
-      console.error(
-        "Delete habit error:",
-        error
-      );
-    } finally {
-      setDeleting(false);
-    }
-  };
+      try {
+        await onDelete(
+          habit.id
+        );
+      } catch {
+        setDeleting(false);
+      }
+    };
+
+  /* =======================================================
+     RENDER
+  ======================================================= */
 
   return (
-    <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md">
-      {/* =========================
-          COMPACT HEADER
-      ========================== */}
+    <div className="overflow-hidden rounded-2xl border bg-white shadow-sm">
+      {/* ===================================================
+          HEADER
+      =================================================== */}
 
-      <div className="flex items-center gap-3 p-3 sm:gap-4 sm:p-4">
-        {/* Progress Circle */}
+      <div className="p-4 sm:p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <h3 className="truncate text-base font-semibold text-gray-900 sm:text-lg">
+              {habit.name}
+            </h3>
 
-        <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full border-[6px] border-slate-100 sm:h-16 sm:w-16">
-          <div
-            className="absolute inset-[-6px] rounded-full"
-            style={{
-              background: `conic-gradient(
-                #2563eb ${progress * 3.6}deg,
-                transparent ${progress * 3.6}deg
-              )`,
-              mask:
-                "radial-gradient(farthest-side, transparent calc(100% - 6px), #000 0)",
-              WebkitMask:
-                "radial-gradient(farthest-side, transparent calc(100% - 6px), #000 0)",
-            }}
-          />
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+              <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-blue-600">
+                <Clock
+                  size={14}
+                />
 
-          <span className="relative text-xs font-bold text-slate-800 sm:text-sm">
-            {progress}%
-          </span>
-        </div>
-
-        {/* Habit Main Info */}
-
-        <div className="min-w-0 flex-1">
-          <h3 className="line-clamp-2 text-sm font-bold text-slate-900 sm:text-base">
-            {habit.name}
-          </h3>
-
-          <p className="mt-1 text-[11px] text-slate-500 sm:text-xs">
-            {habit.targetDays} দিনের অভ্যাস
-            <span className="mx-1">
-              •
-            </span>
-            প্রতিদিন{" "}
-            {formatTime12Hour(
-              habit.time
-            )}
-          </p>
-
-          <div className="mt-1.5 flex items-center gap-2">
-            <span className="rounded-md bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-600 sm:text-xs">
-              {progress}% সম্পন্ন
-            </span>
-
-            <span className="text-[10px] text-slate-500 sm:text-xs">
-              {completedCount}/
-              {habit.targetDays} দিন
-            </span>
-          </div>
-        </div>
-
-        {/* Expand Arrow */}
-
-        <button
-          type="button"
-          onClick={() =>
-            setExpanded(
-              (current) =>
-                !current
-            )
-          }
-          aria-label={
-            expanded
-              ? "Collapse habit details"
-              : "Expand habit details"
-          }
-          aria-expanded={expanded}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition-all duration-200 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 active:scale-95 sm:h-10 sm:w-10"
-        >
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className={`transition-transform duration-300 ${
-              expanded
-                ? "rotate-180"
-                : ""
-            }`}
-          >
-            <path d="m6 9 6 6 6-6" />
-          </svg>
-        </button>
-      </div>
-
-      {/* =========================
-          EXPANDED CONTENT
-      ========================== */}
-
-      {expanded && (
-        <div className="border-t border-slate-100 px-3 pb-4 pt-3 sm:px-4 sm:pb-5 sm:pt-4">
-          {/* Timeline */}
-
-          <div className="rounded-xl bg-slate-50 p-3 sm:p-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-[11px] text-slate-500 sm:text-xs">
-                  শুরু
-                </p>
-
-                <p className="mt-1 text-xs font-semibold text-slate-800 sm:text-sm">
-                  {formatDate(
-                    habit.startDate
-                  )}
-                </p>
-              </div>
-
-              <div>
-                <p className="text-[11px] text-slate-500 sm:text-xs">
-                  শেষ
-                </p>
-
-                <p className="mt-1 text-xs font-semibold text-slate-800 sm:text-sm">
-                  {formatDate(
-                    habit.endDate
-                  )}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* =========================
-              WEEKLY TRACKER
-          ========================== */}
-
-          <div className="mt-4">
-            <div className="mb-2.5 flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold text-slate-700">
-                  এই সপ্তাহ
-                </p>
-
-                <p className="mt-0.5 text-[11px] text-slate-400">
-                  শনিবার থেকে শুক্রবার
-                </p>
-              </div>
-
-              <span className="rounded-md bg-blue-50 px-2 py-1 text-[11px] font-semibold text-blue-600">
                 {formatTime12Hour(
                   habit.time
                 )}
               </span>
+
+              <span
+                className={
+                  alarm.enabled
+                    ? "inline-flex items-center gap-1 rounded-full bg-green-50 px-2.5 py-1 text-green-600"
+                    : "inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-gray-500"
+                }
+              >
+                {alarm.enabled ? (
+                  <Bell
+                    size={14}
+                  />
+                ) : (
+                  <BellOff
+                    size={14}
+                  />
+                )}
+
+                {alarm.enabled
+                  ? "Alarm On"
+                  : "Alarm Off"}
+              </span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() =>
+              setExpanded(
+                (value) =>
+                  !value
+              )
+            }
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border text-gray-500 transition hover:bg-gray-50"
+            aria-label="Expand habit"
+          >
+            {expanded ? (
+              <ChevronUp
+                size={18}
+              />
+            ) : (
+              <ChevronDown
+                size={18}
+              />
+            )}
+          </button>
+        </div>
+
+        {/* =================================================
+            PROGRESS
+        ================================================= */}
+
+        <div className="mt-4">
+          <div className="mb-1 flex items-center justify-between text-xs text-gray-500">
+            <span>
+              Progress
+            </span>
+
+            <span>
+              {completedCount}/
+              {habit.targetDays}
+            </span>
+          </div>
+
+          <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+            <div
+              className="h-full rounded-full bg-green-500 transition-all"
+              style={{
+                width: `${progress}%`,
+              }}
+            />
+          </div>
+        </div>
+
+        {/* =================================================
+            ALARM BUTTON
+        ================================================= */}
+
+        <button
+          type="button"
+          onClick={() =>
+            setShowAlarmSettings(
+              (value) =>
+                !value
+            )
+          }
+          className="mt-4 flex w-full items-center justify-between rounded-xl border border-orange-200 bg-orange-50 px-3 py-3 text-left transition hover:bg-orange-100"
+        >
+          <span className="flex items-center gap-2 text-sm font-medium text-orange-700">
+            {alarm.enabled ? (
+              <Bell
+                size={18}
+              />
+            ) : (
+              <BellOff
+                size={18}
+              />
+            )}
+
+            Alarm Settings
+          </span>
+
+          {showAlarmSettings ? (
+            <ChevronUp
+              size={18}
+              className="text-orange-600"
+            />
+          ) : (
+            <ChevronDown
+              size={18}
+              className="text-orange-600"
+            />
+          )}
+        </button>
+
+        {/* =================================================
+            ALARM SETTINGS
+        ================================================= */}
+
+        {showAlarmSettings && (
+          <div className="mt-3 rounded-2xl border bg-gray-50 p-4">
+            <div className="space-y-4">
+              {/* ON / OFF */}
+
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-gray-800">
+                    Habit Alarm
+                  </p>
+
+                  <p className="text-xs text-gray-500">
+                    সময়:{" "}
+                    {formatTime12Hour(
+                      habit.time
+                    )}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={savingAlarm}
+                  onClick={() =>
+                    void updateAlarm(
+                      {
+                        enabled:
+                          !alarm.enabled,
+                      }
+                    )
+                  }
+                  className={
+                    alarm.enabled
+                      ? "relative h-7 w-12 rounded-full bg-green-500 transition"
+                      : "relative h-7 w-12 rounded-full bg-gray-300 transition"
+                  }
+                  aria-label="Toggle alarm"
+                >
+                  <span
+                    className={
+                      alarm.enabled
+                        ? "absolute right-1 top-1 h-5 w-5 rounded-full bg-white shadow"
+                        : "absolute left-1 top-1 h-5 w-5 rounded-full bg-white shadow"
+                    }
+                  />
+                </button>
+              </div>
+
+              {/* SOUND */}
+
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                  <span className="inline-flex items-center gap-2">
+                    <Volume2
+                      size={16}
+                    />
+                    Alarm Sound
+                  </span>
+                </label>
+
+                <select
+                  value={alarm.sound}
+                  disabled={
+                    savingAlarm ||
+                    !alarm.enabled
+                  }
+                  onChange={(event) =>
+                    void updateAlarm(
+                      {
+                        sound:
+                          event.target
+                            .value as HabitAlarm["sound"],
+                      }
+                    )
+                  }
+                  className="w-full rounded-xl border bg-white px-3 py-2.5 text-sm outline-none focus:border-orange-400"
+                >
+                  <option value="default">
+                    Default
+                  </option>
+
+                  <option value="alarm">
+                    Alarm
+                  </option>
+
+                  <option value="bell">
+                    Bell
+                  </option>
+
+                  <option value="chime">
+                    Chime
+                  </option>
+
+                  <option value="digital">
+                    Digital
+                  </option>
+                </select>
+              </div>
+
+              {/* REPEAT */}
+
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                  Repeat
+                </label>
+
+                <select
+                  value={alarm.repeat}
+                  disabled={
+                    savingAlarm ||
+                    !alarm.enabled
+                  }
+                  onChange={(event) =>
+                    void updateAlarm(
+                      {
+                        repeat:
+                          event.target
+                            .value as HabitAlarm["repeat"],
+                      }
+                    )
+                  }
+                  className="w-full rounded-xl border bg-white px-3 py-2.5 text-sm outline-none focus:border-orange-400"
+                >
+                  <option value="none">
+                    একবার
+                  </option>
+
+                  <option value="daily">
+                    প্রতিদিন
+                  </option>
+
+                  <option value="weekdays">
+                    Weekdays
+                  </option>
+
+                  <option value="weekly">
+                    Weekly
+                  </option>
+                </select>
+              </div>
+
+              {/* SNOOZE */}
+
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                  Snooze
+                </label>
+
+                <select
+                  value={
+                    alarm.snoozeMinutes
+                  }
+                  disabled={
+                    savingAlarm ||
+                    !alarm.enabled
+                  }
+                  onChange={(event) =>
+                    void updateAlarm(
+                      {
+                        snoozeMinutes:
+                          Number(
+                            event.target
+                              .value
+                          ),
+                      }
+                    )
+                  }
+                  className="w-full rounded-xl border bg-white px-3 py-2.5 text-sm outline-none focus:border-orange-400"
+                >
+                  <option value={1}>
+                    1 মিনিট
+                  </option>
+
+                  <option value={5}>
+                    5 মিনিট
+                  </option>
+
+                  <option value={10}>
+                    10 মিনিট
+                  </option>
+
+                  <option value={15}>
+                    15 মিনিট
+                  </option>
+
+                  <option value={30}>
+                    30 মিনিট
+                  </option>
+                </select>
+              </div>
+
+              {/* VIBRATION */}
+
+              <button
+                type="button"
+                disabled={
+                  savingAlarm ||
+                  !alarm.enabled
+                }
+                onClick={() =>
+                  void updateAlarm(
+                    {
+                      vibration:
+                        !alarm.vibration,
+                    }
+                  )
+                }
+                className="flex w-full items-center justify-between rounded-xl border bg-white px-3 py-3"
+              >
+                <div className="text-left">
+                  <p className="text-sm font-medium text-gray-800">
+                    Vibration
+                  </p>
+
+                  <p className="text-xs text-gray-500">
+                    Alarm বাজলে vibration হবে
+                  </p>
+                </div>
+
+                <span
+                  className={
+                    alarm.vibration
+                      ? "flex h-7 w-7 items-center justify-center rounded-full bg-green-100 text-green-600"
+                      : "flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-gray-400"
+                  }
+                >
+                  {alarm.vibration ? (
+                    <Check
+                      size={16}
+                    />
+                  ) : (
+                    <VolumeX
+                      size={16}
+                    />
+                  )}
+                </span>
+              </button>
+
+              {savingAlarm && (
+                <div className="flex items-center justify-center gap-2 text-xs text-gray-500">
+                  <Loader2
+                    size={14}
+                    className="animate-spin"
+                  />
+
+                  Saving...
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ===================================================
+          EXPANDED DETAILS
+      =================================================== */}
+
+      {expanded && (
+        <div className="border-t bg-gray-50 p-4 sm:p-5">
+          {/* DATE */}
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-xl border bg-white p-3">
+              <p className="text-xs text-gray-500">
+                Start Date
+              </p>
+
+              <p className="mt-1 text-sm font-medium text-gray-800">
+                {formatDate(
+                  habit.startDate
+                )}
+              </p>
             </div>
 
-            {/* Week */}
+            <div className="rounded-xl border bg-white p-3">
+              <p className="text-xs text-gray-500">
+                End Date
+              </p>
 
-            <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
-              {currentWeekDays.map(
-                (date) => {
-                  const dateKey =
-                    getDateKey(date);
+              <p className="mt-1 text-sm font-medium text-gray-800">
+                {formatDate(
+                  habit.endDate
+                )}
+              </p>
+            </div>
+          </div>
+
+          {/* WEEKLY TRACKER */}
+
+          <div className="mt-4 rounded-xl border bg-white p-4">
+            <p className="mb-3 text-sm font-semibold text-gray-800">
+              এই সপ্তাহ
+            </p>
+
+            <div className="grid grid-cols-7 gap-1.5">
+              {weekDays.map(
+                (
+                  date,
+                  index
+                ) => {
+                  const key =
+                    getDateKey(
+                      date
+                    );
 
                   const completed =
                     completionMap.get(
-                      dateKey
-                    ) ?? false;
-
-                  const isBeforeStart =
-                    date < startDate;
-
-                  const isAfterEnd =
-                    date > endDate;
-
-                  const isFuture =
-                    date > today;
-
-                  const isDisabled =
-                    isBeforeStart ||
-                    isAfterEnd ||
-                    isFuture;
-
-                  const weekday =
-                    date.toLocaleDateString(
-                      "bn-BD",
-                      {
-                        weekday: "short",
-                      }
-                    );
+                      key
+                    ) === true;
 
                   const isToday =
-                    date.getTime() ===
-                    today.getTime();
+                    key ===
+                    getDateKey(
+                      today
+                    );
 
                   return (
                     <button
-                      key={dateKey}
+                      key={key}
                       type="button"
-                      disabled={isDisabled}
                       onClick={() =>
-                        onToggle(
-                          dateKey,
+                        void onToggle(
+                          key,
                           !completed
                         )
                       }
-                      className={`relative flex min-h-[64px] flex-col items-center justify-center rounded-lg border text-[9px] transition sm:min-h-[72px] sm:text-[10px] ${
-                        completed
-                          ? "border-green-200 bg-green-50 text-green-600"
-                          : isDisabled
-                            ? "border-slate-100 bg-slate-100 text-slate-300"
-                            : "border-slate-200 bg-slate-50 text-slate-500 hover:border-blue-200 hover:bg-blue-50"
-                      }`}
+                      className="flex flex-col items-center gap-1"
                     >
-                      {isToday && (
-                        <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-blue-500" />
-                      )}
-
-                      <span className="font-medium">
-                        {weekday}
+                      <span className="text-[10px] text-gray-500">
+                        {
+                          weekLabels[
+                            index
+                          ]
+                        }
                       </span>
 
-                      <span className="mt-0.5 text-sm font-bold sm:text-base">
-                        {date.getDate()}
+                      <span
+                        className={
+                          completed
+                            ? "flex h-8 w-8 items-center justify-center rounded-full bg-green-500 text-white"
+                            : isToday
+                              ? "flex h-8 w-8 items-center justify-center rounded-full border-2 border-blue-400 bg-blue-50 text-blue-600"
+                              : "flex h-8 w-8 items-center justify-center rounded-full border bg-gray-50 text-gray-400"
+                        }
+                      >
+                        {completed ? (
+                          <Check
+                            size={15}
+                          />
+                        ) : (
+                          date.getDate()
+                        )}
                       </span>
-
-                      {completed && (
-                        <span className="text-xs sm:text-sm">
-                          ✓
-                        </span>
-                      )}
                     </button>
                   );
                 }
@@ -602,110 +938,71 @@ export default function HabitCard({
             </div>
           </div>
 
-          {/* Stats */}
+          {/* STATS */}
 
           <div className="mt-4 grid grid-cols-3 gap-2">
-            {/* Target */}
-
-            <div className="rounded-lg bg-blue-50 p-2.5 text-center">
-              <p className="text-[10px] text-slate-500 sm:text-xs">
-                লক্ষ্য
+            <div className="rounded-xl border bg-white p-3 text-center">
+              <p className="text-xs text-gray-500">
+                Complete
               </p>
 
-              <p className="mt-0.5 text-base font-bold text-slate-900 sm:text-lg">
-                {habit.targetDays}
-              </p>
-            </div>
-
-            {/* Completed */}
-
-            <div className="rounded-lg bg-green-50 p-2.5 text-center">
-              <p className="text-[10px] text-slate-500 sm:text-xs">
-                সম্পন্ন
-              </p>
-
-              <p className="mt-0.5 text-base font-bold text-green-600 sm:text-lg">
+              <p className="mt-1 text-lg font-bold text-green-600">
                 {completedCount}
               </p>
             </div>
 
-            {/* Missed */}
-
-            <div className="rounded-lg bg-red-50 p-2.5 text-center">
-              <p className="text-[10px] text-slate-500 sm:text-xs">
-                বাদ
+            <div className="rounded-xl border bg-white p-3 text-center">
+              <p className="text-xs text-gray-500">
+                Missed
               </p>
 
-              <p className="mt-0.5 text-base font-bold text-red-500 sm:text-lg">
+              <p className="mt-1 text-lg font-bold text-red-500">
                 {missedCount}
               </p>
             </div>
-          </div>
 
-          {/* Streak */}
+            <div className="rounded-xl border bg-white p-3 text-center">
+              <p className="text-xs text-gray-500">
+                Streak
+              </p>
 
-          <div className="mt-3 flex items-center justify-between rounded-lg bg-orange-50 px-3 py-2.5">
-            <span className="text-xs text-slate-600 sm:text-sm">
-              ধারাবাহিকতা
-            </span>
+              <p className="mt-1 flex items-center justify-center gap-1 text-lg font-bold text-orange-500">
+                <Flame
+                  size={17}
+                />
 
-            <span className="text-sm font-bold text-orange-600">
-              🔥 {currentStreak} দিন
-            </span>
-          </div>
-
-          {/* Progress */}
-
-          <div className="mt-3">
-            <div className="mb-1.5 flex items-center justify-between text-xs">
-              <span className="text-slate-500">
-                অগ্রগতি
-              </span>
-
-              <span className="font-semibold text-slate-700">
-                {completedCount}/
-                {habit.targetDays} (
-                {progress}%)
-              </span>
+                {currentStreak}
+              </p>
             </div>
+          </div>
 
-            <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
-              <div
-                className="h-full rounded-full bg-blue-600 transition-all duration-500"
-                style={{
-                  width: `${progress}%`,
-                }}
+          {/* DELETE */}
+
+          <button
+            type="button"
+            disabled={deleting}
+            onClick={() =>
+              void handleDelete()
+            }
+            className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-600 transition hover:bg-red-100 disabled:opacity-50"
+          >
+            {deleting ? (
+              <Loader2
+                size={17}
+                className="animate-spin"
               />
-            </div>
-          </div>
+            ) : (
+              <Trash2
+                size={17}
+              />
+            )}
 
-          {/* =========================
-              DELETE
-          ========================== */}
-
-          <div className="mt-4 border-t border-slate-100 pt-3">
-            <button
-              type="button"
-              onClick={() =>
-                void handleDelete()
-              }
-              disabled={deleting}
-              className="flex w-full items-center justify-center gap-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2.5 text-xs font-semibold text-red-600 transition hover:border-red-200 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:px-4"
-            >
-              {deleting ? (
-                <>
-                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-red-300 border-t-red-600" />
-                  Delete হচ্ছে...
-                </>
-              ) : (
-                <>
-                  🗑️ Delete Habit
-                </>
-              )}
-            </button>
-          </div>
+            {deleting
+              ? "Deleting..."
+              : "Delete Habit"}
+          </button>
         </div>
       )}
-    </article>
+    </div>
   );
 }

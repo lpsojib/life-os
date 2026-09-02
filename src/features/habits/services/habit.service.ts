@@ -15,11 +15,38 @@ import { auth, db } from "@/lib/firebase";
 
 import {
   Habit,
+  HabitAlarm,
   HabitCompletion,
 } from "../types/habit.types";
 
 /* =========================================================
-   IndexedDB
+   DEFAULT ALARM
+========================================================= */
+
+const DEFAULT_HABIT_ALARM: HabitAlarm = {
+  enabled: true,
+  sound: "default",
+  repeat: "daily",
+  snoozeMinutes: 5,
+  vibration: true,
+};
+
+/**
+ * পুরোনো Habit data-এর সাথে compatibility রাখার জন্য
+ * default alarm যোগ করা হয়।
+ */
+const withDefaultAlarm = (
+  habit: Habit
+): Habit => ({
+  ...habit,
+  alarm: {
+    ...DEFAULT_HABIT_ALARM,
+    ...(habit.alarm ?? {}),
+  },
+});
+
+/* =========================================================
+   INDEXEDDB
 ========================================================= */
 
 const DB_NAME = "life-os-db";
@@ -31,12 +58,14 @@ const QUEUE_STORE = "habitSyncQueue";
 
 interface HabitSyncItem {
   id?: number;
+
   type:
     | "add-habit"
     | "update-habit"
     | "delete-habit"
     | "toggle-completion"
     | "complete-habit";
+
   habit?: Habit;
   habitId?: string;
   completion?: HabitCompletion;
@@ -47,12 +76,14 @@ interface HabitSyncItem {
 let databasePromise: Promise<IDBDatabase> | null = null;
 
 /**
- * Open IndexedDB
+ * Open IndexedDB.
  */
 const openDatabase = (): Promise<IDBDatabase> => {
   if (typeof window === "undefined") {
     return Promise.reject(
-      new Error("IndexedDB is only available in the browser.")
+      new Error(
+        "IndexedDB is only available in the browser."
+      )
     );
   }
 
@@ -60,84 +91,100 @@ const openDatabase = (): Promise<IDBDatabase> => {
     return databasePromise;
   }
 
-  databasePromise = new Promise((resolve, reject) => {
-    const request = window.indexedDB.open(
-      DB_NAME,
-      DB_VERSION
-    );
-
-    request.onupgradeneeded = () => {
-      const database = request.result;
-
-      if (!database.objectStoreNames.contains(HABITS_STORE)) {
-        const store = database.createObjectStore(
-          HABITS_STORE,
-          {
-            keyPath: "id",
-          }
+  databasePromise = new Promise(
+    (resolve, reject) => {
+      const request =
+        window.indexedDB.open(
+          DB_NAME,
+          DB_VERSION
         );
 
-        store.createIndex(
-          "status",
-          "status",
-          { unique: false }
-        );
-      }
+      request.onupgradeneeded = () => {
+        const database =
+          request.result;
 
-      if (
-        !database.objectStoreNames.contains(
-          COMPLETIONS_STORE
-        )
-      ) {
-        const store = database.createObjectStore(
-          COMPLETIONS_STORE,
-          {
-            keyPath: "id",
-          }
-        );
+        if (
+          !database.objectStoreNames.contains(
+            HABITS_STORE
+          )
+        ) {
+          const store =
+            database.createObjectStore(
+              HABITS_STORE,
+              {
+                keyPath: "id",
+              }
+            );
 
-        store.createIndex(
-          "habitId",
-          "habitId",
-          { unique: false }
-        );
+          store.createIndex(
+            "status",
+            "status",
+            {
+              unique: false,
+            }
+          );
+        }
 
-        store.createIndex(
-          "date",
-          "date",
-          { unique: false }
-        );
-      }
+        if (
+          !database.objectStoreNames.contains(
+            COMPLETIONS_STORE
+          )
+        ) {
+          const store =
+            database.createObjectStore(
+              COMPLETIONS_STORE,
+              {
+                keyPath: "id",
+              }
+            );
 
-      if (
-        !database.objectStoreNames.contains(
-          QUEUE_STORE
-        )
-      ) {
-        database.createObjectStore(
-          QUEUE_STORE,
-          {
-            keyPath: "id",
-            autoIncrement: true,
-          }
-        );
-      }
-    };
+          store.createIndex(
+            "habitId",
+            "habitId",
+            {
+              unique: false,
+            }
+          );
 
-    request.onsuccess = () => {
-      resolve(request.result);
-    };
+          store.createIndex(
+            "date",
+            "date",
+            {
+              unique: false,
+            }
+          );
+        }
 
-    request.onerror = () => {
-      reject(request.error);
-    };
-  });
+        if (
+          !database.objectStoreNames.contains(
+            QUEUE_STORE
+          )
+        ) {
+          database.createObjectStore(
+            QUEUE_STORE,
+            {
+              keyPath: "id",
+              autoIncrement: true,
+            }
+          );
+        }
+      };
+
+      request.onsuccess = () => {
+        resolve(request.result);
+      };
+
+      request.onerror = () => {
+        reject(request.error);
+      };
+    }
+  );
 
   return databasePromise;
 };
 
 /**
- * Run IndexedDB transaction
+ * Run IndexedDB transaction.
  */
 const runTransaction = async <T>(
   storeName: string,
@@ -146,103 +193,115 @@ const runTransaction = async <T>(
     store: IDBObjectStore
   ) => IDBRequest<T> | void
 ): Promise<T | undefined> => {
-  const database = await openDatabase();
+  const database =
+    await openDatabase();
 
-  return new Promise((resolve, reject) => {
-    const transaction =
-      database.transaction(
-        storeName,
-        mode
-      );
+  return new Promise(
+    (resolve, reject) => {
+      const transaction =
+        database.transaction(
+          storeName,
+          mode
+        );
 
-    const store =
-      transaction.objectStore(storeName);
+      const store =
+        transaction.objectStore(
+          storeName
+        );
 
-    let requestResult: T | undefined;
+      let requestResult:
+        | T
+        | undefined;
 
-    let request:
-      | IDBRequest<T>
-      | undefined;
-
-    try {
-      request = operation(store) as
+      let request:
         | IDBRequest<T>
         | undefined;
-    } catch (error) {
-      reject(error);
-      return;
-    }
 
-    if (request) {
-      request.onsuccess = () => {
-        requestResult = request.result;
+      try {
+        request =
+          operation(store) as
+            | IDBRequest<T>
+            | undefined;
+      } catch (error) {
+        reject(error);
+        return;
+      }
+
+      if (request) {
+        request.onsuccess = () => {
+          requestResult =
+            request?.result;
+        };
+
+        request.onerror = () => {
+          reject(request?.error);
+        };
+      }
+
+      transaction.oncomplete =
+        () => {
+          resolve(requestResult);
+        };
+
+      transaction.onerror = () => {
+        reject(transaction.error);
       };
 
-      request.onerror = () => {
-        reject(request.error);
+      transaction.onabort = () => {
+        reject(transaction.error);
       };
     }
-
-    transaction.oncomplete = () => {
-      resolve(requestResult);
-    };
-
-    transaction.onerror = () => {
-      reject(transaction.error);
-    };
-
-    transaction.onabort = () => {
-      reject(transaction.error);
-    };
-  });
+  );
 };
 
 /* =========================================================
-   Helpers
+   FIREBASE COLLECTIONS
+========================================================= */
+
+const getHabitsCollection =
+  () => {
+    const user =
+      auth.currentUser;
+
+    if (!user) {
+      throw new Error(
+        "User is not authenticated."
+      );
+    }
+
+    return collection(
+      db,
+      "users",
+      user.uid,
+      "habits"
+    );
+  };
+
+const getCompletionsCollection =
+  () => {
+    const user =
+      auth.currentUser;
+
+    if (!user) {
+      throw new Error(
+        "User is not authenticated."
+      );
+    }
+
+    return collection(
+      db,
+      "users",
+      user.uid,
+      "habitCompletions"
+    );
+  };
+
+/* =========================================================
+   HELPERS
 ========================================================= */
 
 /**
- * Current user's Habits collection
- */
-const getHabitsCollection = () => {
-  const user = auth.currentUser;
-
-  if (!user) {
-    throw new Error(
-      "User is not authenticated."
-    );
-  }
-
-  return collection(
-    db,
-    "users",
-    user.uid,
-    "habits"
-  );
-};
-
-/**
- * Current user's Habit Completions collection
- */
-const getCompletionsCollection = () => {
-  const user = auth.currentUser;
-
-  if (!user) {
-    throw new Error(
-      "User is not authenticated."
-    );
-  }
-
-  return collection(
-    db,
-    "users",
-    user.uid,
-    "habitCompletions"
-  );
-};
-
-/**
- * Generate local ID
+ * Generate local ID.
  */
 const generateLocalId = (
   prefix: string
@@ -253,7 +312,7 @@ const generateLocalId = (
 };
 
 /**
- * Calculate Habit End Date
+ * Calculate Habit End Date.
  */
 const calculateEndDate = (
   startDate: string,
@@ -263,7 +322,9 @@ const calculateEndDate = (
     `${startDate}T00:00:00`
   );
 
-  if (Number.isNaN(start.getTime())) {
+  if (
+    Number.isNaN(start.getTime())
+  ) {
     throw new Error(
       "Invalid habit start date."
     );
@@ -281,16 +342,20 @@ const calculateEndDate = (
   const end = new Date(start);
 
   end.setDate(
-    start.getDate() + targetDays - 1
+    start.getDate() +
+      targetDays -
+      1
   );
 
-  return end
-    .toISOString()
-    .split("T")[0];
+  return (
+    end
+      .toISOString()
+      .split("T")[0]
+  );
 };
 
 /**
- * Save habit locally
+ * Save habit locally.
  */
 const saveHabitLocally = async (
   habit: Habit
@@ -299,32 +364,41 @@ const saveHabitLocally = async (
     HABITS_STORE,
     "readwrite",
     (store) => {
-      store.put(habit);
+      store.put(
+        withDefaultAlarm(habit)
+      );
     }
   );
 };
 
 /**
- * Get all local habits
+ * Get all local habits.
  */
 const getLocalHabits =
   async (): Promise<Habit[]> => {
     const result =
-      await runTransaction<Habit[]>(
+      await runTransaction<
+        Habit[]
+      >(
         HABITS_STORE,
         "readonly",
-        (store) => store.getAll()
+        (store) =>
+          store.getAll()
       );
 
-    return result ?? [];
+    return (result ?? []).map(
+      withDefaultAlarm
+    );
   };
 
 /**
- * Get local habit
+ * Get one local habit.
  */
 const getLocalHabit = async (
   habitId: string
-): Promise<Habit | undefined> => {
+): Promise<
+  Habit | undefined
+> => {
   const result =
     await runTransaction<Habit>(
       HABITS_STORE,
@@ -333,26 +407,29 @@ const getLocalHabit = async (
         store.get(habitId)
     );
 
-  return result;
+  return result
+    ? withDefaultAlarm(result)
+    : undefined;
 };
 
 /**
- * Delete local habit
+ * Delete local habit.
  */
-const deleteLocalHabit = async (
-  habitId: string
-): Promise<void> => {
-  await runTransaction(
-    HABITS_STORE,
-    "readwrite",
-    (store) => {
-      store.delete(habitId);
-    }
-  );
-};
+const deleteLocalHabit =
+  async (
+    habitId: string
+  ): Promise<void> => {
+    await runTransaction(
+      HABITS_STORE,
+      "readwrite",
+      (store) => {
+        store.delete(habitId);
+      }
+    );
+  };
 
 /**
- * Save completion locally
+ * Save completion locally.
  */
 const saveCompletionLocally =
   async (
@@ -368,12 +445,14 @@ const saveCompletionLocally =
   };
 
 /**
- * Get local completions
+ * Get local completions.
  */
 const getLocalCompletions =
   async (
     habitId: string
-  ): Promise<HabitCompletion[]> => {
+  ): Promise<
+    HabitCompletion[]
+  > => {
     const database =
       await openDatabase();
 
@@ -396,12 +475,13 @@ const getLocalCompletions =
         const request =
           index.getAll(habitId);
 
-        request.onsuccess = () => {
-          resolve(
-            (request.result ??
-              []) as HabitCompletion[]
-          );
-        };
+        request.onsuccess =
+          () => {
+            resolve(
+              (request.result ??
+                []) as HabitCompletion[]
+            );
+          };
 
         request.onerror = () => {
           reject(request.error);
@@ -411,7 +491,7 @@ const getLocalCompletions =
   };
 
 /**
- * Delete local completions
+ * Delete local completions.
  */
 const deleteLocalCompletions =
   async (
@@ -422,7 +502,9 @@ const deleteLocalCompletions =
         habitId
       );
 
-    if (completions.length === 0) {
+    if (
+      completions.length === 0
+    ) {
       return;
     }
 
@@ -450,53 +532,88 @@ const deleteLocalCompletions =
           }
         );
 
-        transaction.oncomplete = () =>
-          resolve();
+        transaction.oncomplete =
+          () => resolve();
 
-        transaction.onerror = () =>
-          reject(transaction.error);
+        transaction.onerror =
+          () =>
+            reject(
+              transaction.error
+            );
 
-        transaction.onabort = () =>
-          reject(transaction.error);
+        transaction.onabort =
+          () =>
+            reject(
+              transaction.error
+            );
       }
     );
   };
 
 /**
- * Add item to sync queue
+ * Add item to sync queue.
  */
-const addToSyncQueue = async (
-  item: HabitSyncItem
-): Promise<void> => {
-  await runTransaction(
-    QUEUE_STORE,
-    "readwrite",
-    (store) => {
-      store.add(item);
-    }
-  );
-};
+const addToSyncQueue =
+  async (
+    item: HabitSyncItem
+  ): Promise<void> => {
+    await runTransaction(
+      QUEUE_STORE,
+      "readwrite",
+      (store) => {
+        store.add(item);
+      }
+    );
+  };
+
+/**
+ * Get all sync queue items.
+ */
+const getSyncQueue =
+  async (): Promise<
+    HabitSyncItem[]
+  > => {
+    const result =
+      await runTransaction<
+        HabitSyncItem[]
+      >(
+        QUEUE_STORE,
+        "readonly",
+        (store) =>
+          store.getAll()
+      );
+
+    return result ?? [];
+  };
+
+/**
+ * Delete queue item.
+ */
+const deleteQueueItem =
+  async (
+    id: number
+  ): Promise<void> => {
+    await runTransaction(
+      QUEUE_STORE,
+      "readwrite",
+      (store) => {
+        store.delete(id);
+      }
+    );
+  };
 
 /* =========================================================
    ADD HABIT
 ========================================================= */
 
-/**
- * Add a new Habit
- *
- * Online:
- * Firebase-এ save হবে।
- *
- * Offline:
- * IndexedDB-তে save হবে।
- */
 export const addHabit = async (
   name: string,
   targetDays: number,
   startDate: string,
   time: string
 ): Promise<string> => {
-  const user = auth.currentUser;
+  const user =
+    auth.currentUser;
 
   if (!user) {
     throw new Error(
@@ -504,7 +621,8 @@ export const addHabit = async (
     );
   }
 
-  const trimmedName = name.trim();
+  const trimmedName =
+    name.trim();
 
   if (!trimmedName) {
     throw new Error(
@@ -512,43 +630,56 @@ export const addHabit = async (
     );
   }
 
-  const endDate = calculateEndDate(
-    startDate,
-    targetDays
-  );
+  if (!time) {
+    throw new Error(
+      "Habit time is required."
+    );
+  }
+
+  const endDate =
+    calculateEndDate(
+      startDate,
+      targetDays
+    );
 
   const localId =
     generateLocalId("habit");
 
-  const habit: Habit = {
-    id: localId,
-    name: trimmedName,
-    targetDays,
-    startDate,
-    endDate,
-    time,
-    status: "active",
-    createdAt:
-      new Date().toISOString(),
-  };
-
-  /*
-   * LOCAL-FIRST
-   *
-   * The UI never waits for Firebase.
+  /**
+   * Habit.time-ই Alarm Time।
    */
-  await saveHabitLocally(habit);
+  const habit: Habit =
+    withDefaultAlarm({
+      id: localId,
+      name: trimmedName,
+      targetDays,
+      startDate,
+      endDate,
+      time,
+      status: "active",
+      createdAt:
+        new Date().toISOString(),
+      alarm: {
+        ...DEFAULT_HABIT_ALARM,
+      },
+    });
 
+  /**
+   * LOCAL-FIRST
+   */
+  await saveHabitLocally(
+    habit
+  );
+
+  /**
+   * Online হলে Firebase
+   * background-এ sync হবে।
+   */
   if (
-    typeof window !== "undefined" &&
+    typeof window !==
+      "undefined" &&
     navigator.onLine
   ) {
-    /*
-     * Firebase runs in the background.
-     *
-     * addHabit() returns immediately after
-     * the local IndexedDB save.
-     */
     void syncSingleHabitInBackground(
       habit
     );
@@ -556,13 +687,8 @@ export const addHabit = async (
     return localId;
   }
 
-  /*
-   * Offline:
-   * Keep a durable sync queue.
-   *
-   * This is intentionally awaited so an
-   * offline habit is not lost if the page
-   * closes immediately after creation.
+  /**
+   * Offline হলে durable queue.
    */
   await addToSyncQueue({
     type: "add-habit",
@@ -572,70 +698,90 @@ export const addHabit = async (
   return localId;
 };
 
-/**
- * Sync one newly-created habit in the
- * background when the browser is online.
- */
+/* =========================================================
+   BACKGROUND ADD SYNC
+========================================================= */
+
 const syncSingleHabitInBackground =
   async (
     habit: Habit
   ): Promise<void> => {
     try {
+      const normalizedHabit =
+        withDefaultAlarm(habit);
+
       const habitRef =
         await addDoc(
           getHabitsCollection(),
           {
-            name: habit.name,
+            name:
+              normalizedHabit.name,
+
             targetDays:
-              habit.targetDays,
+              normalizedHabit.targetDays,
+
             startDate:
-              habit.startDate,
+              normalizedHabit.startDate,
+
             endDate:
-              habit.endDate,
-            time: habit.time,
-            status: habit.status,
+              normalizedHabit.endDate,
+
+            /**
+             * Habit time = Alarm time
+             */
+            time:
+              normalizedHabit.time,
+
+            status:
+              normalizedHabit.status,
+
+            /**
+             * IMPORTANT:
+             * Alarm Firebase-এও save হবে।
+             */
+            alarm:
+              normalizedHabit.alarm,
+
             createdAt:
               Timestamp.fromDate(
                 new Date(
-                  habit.createdAt
+                  normalizedHabit.createdAt
                 )
               ),
           }
         );
 
       await deleteLocalHabit(
-        habit.id
+        normalizedHabit.id
       );
 
-      const firebaseHabit: Habit = {
-        ...habit,
-        id: habitRef.id,
-      };
+      const firebaseHabit: Habit =
+        {
+          ...normalizedHabit,
+          id: habitRef.id,
+        };
 
       await saveHabitLocally(
         firebaseHabit
       );
 
-      /*
-       * If the user completed/toggled this
-       * local habit before Firebase finished,
-       * move those queued operations to the
-       * real Firebase habit ID.
-       */
       await replaceQueuedHabitId(
-        habit.id,
+        normalizedHabit.id,
         habitRef.id
       );
 
       if (
-        typeof window !== "undefined"
+        typeof window !==
+        "undefined"
       ) {
         window.dispatchEvent(
           new CustomEvent(
             "life-os-habit-synced",
             {
               detail: {
-                localId: habit.id,
+                localId:
+                  normalizedHabit.id,
+
                 firebaseId:
                   habitRef.id,
               },
@@ -649,10 +795,6 @@ const syncSingleHabitInBackground =
         error
       );
 
-      /*
-       * Firebase failed. Keep the local copy
-       * and put it into the durable queue.
-       */
       try {
         await addToSyncQueue({
           type: "add-habit",
@@ -667,10 +809,10 @@ const syncSingleHabitInBackground =
     }
   };
 
-/**
- * Replace a temporary local habit ID in
- * queued completion operations.
- */
+/* =========================================================
+   REPLACE LOCAL HABIT ID IN QUEUE
+========================================================= */
+
 const replaceQueuedHabitId =
   async (
     localId: string,
@@ -682,7 +824,8 @@ const replaceQueuedHabitId =
     const relatedItems =
       queue.filter(
         (item) =>
-          item.habitId === localId
+          item.habitId ===
+          localId
       );
 
     if (
@@ -719,7 +862,10 @@ const replaceQueuedHabitId =
 
           store.put({
             ...item,
-            habitId: firebaseId,
+
+            habitId:
+              firebaseId,
+
             completion:
               item.completion
                 ? {
@@ -731,33 +877,33 @@ const replaceQueuedHabitId =
           });
         }
 
-        transaction.oncomplete = () =>
-          resolve();
+        transaction.oncomplete =
+          () => resolve();
 
-        transaction.onerror = () =>
-          reject(
-            transaction.error
-          );
+        transaction.onerror =
+          () =>
+            reject(
+              transaction.error
+            );
 
-        transaction.onabort = () =>
-          reject(
-            transaction.error
-          );
+        transaction.onabort =
+          () =>
+            reject(
+              transaction.error
+            );
       }
     );
   };
 
-/**
- * Refresh habits from Firebase in the
- * background.
- *
- * This function is intentionally separate
- * from getHabits() so reads stay instant.
- */
+/* =========================================================
+   REFRESH HABITS FROM FIREBASE
+========================================================= */
+
 export const refreshHabitsFromFirebase =
   async (): Promise<void> => {
     if (
-      typeof window === "undefined" ||
+      typeof window ===
+        "undefined" ||
       !navigator.onLine ||
       !auth.currentUser
     ) {
@@ -768,11 +914,13 @@ export const refreshHabitsFromFirebase =
       const habitsQuery =
         query(
           getHabitsCollection(),
+
           where(
             "status",
             "==",
             "active"
           ),
+
           orderBy(
             "createdAt",
             "desc"
@@ -790,25 +938,42 @@ export const refreshHabitsFromFirebase =
             const data =
               item.data();
 
-            const habit: Habit = {
-              id: item.id,
-              name:
-                data.name ?? "",
-              targetDays:
-                data.targetDays ?? 0,
-              startDate:
-                data.startDate ?? "",
-              endDate:
-                data.endDate ?? "",
-              time:
-                data.time ?? "",
-              status: "active",
-              createdAt:
-                data.createdAt
-                  ?.toDate?.()
-                  ?.toISOString() ??
-                new Date().toISOString(),
-            };
+            const habit: Habit =
+              withDefaultAlarm({
+                id: item.id,
+
+                name:
+                  data.name ?? "",
+
+                targetDays:
+                  data.targetDays ??
+                  0,
+
+                startDate:
+                  data.startDate ??
+                  "",
+
+                endDate:
+                  data.endDate ??
+                  "",
+
+                time:
+                  data.time ?? "",
+
+                status: "active",
+
+                alarm: {
+                  ...DEFAULT_HABIT_ALARM,
+                  ...(data.alarm ??
+                    {}),
+                },
+
+                createdAt:
+                  data.createdAt
+                    ?.toDate?.()
+                    ?.toISOString() ??
+                  new Date().toISOString(),
+              });
 
             await saveHabitLocally(
               habit
@@ -816,7 +981,6 @@ export const refreshHabitsFromFirebase =
           }
         )
       );
-
     } catch (error) {
       console.error(
         "Background habit refresh failed:",
@@ -825,16 +989,17 @@ export const refreshHabitsFromFirebase =
     }
   };
 
-/**
- * Refresh one habit's completions from
- * Firebase in the background.
- */
+/* =========================================================
+   REFRESH COMPLETIONS FROM FIREBASE
+========================================================= */
+
 export const refreshHabitCompletionsFromFirebase =
   async (
     habitId: string
   ): Promise<void> => {
     if (
-      typeof window === "undefined" ||
+      typeof window ===
+        "undefined" ||
       !navigator.onLine ||
       !auth.currentUser ||
       habitId.startsWith(
@@ -848,11 +1013,13 @@ export const refreshHabitCompletionsFromFirebase =
       const completionsQuery =
         query(
           getCompletionsCollection(),
+
           where(
             "habitId",
             "==",
             habitId
           ),
+
           orderBy(
             "date",
             "asc"
@@ -870,23 +1037,27 @@ export const refreshHabitCompletionsFromFirebase =
             const data =
               item.data();
 
-            const completion:
-              HabitCompletion = {
-              id: item.id,
-              habitId:
-                data.habitId ??
-                habitId,
-              date:
-                data.date ?? "",
-              completed:
-                data.completed ??
-                false,
-              createdAt:
-                data.createdAt
-                  ?.toDate?.()
-                  ?.toISOString() ??
-                new Date().toISOString(),
-            };
+            const completion: HabitCompletion =
+              {
+                id: item.id,
+
+                habitId:
+                  data.habitId ??
+                  habitId,
+
+                date:
+                  data.date ?? "",
+
+                completed:
+                  data.completed ??
+                  false,
+
+                createdAt:
+                  data.createdAt
+                    ?.toDate?.()
+                    ?.toISOString() ??
+                  new Date().toISOString(),
+              };
 
             await saveCompletionLocally(
               completion
@@ -894,7 +1065,6 @@ export const refreshHabitCompletionsFromFirebase =
           }
         )
       );
-
     } catch (error) {
       console.error(
         "Background completion refresh failed:",
@@ -907,48 +1077,47 @@ export const refreshHabitCompletionsFromFirebase =
    GET HABITS
 ========================================================= */
 
-/**
- * Get Active Habits
- */
 export const getHabits =
-  async (): Promise<Habit[]> => {
-    /*
+  async (): Promise<
+    Habit[]
+  > => {
+    /**
      * LOCAL-FIRST
-     *
-     * Never wait for Firebase here.
      */
     const localHabits =
       await getLocalHabits();
 
-    const activeLocalHabits =
-      localHabits
-        .filter(
-          (habit) =>
-            habit.status === "active"
-        )
-        .sort(
-          (a, b) =>
-            b.createdAt.localeCompare(
-              a.createdAt
-            )
-        );
-
-    return activeLocalHabits;
+    return localHabits
+      .filter(
+        (habit) =>
+          habit.status ===
+          "active"
+      )
+      .sort(
+        (a, b) =>
+          b.createdAt.localeCompare(
+            a.createdAt
+          )
+      )
+      .map(withDefaultAlarm);
   };
 
 /* =========================================================
    COMPLETED HABITS
 ========================================================= */
 
-/**
- * Get Completed Habits
- */
 export const getCompletedHabits =
-  async (): Promise<Habit[]> => {
+  async (): Promise<
+    Habit[]
+  > => {
     const localHabits =
       await getLocalHabits();
 
-    if (!navigator.onLine) {
+    if (
+      typeof navigator !==
+        "undefined" &&
+      !navigator.onLine
+    ) {
       return localHabits
         .filter(
           (habit) =>
@@ -960,18 +1129,21 @@ export const getCompletedHabits =
             b.createdAt.localeCompare(
               a.createdAt
             )
-        );
+        )
+        .map(withDefaultAlarm);
     }
 
     try {
       const habitsQuery =
         query(
           getHabitsCollection(),
+
           where(
             "status",
             "==",
             "completed"
           ),
+
           orderBy(
             "createdAt",
             "desc"
@@ -989,32 +1161,46 @@ export const getCompletedHabits =
             const data =
               item.data();
 
-            const habit: Habit = {
+            return withDefaultAlarm({
               id: item.id,
+
               name:
                 data.name ?? "",
+
               targetDays:
-                data.targetDays ?? 0,
+                data.targetDays ??
+                0,
+
               startDate:
-                data.startDate ?? "",
+                data.startDate ??
+                "",
+
               endDate:
                 data.endDate ?? "",
+
               time:
                 data.time ?? "",
+
               status:
                 "completed",
+
+              alarm: {
+                ...DEFAULT_HABIT_ALARM,
+                ...(data.alarm ?? {}),
+              },
+
               createdAt:
                 data.createdAt
                   ?.toDate?.()
                   ?.toISOString() ??
                 new Date().toISOString(),
-            };
-
-            return habit;
+            });
           }
         );
 
-      for (const habit of firebaseHabits) {
+      for (
+        const habit of firebaseHabits
+      ) {
         await saveHabitLocally(
           habit
         );
@@ -1027,11 +1213,13 @@ export const getCompletedHabits =
         error
       );
 
-      return localHabits.filter(
-        (habit) =>
-          habit.status ===
-          "completed"
-      );
+      return localHabits
+        .filter(
+          (habit) =>
+            habit.status ===
+            "completed"
+        )
+        .map(withDefaultAlarm);
     }
   };
 
@@ -1039,16 +1227,12 @@ export const getCompletedHabits =
    HABIT COMPLETIONS
 ========================================================= */
 
-/**
- * Get Habit Completions
- */
 export const getHabitCompletions =
   async (
     habitId: string
-  ): Promise<HabitCompletion[]> => {
-    /*
-     * LOCAL-FIRST.
-     */
+  ): Promise<
+    HabitCompletion[]
+  > => {
     const localCompletions =
       await getLocalCompletions(
         habitId
@@ -1066,18 +1250,14 @@ export const getHabitCompletions =
    TOGGLE COMPLETION
 ========================================================= */
 
-/**
- * Toggle Habit Completion
- *
- * Offline + Online compatible.
- */
 export const toggleHabitCompletion =
   async (
     habitId: string,
     date: string,
     completed: boolean
   ): Promise<void> => {
-    const user = auth.currentUser;
+    const user =
+      auth.currentUser;
 
     if (!user) {
       throw new Error(
@@ -1103,31 +1283,43 @@ export const toggleHabitCompletion =
           generateLocalId(
             "completion"
           ),
+
         habitId,
+
         date,
+
         completed,
+
         createdAt:
           existing?.createdAt ??
           new Date().toISOString(),
       };
 
     /**
-     * Save locally immediately.
+     * Local-first.
      */
     await saveCompletionLocally(
       completion
     );
 
     /**
-     * Offline queue.
+     * Offline.
      */
-    if (!navigator.onLine) {
+    if (
+      typeof navigator !==
+        "undefined" &&
+      !navigator.onLine
+    ) {
       await addToSyncQueue({
         type:
           "toggle-completion",
+
         habitId,
+
         date,
+
         completed,
+
         completion,
       });
 
@@ -1144,11 +1336,13 @@ export const toggleHabitCompletion =
       const existingQuery =
         query(
           completionsCollection,
+
           where(
             "habitId",
             "==",
             habitId
           ),
+
           where(
             "date",
             "==",
@@ -1161,7 +1355,9 @@ export const toggleHabitCompletion =
           existingQuery
         );
 
-      if (!snapshot.empty) {
+      if (
+        !snapshot.empty
+      ) {
         await updateDoc(
           doc(
             db,
@@ -1175,10 +1371,6 @@ export const toggleHabitCompletion =
           }
         );
 
-        /**
-         * Replace local temporary
-         * completion with Firebase ID.
-         */
         await runTransaction(
           COMPLETIONS_STORE,
           "readwrite",
@@ -1191,7 +1383,8 @@ export const toggleHabitCompletion =
 
         await saveCompletionLocally({
           ...completion,
-          id: snapshot.docs[0].id,
+          id:
+            snapshot.docs[0].id,
         });
 
         return;
@@ -1202,8 +1395,11 @@ export const toggleHabitCompletion =
           completionsCollection,
           {
             habitId,
+
             date,
+
             completed,
+
             createdAt:
               Timestamp.fromDate(
                 new Date(
@@ -1236,9 +1432,13 @@ export const toggleHabitCompletion =
       await addToSyncQueue({
         type:
           "toggle-completion",
+
         habitId,
+
         date,
+
         completed,
+
         completion,
       });
     }
@@ -1248,14 +1448,12 @@ export const toggleHabitCompletion =
    COMPLETE HABIT
 ========================================================= */
 
-/**
- * Mark Habit as Completed
- */
 export const completeHabit =
   async (
     habitId: string
   ): Promise<void> => {
-    const user = auth.currentUser;
+    const user =
+      auth.currentUser;
 
     if (!user) {
       throw new Error(
@@ -1275,7 +1473,11 @@ export const completeHabit =
       });
     }
 
-    if (!navigator.onLine) {
+    if (
+      typeof navigator !==
+        "undefined" &&
+      !navigator.onLine
+    ) {
       await addToSyncQueue({
         type: "complete-habit",
         habitId,
@@ -1314,21 +1516,12 @@ export const completeHabit =
    DELETE HABIT
 ========================================================= */
 
-/**
- * Delete Active / Completed Habit
- *
- * Offline:
- * Local habit + completion records
- * immediately delete হবে।
- *
- * Online:
- * Firebase থেকেও delete হবে।
- */
 export const deleteHabit =
   async (
     habitId: string
   ): Promise<void> => {
-    const user = auth.currentUser;
+    const user =
+      auth.currentUser;
 
     if (!user) {
       throw new Error(
@@ -1337,7 +1530,7 @@ export const deleteHabit =
     }
 
     /**
-     * Delete locally first.
+     * Local-first delete.
      */
     await deleteLocalHabit(
       habitId
@@ -1348,9 +1541,13 @@ export const deleteHabit =
     );
 
     /**
-     * Offline → queue delete.
+     * Offline queue.
      */
-    if (!navigator.onLine) {
+    if (
+      typeof navigator !==
+        "undefined" &&
+      !navigator.onLine
+    ) {
       await addToSyncQueue({
         type: "delete-habit",
         habitId,
@@ -1361,7 +1558,8 @@ export const deleteHabit =
 
     try {
       /**
-       * Delete Firebase habit.
+       * Local temporary ID হলে
+       * Firebase delete করার দরকার নেই।
        */
       if (
         !habitId.startsWith(
@@ -1379,12 +1577,10 @@ export const deleteHabit =
         );
       }
 
-      /**
-       * Delete Firebase completions.
-       */
       const completionsQuery =
         query(
           getCompletionsCollection(),
+
           where(
             "habitId",
             "==",
@@ -1428,63 +1624,29 @@ export const deleteHabit =
    SYNC PENDING HABITS
 ========================================================= */
 
-/**
- * Get all pending queue items
- */
-const getSyncQueue =
-  async (): Promise<
-    HabitSyncItem[]
-  > => {
-    const result =
-      await runTransaction<
-        HabitSyncItem[]
-      >(
-        QUEUE_STORE,
-        "readonly",
-        (store) =>
-          store.getAll()
-      );
-
-    return result ?? [];
-  };
-
-/**
- * Delete queue item
- */
-const deleteQueueItem =
-  async (
-    id: number
-  ): Promise<void> => {
-    await runTransaction(
-      QUEUE_STORE,
-      "readwrite",
-      (store) => {
-        store.delete(id);
-      }
-    );
-  };
-
-/**
- * Sync offline habits
- *
- * Call this when browser becomes online.
- */
 export const syncPendingHabits =
   async (): Promise<void> => {
-    const user = auth.currentUser;
+    const user =
+      auth.currentUser;
 
     if (!user) {
       return;
     }
 
-    if (!navigator.onLine) {
+    if (
+      typeof navigator !==
+        "undefined" &&
+      !navigator.onLine
+    ) {
       return;
     }
 
     const queue =
       await getSyncQueue();
 
-    for (const item of queue) {
+    for (
+      const item of queue
+    ) {
       if (
         typeof item.id !==
         "number"
@@ -1493,33 +1655,56 @@ export const syncPendingHabits =
       }
 
       try {
-        /**
-         * ADD HABIT
-         */
+        /* =================================================
+           ADD HABIT
+        ================================================= */
+
         if (
           item.type ===
             "add-habit" &&
           item.habit
         ) {
           const habit =
-            item.habit;
+            withDefaultAlarm(
+              item.habit
+            );
 
+          /**
+           * IMPORTANT:
+           * Offline habit-এর alarm-ও
+           * Firebase-এ যাবে।
+           */
           const habitRef =
             await addDoc(
               getHabitsCollection(),
               {
                 name:
                   habit.name,
+
                 targetDays:
                   habit.targetDays,
+
                 startDate:
                   habit.startDate,
+
                 endDate:
                   habit.endDate,
+
+                /**
+                 * Habit.time = Alarm time
+                 */
                 time:
                   habit.time,
+
                 status:
                   habit.status,
+
+                /**
+                 * IMPORTANT FIX
+                 */
+                alarm:
+                  habit.alarm,
+
                 createdAt:
                   Timestamp.fromDate(
                     new Date(
@@ -1538,20 +1723,16 @@ export const syncPendingHabits =
             id: habitRef.id,
           });
 
-          /*
-           * Any completion operations created
-           * while the habit was offline must now
-           * use the real Firebase habit ID.
-           */
           await replaceQueuedHabitId(
             habit.id,
             habitRef.id
           );
         }
 
-        /**
-         * COMPLETE HABIT
-         */
+        /* =================================================
+           COMPLETE HABIT
+        ================================================= */
+
         if (
           item.type ===
             "complete-habit" &&
@@ -1578,9 +1759,10 @@ export const syncPendingHabits =
           }
         }
 
-        /**
-         * DELETE HABIT
-         */
+        /* =================================================
+           DELETE HABIT
+        ================================================= */
+
         if (
           item.type ===
             "delete-habit" &&
@@ -1602,13 +1784,16 @@ export const syncPendingHabits =
                 )
               );
             } catch {
-              // Firebase document may
-              // already be deleted.
+              /**
+               * Firebase document
+               * may already be deleted.
+               */
             }
 
             const completionsQuery =
               query(
                 getCompletionsCollection(),
+
                 where(
                   "habitId",
                   "==",
@@ -1638,9 +1823,10 @@ export const syncPendingHabits =
           }
         }
 
-        /**
-         * TOGGLE COMPLETION
-         */
+        /* =================================================
+           TOGGLE COMPLETION
+        ================================================= */
+
         if (
           item.type ===
             "toggle-completion" &&
@@ -1650,20 +1836,14 @@ export const syncPendingHabits =
             "boolean"
         ) {
           /**
-           * If this completion belongs
-           * to a local habit that was
-           * just added, we cannot sync
-           * it until the habit has a
-           * Firebase ID.
+           * Local habit-এর Firebase ID
+           * না পাওয়া পর্যন্ত wait করবে।
            */
           if (
             item.habitId.startsWith(
               "local-habit-"
             )
           ) {
-            /**
-             * Keep it in queue.
-             */
             continue;
           }
 
@@ -1673,11 +1853,13 @@ export const syncPendingHabits =
           const existingQuery =
             query(
               completionsCollection,
+
               where(
                 "habitId",
                 "==",
                 item.habitId
               ),
+
               where(
                 "date",
                 "==",
@@ -1690,7 +1872,9 @@ export const syncPendingHabits =
               existingQuery
             );
 
-          if (!snapshot.empty) {
+          if (
+            !snapshot.empty
+          ) {
             await updateDoc(
               doc(
                 db,
@@ -1710,10 +1894,13 @@ export const syncPendingHabits =
               {
                 habitId:
                   item.habitId,
+
                 date:
                   item.date,
+
                 completed:
                   item.completed,
+
                 createdAt:
                   Timestamp.now(),
               }
@@ -1721,9 +1908,10 @@ export const syncPendingHabits =
           }
         }
 
-        /**
-         * Successfully synced.
-         */
+        /* =================================================
+           SUCCESS
+        ================================================= */
+
         await deleteQueueItem(
           item.id
         );
@@ -1735,8 +1923,8 @@ export const syncPendingHabits =
         );
 
         /**
-         * Stop here so remaining
-         * items can retry later.
+         * একটি item fail করলে এখানে stop করবে।
+         * পরের online sync-এ আবার চেষ্টা করবে।
          */
         break;
       }
