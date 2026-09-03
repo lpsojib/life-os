@@ -3,11 +3,11 @@
 import {
   useCallback,
   useEffect,
+  useRef,
   useState,
 } from "react";
 
 import {
-  Bell,
   BellRing,
   Clock,
   Moon,
@@ -75,6 +75,10 @@ interface AlarmEventDetail {
 const parseDate = (
   dateString: string
 ): Date => {
+  if (!dateString) {
+    return new Date(NaN);
+  }
+
   const [
     year,
     month,
@@ -82,6 +86,14 @@ const parseDate = (
   ] = dateString
     .split("-")
     .map(Number);
+
+  if (
+    !year ||
+    !month ||
+    !day
+  ) {
+    return new Date(NaN);
+  }
 
   return new Date(
     year,
@@ -91,7 +103,8 @@ const parseDate = (
 };
 
 const getToday = (): Date => {
-  const today = new Date();
+  const today =
+    new Date();
 
   today.setHours(
     0,
@@ -148,9 +161,9 @@ export default function HabitList({
   refreshKey = 0,
 }: HabitListProps) {
   const [items, setItems] =
-    useState<HabitWithCompletions[]>(
-      []
-    );
+    useState<
+      HabitWithCompletions[]
+    >([]);
 
   const [loading, setLoading] =
     useState(true);
@@ -158,12 +171,22 @@ export default function HabitList({
   const [error, setError] =
     useState("");
 
-  /* =======================================================
-     RINGING ALARM
-  ======================================================= */
-
   const [ringingAlarm, setRingingAlarm] =
     useState<AlarmEventDetail | null>(
+      null
+    );
+
+  /*
+   * Prevent multiple simultaneous loads.
+   */
+  const loadingRef =
+    useRef(false);
+
+  /*
+   * Track current authenticated user.
+   */
+  const currentUserIdRef =
+    useRef<string | null>(
       null
     );
 
@@ -176,8 +199,21 @@ export default function HabitList({
       async (
         showLoading = false
       ) => {
+        /*
+         * Do not start duplicate local loads.
+         */
+        if (
+          loadingRef.current
+        ) {
+          return;
+        }
+
+        loadingRef.current = true;
+
         try {
-          if (showLoading) {
+          if (
+            showLoading
+          ) {
             setLoading(true);
           }
 
@@ -189,16 +225,33 @@ export default function HabitList({
           const habitsWithCompletions =
             await Promise.all(
               habits.map(
-                async (habit) => {
-                  const completions =
-                    await getHabitCompletions(
-                      habit.id
+                async (
+                  habit
+                ) => {
+                  try {
+                    const completions =
+                      await getHabitCompletions(
+                        habit.id
+                      );
+
+                    return {
+                      habit,
+                      completions,
+                    };
+                  } catch (
+                    completionError
+                  ) {
+                    console.error(
+                      `Failed to load completions for habit ${habit.id}:`,
+                      completionError
                     );
 
-                  return {
-                    habit,
-                    completions,
-                  };
+                    return {
+                      habit,
+                      completions:
+                        [],
+                    };
+                  }
                 }
               )
             );
@@ -219,13 +272,23 @@ export default function HabitList({
                 item.habit.endDate
               );
 
+            /*
+             * Keep the habit visible ON the end date.
+             * Only remove/complete it after the end date.
+             */
             if (
-              today >= endDate
+              !Number.isNaN(
+                endDate.getTime()
+              ) &&
+              today >
+                endDate
             ) {
               void completeHabit(
                 item.habit.id
               ).catch(
-                (completeError) => {
+                (
+                  completeError
+                ) => {
                   console.error(
                     "Auto complete habit error:",
                     completeError
@@ -245,31 +308,61 @@ export default function HabitList({
             activeItems
           );
 
+          /*
+           * Update alarm runner immediately
+           * using local data.
+           */
           setAlarmHabits(
             activeItems.map(
-              (item) =>
+              (
+                item
+              ) =>
                 item.habit
             )
           );
 
-          activeItems.forEach(
-            (item) => {
+          /*
+           * Notification check.
+           */
+          for (
+            const item of
+              activeItems
+          ) {
+            try {
               notifyHabitIfNeeded(
                 item.habit
               );
+            } catch (
+              notificationError
+            ) {
+              console.error(
+                "Habit notification error:",
+                notificationError
+              );
             }
-          );
-        } catch (loadError) {
+          }
+        } catch (
+          loadError
+        ) {
           console.error(
             "Load habits error:",
             loadError
           );
 
+          /*
+           * Only show error if there is
+           * actually no local data.
+           */
           setError(
             "অভ্যাসগুলো লোড করা যায়নি।"
           );
         } finally {
-          if (showLoading) {
+          loadingRef.current =
+            false;
+
+          if (
+            showLoading
+          ) {
             setLoading(false);
           }
         }
@@ -285,7 +378,7 @@ export default function HabitList({
     useCallback(
       async () => {
         if (
-          typeof navigator ===
+          typeof window ===
           "undefined"
         ) {
           return;
@@ -297,27 +390,53 @@ export default function HabitList({
           return;
         }
 
+        if (
+          !auth.currentUser
+        ) {
+          return;
+        }
+
         try {
+          /*
+           * First push pending offline changes.
+           */
+          await syncPendingHabits();
+
+          /*
+           * Pull latest habits.
+           */
           await refreshHabitsFromFirebase();
 
           const latestHabits =
             await getHabits();
 
+          /*
+           * Pull completions.
+           */
           await Promise.all(
             latestHabits.map(
-              (habit) =>
+              (
+                habit
+              ) =>
                 refreshHabitCompletionsFromFirebase(
                   habit.id
                 )
             )
           );
 
+          /*
+           * Reload local data after Firebase sync.
+           */
           await loadHabits(
             false
           );
         } catch (
           refreshError
         ) {
+          /*
+           * Background Firebase error should NOT
+           * destroy working offline/local UI.
+           */
           console.error(
             "Background habit refresh error:",
             refreshError
@@ -332,11 +451,25 @@ export default function HabitList({
   ======================================================= */
 
   useEffect(() => {
+    let disposed = false;
+
     const unsubscribe =
       onAuthStateChanged(
         auth,
         (user) => {
+          if (
+            disposed
+          ) {
+            return;
+          }
+
+          /*
+           * No user.
+           */
           if (!user) {
+            currentUserIdRef.current =
+              null;
+
             setItems([]);
 
             setAlarmHabits([]);
@@ -352,17 +485,42 @@ export default function HabitList({
             return;
           }
 
+          /*
+           * New user detected.
+           */
+          const userChanged =
+            currentUserIdRef.current !==
+            user.uid;
+
+          currentUserIdRef.current =
+            user.uid;
+
           setError("");
+
+          /*
+           * If user changed, clear old UI first.
+           * Then load this user's local data.
+           */
+          if (
+            userChanged
+          ) {
+            setItems([]);
+          }
 
           void loadHabits(
             true
           );
 
+          /*
+           * Firebase runs in background.
+           */
           void refreshFromFirebase();
         }
       );
 
     return () => {
+      disposed = true;
+
       unsubscribe();
 
       stopHabitAlarmRunner();
@@ -378,6 +536,10 @@ export default function HabitList({
   ======================================================= */
 
   useEffect(() => {
+    /*
+     * Runner itself checks the current alarm list.
+     * Actual habits are supplied through setAlarmHabits().
+     */
     startHabitAlarmRunner([]);
 
     return () => {
@@ -392,7 +554,9 @@ export default function HabitList({
   useEffect(() => {
     const habits =
       items.map(
-        (item) =>
+        (
+          item
+        ) =>
           item.habit
       );
 
@@ -507,7 +671,9 @@ export default function HabitList({
       false;
 
     const unlock = () => {
-      if (unlocked) {
+      if (
+        unlocked
+      ) {
         return;
       }
 
@@ -629,7 +795,9 @@ export default function HabitList({
       () => {
         const habits =
           items.map(
-            (item) =>
+            (
+              item
+            ) =>
               item.habit
           );
 
@@ -671,12 +839,16 @@ export default function HabitList({
         void (
           async () => {
             try {
-              await syncPendingHabits();
-
+              /*
+               * Immediately show local state.
+               */
               await loadHabits(
                 false
               );
 
+              /*
+               * Then sync Firebase.
+               */
               await refreshFromFirebase();
             } catch (
               syncError
@@ -719,13 +891,23 @@ export default function HabitList({
 
     const checkNotifications =
       () => {
-        items.forEach(
-          (item) => {
+        for (
+          const item of
+            items
+        ) {
+          try {
             notifyHabitIfNeeded(
               item.habit
             );
+          } catch (
+            notificationError
+          ) {
+            console.error(
+              "Habit notification error:",
+              notificationError
+            );
           }
-        );
+        }
       };
 
     checkNotifications();
@@ -756,126 +938,83 @@ export default function HabitList({
       try {
         setError("");
 
+        /*
+         * Persist first.
+         */
         await toggleHabitCompletion(
           habitId,
           date,
           completed
         );
 
-        let updatedItems:
-          HabitWithCompletions[] =
-          [];
-
+        /*
+         * Optimistic/local UI update.
+         */
         setItems(
-          (currentItems) => {
-            updatedItems =
-              currentItems.map(
-                (item) => {
-                  if (
-                    item.habit.id !==
-                    habitId
-                  ) {
-                    return item;
-                  }
-
-                  const existing =
-                    item.completions.find(
-                      (
-                        completion
-                      ) =>
-                        completion.date ===
-                        date
-                    );
-
-                  if (
-                    existing
-                  ) {
-                    return {
-                      ...item,
-                      completions:
-                        item.completions.map(
-                          (
-                            completion
-                          ) =>
-                            completion.date ===
-                            date
-                              ? {
-                                  ...completion,
-                                  completed,
-                                }
-                              : completion
-                        ),
-                    };
-                  }
-
-                  return {
-                    ...item,
-                    completions: [
-                      ...item.completions,
-                      {
-                        id: `${habitId}-${date}`,
-                        habitId,
-                        date,
-                        completed,
-                        createdAt:
-                          new Date().toISOString(),
-                      },
-                    ],
-                  };
-                }
-              );
-
-            return updatedItems;
-          }
-        );
-
-        const updatedHabit =
-          updatedItems.find(
-            (item) =>
-              item.habit.id ===
-              habitId
-          );
-
-        if (
-          !updatedHabit
-        ) {
-          return;
-        }
-
-        const completedCount =
-          updatedHabit.completions.filter(
-            (completion) =>
-              completion.completed
-          ).length;
-
-        if (
-          updatedHabit.habit
-            .targetDays >
-            0 &&
-          completedCount >=
-            updatedHabit.habit
-              .targetDays
-        ) {
-          void completeHabit(
-            habitId
-          ).catch(
-            (completeError) => {
-              console.error(
-                "Complete habit error:",
-                completeError
-              );
-            }
-          );
-
-          setItems(
-            (currentItems) =>
-              currentItems.filter(
-                (item) =>
+          (
+            currentItems
+          ) =>
+            currentItems.map(
+              (
+                item
+              ) => {
+                if (
                   item.habit.id !==
                   habitId
-              )
-          );
-        }
+                ) {
+                  return item;
+                }
+
+                const existing =
+                  item.completions.find(
+                    (
+                      completion
+                    ) =>
+                      completion.date ===
+                      date
+                  );
+
+                if (
+                  existing
+                ) {
+                  return {
+                    ...item,
+                    completions:
+                      item.completions.map(
+                        (
+                          completion
+                        ) =>
+                          completion.date ===
+                          date
+                            ? {
+                                ...completion,
+                                completed,
+                              }
+                            : completion
+                      ),
+                  };
+                }
+
+                /*
+                 * Prevent duplicate records.
+                 */
+                return {
+                  ...item,
+                  completions: [
+                    ...item.completions,
+                    {
+                      id: `${habitId}-${date}`,
+                      habitId,
+                      date,
+                      completed,
+                      createdAt:
+                        new Date().toISOString(),
+                    },
+                  ],
+                };
+              }
+            )
+        );
       } catch (
         toggleError
       ) {
@@ -886,6 +1025,13 @@ export default function HabitList({
 
         setError(
           "অভ্যাসের অবস্থা পরিবর্তন করা যায়নি।"
+        );
+
+        /*
+         * Reload local data if persistence failed.
+         */
+        void loadHabits(
+          false
         );
       }
     };
@@ -905,10 +1051,21 @@ export default function HabitList({
           habitId
         );
 
+        /*
+         * Stop alarm before removing habit.
+         */
+        stopHabitAlarm(
+          habitId
+        );
+
         setItems(
-          (currentItems) =>
+          (
+            currentItems
+          ) =>
             currentItems.filter(
-              (item) =>
+              (
+                item
+              ) =>
                 item.habit.id !==
                 habitId
             )
@@ -918,10 +1075,6 @@ export default function HabitList({
           ringingAlarm?.habit.id ===
           habitId
         ) {
-          stopHabitAlarm(
-            habitId
-          );
-
           setRingingAlarm(
             null
           );
@@ -948,7 +1101,9 @@ export default function HabitList({
 
   const handleStopAlarm =
     () => {
-      if (!ringingAlarm) {
+      if (
+        !ringingAlarm
+      ) {
         return;
       }
 
@@ -962,12 +1117,14 @@ export default function HabitList({
     };
 
   /* =======================================================
-     SNOOZE RINGING
+     SNOOZE
   ======================================================= */
 
   const handleSnoozeAlarm =
     () => {
-      if (!ringingAlarm) {
+      if (
+        !ringingAlarm
+      ) {
         return;
       }
 
@@ -993,6 +1150,20 @@ export default function HabitList({
         <div className="rounded-2xl border bg-white p-6 text-center text-gray-500">
           অভ্যাস লোড হচ্ছে...
         </div>
+
+        {ringingAlarm && (
+          <AlarmRingingModal
+            alarm={
+              ringingAlarm
+            }
+            onStop={
+              handleStopAlarm
+            }
+            onSnooze={
+              handleSnoozeAlarm
+            }
+          />
+        )}
       </>
     );
   }
@@ -1010,6 +1181,20 @@ export default function HabitList({
         <div className="rounded-2xl bg-red-50 p-4 text-center text-sm text-red-600">
           {error}
         </div>
+
+        {ringingAlarm && (
+          <AlarmRingingModal
+            alarm={
+              ringingAlarm
+            }
+            onStop={
+              handleStopAlarm
+            }
+            onSnooze={
+              handleSnoozeAlarm
+            }
+          />
+        )}
       </>
     );
   }
@@ -1033,13 +1218,11 @@ export default function HabitList({
           </p>
         </div>
 
-        {/* =================================================
-            ALARM MODAL
-        ================================================= */}
-
         {ringingAlarm && (
           <AlarmRingingModal
-            alarm={ringingAlarm}
+            alarm={
+              ringingAlarm
+            }
             onStop={
               handleStopAlarm
             }
@@ -1060,7 +1243,9 @@ export default function HabitList({
     <>
       <div className="space-y-4">
         {items.map(
-          (item) => (
+          (
+            item
+          ) => (
             <HabitCard
               key={
                 item.habit.id
@@ -1089,13 +1274,11 @@ export default function HabitList({
         )}
       </div>
 
-      {/* =================================================
-          ALARM RINGING MODAL
-      ================================================= */}
-
       {ringingAlarm && (
         <AlarmRingingModal
-          alarm={ringingAlarm}
+          alarm={
+            ringingAlarm
+          }
           onStop={
             handleStopAlarm
           }
@@ -1124,7 +1307,8 @@ function AlarmRingingModal({
   onSnooze,
 }: AlarmRingingModalProps) {
   const snoozeMinutes =
-    alarm.alarm?.snoozeMinutes ??
+    alarm.alarm
+      ?.snoozeMinutes ??
     5;
 
   return (
@@ -1136,7 +1320,7 @@ function AlarmRingingModal({
 
         <div className="relative overflow-hidden bg-gradient-to-br from-orange-500 via-red-500 to-pink-600 px-6 py-8 text-center text-white">
           <div className="absolute inset-0 opacity-20">
-            <div className="absolute left-1/2 top-1/2 h-40 w-40 -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-white animate-ping" />
+            <div className="absolute left-1/2 top-1/2 h-40 w-40 -translate-x-1/2 -translate-y-1/2 animate-ping rounded-full border-4 border-white" />
           </div>
 
           <div className="relative">
@@ -1197,7 +1381,9 @@ function AlarmRingingModal({
           <div className="mt-5 grid grid-cols-2 gap-3">
             <button
               type="button"
-              onClick={onSnooze}
+              onClick={
+                onSnooze
+              }
               className="flex min-h-14 items-center justify-center gap-2 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-700 transition hover:bg-blue-100 active:scale-[0.98]"
             >
               <Moon
@@ -1205,13 +1391,16 @@ function AlarmRingingModal({
               />
 
               <span>
-                Snooze {snoozeMinutes}m
+                Snooze{" "}
+                {snoozeMinutes}m
               </span>
             </button>
 
             <button
               type="button"
-              onClick={onStop}
+              onClick={
+                onStop
+              }
               className="flex min-h-14 items-center justify-center gap-2 rounded-2xl bg-red-600 px-4 py-3 text-sm font-bold text-white shadow-lg transition hover:bg-red-700 active:scale-[0.98]"
             >
               <X
@@ -1225,7 +1414,8 @@ function AlarmRingingModal({
           </div>
 
           <p className="mt-4 text-center text-xs text-gray-400">
-            Snooze করলে {snoozeMinutes} মিনিট পরে
+            Snooze করলে{" "}
+            {snoozeMinutes} মিনিট পরে
             আবার alarm বাজবে।
           </p>
         </div>

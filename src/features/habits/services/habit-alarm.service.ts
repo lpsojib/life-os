@@ -5,14 +5,11 @@ import type {
   HabitAlarm,
 } from "../types/habit.types";
 
-const ALARM_STORAGE_KEY =
-  "life-os-habit-alarm-state";
+const ALARM_STORAGE_KEY = "life-os-habit-alarm-state";
 
-const CHECK_INTERVAL =
-  15 * 1000;
+const CHECK_INTERVAL = 15 * 1000;
 
-const TRIGGER_GUARD =
-  60 * 1000;
+const TRIGGER_GUARD = 60 * 1000;
 
 const DEFAULT_ALARM: HabitAlarm = {
   enabled: true,
@@ -35,68 +32,63 @@ interface AlarmState {
 
 let audioContext: AudioContext | null = null;
 
-let alarmTimer:
-  ReturnType<typeof setTimeout> | null = null;
+let alarmTimer: ReturnType<typeof setTimeout> | null = null;
 
 let alarmPlaying = false;
 
-const getAudioContext =
-  (): AudioContext | null => {
-    if (typeof window === "undefined") {
-      return null;
-    }
+const getAudioContext = (): AudioContext | null => {
+  if (typeof window === "undefined") {
+    return null;
+  }
 
-    try {
-      if (audioContext) {
-        return audioContext;
-      }
-
-      const AudioContextClass =
-        window.AudioContext ||
-        (
-          window as typeof window & {
-            webkitAudioContext?: typeof AudioContext;
-          }
-        ).webkitAudioContext;
-
-      if (!AudioContextClass) {
-        return null;
-      }
-
-      audioContext =
-        new AudioContextClass();
-
+  try {
+    if (audioContext) {
       return audioContext;
-    } catch (error) {
-      console.error(
-        "Life OS: AudioContext error",
-        error
-      );
+    }
 
+    const AudioContextClass =
+      window.AudioContext ||
+      (
+        window as typeof window & {
+          webkitAudioContext?: typeof AudioContext;
+        }
+      ).webkitAudioContext;
+
+    if (!AudioContextClass) {
       return null;
     }
-  };
 
-export const unlockAlarmAudio =
-  async (): Promise<void> => {
-    const context =
-      getAudioContext();
+    audioContext = new AudioContextClass();
 
-    if (!context) {
-      return;
+    return audioContext;
+  } catch (error) {
+    console.error(
+      "Life OS: AudioContext error",
+      error
+    );
+
+    return null;
+  }
+};
+
+export const unlockAlarmAudio = async (): Promise<void> => {
+  const context = getAudioContext();
+
+  if (!context) {
+    return;
+  }
+
+  try {
+    if (context.state === "suspended") {
+      await context.resume();
     }
-
-    try {
-      if (context.state === "suspended") {
-        await context.resume();
-      }
-    } catch (error) {
-      console.error(
-        "Life OS: Audio unlock error",
-        error
-      );
-    }
-  };
+  } catch (error) {
+    console.error(
+      "Life OS: Audio unlock error",
+      error
+    );
+  }
+};
 
 const playTone = (
   context: AudioContext,
@@ -104,54 +96,54 @@ const playTone = (
   duration: number,
   volume: number
 ): void => {
-  const oscillator =
-    context.createOscillator();
+  try {
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
 
-  const gain =
-    context.createGain();
+    const startTime = context.currentTime;
 
-  const startTime =
-    context.currentTime;
+    oscillator.type = "sine";
 
-  oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(
+      frequency,
+      startTime
+    );
 
-  oscillator.frequency.setValueAtTime(
-    frequency,
-    startTime
-  );
+    gain.gain.setValueAtTime(
+      0.001,
+      startTime
+    );
 
-  gain.gain.setValueAtTime(
-    0.001,
-    startTime
-  );
+    gain.gain.exponentialRampToValueAtTime(
+      volume,
+      startTime + 0.03
+    );
 
-  gain.gain.exponentialRampToValueAtTime(
-    volume,
-    startTime + 0.03
-  );
+    gain.gain.exponentialRampToValueAtTime(
+      0.001,
+      startTime + duration
+    );
 
-  gain.gain.exponentialRampToValueAtTime(
-    0.001,
-    startTime + duration
-  );
+    oscillator.connect(gain);
+    gain.connect(context.destination);
 
-  oscillator.connect(gain);
-  gain.connect(
-    context.destination
-  );
+    oscillator.start(startTime);
 
-  oscillator.start(startTime);
-
-  oscillator.stop(
-    startTime + duration
-  );
+    oscillator.stop(
+      startTime + duration
+    );
+  } catch (error) {
+    console.error(
+      "Life OS: Alarm tone error",
+      error
+    );
+  }
 };
 
 const playAlarmPattern = (
   sound: HabitAlarm["sound"]
 ): void => {
-  const context =
-    getAudioContext();
+  const context = getAudioContext();
 
   if (!context) {
     return;
@@ -159,57 +151,27 @@ const playAlarmPattern = (
 
   switch (sound) {
     case "alarm":
-      playTone(
-        context,
-        880,
-        0.35,
-        0.45
-      );
+      playTone(context, 880, 0.35, 0.45);
 
       setTimeout(() => {
-        playTone(
-          context,
-          440,
-          0.35,
-          0.45
-        );
+        playTone(context, 440, 0.35, 0.45);
       }, 380);
 
       setTimeout(() => {
-        playTone(
-          context,
-          880,
-          0.35,
-          0.45
-        );
+        playTone(context, 880, 0.35, 0.45);
       }, 760);
 
       setTimeout(() => {
-        playTone(
-          context,
-          440,
-          0.35,
-          0.45
-        );
+        playTone(context, 440, 0.35, 0.45);
       }, 1140);
 
       break;
 
     case "bell":
-      playTone(
-        context,
-        880,
-        0.55,
-        0.4
-      );
+      playTone(context, 880, 0.55, 0.4);
 
       setTimeout(() => {
-        playTone(
-          context,
-          660,
-          0.55,
-          0.4
-        );
+        playTone(context, 660, 0.55, 0.4);
       }, 600);
 
       break;
@@ -301,123 +263,104 @@ const playAlarmPattern = (
   }
 };
 
-export const playAlarmSound =
-  async (
-    sound: HabitAlarm["sound"] = "default"
-  ): Promise<void> => {
-    await unlockAlarmAudio();
+export const playAlarmSound = async (
+  sound: HabitAlarm["sound"] = "default"
+): Promise<void> => {
+  await unlockAlarmAudio();
+
+  playAlarmPattern(sound);
+};
+
+export const startContinuousAlarmSound = async (
+  sound: HabitAlarm["sound"] = "default"
+): Promise<void> => {
+  await unlockAlarmAudio();
+
+  stopAlarmSound();
+
+  alarmPlaying = true;
+
+  const playLoop = () => {
+    if (!alarmPlaying) {
+      return;
+    }
 
     playAlarmPattern(sound);
+
+    alarmTimer = setTimeout(
+      playLoop,
+      2200
+    );
   };
 
-export const startContinuousAlarmSound =
-  async (
-    sound: HabitAlarm["sound"] = "default"
-  ): Promise<void> => {
-    await unlockAlarmAudio();
+  playLoop();
+};
 
-    stopAlarmSound();
+export const stopAlarmSound = (): void => {
+  alarmPlaying = false;
 
-    alarmPlaying = true;
-
-    const playLoop = () => {
-      if (!alarmPlaying) {
-        return;
-      }
-
-      playAlarmPattern(sound);
-
-      alarmTimer =
-        setTimeout(
-          playLoop,
-          2200
-        );
-    };
-
-    playLoop();
-  };
-
-export const stopAlarmSound =
-  (): void => {
-    alarmPlaying = false;
-
-    if (alarmTimer) {
-      clearTimeout(
-        alarmTimer
-      );
-
-      alarmTimer = null;
-    }
-  };
+  if (alarmTimer) {
+    clearTimeout(alarmTimer);
+    alarmTimer = null;
+  }
+};
 
 /* =========================================================
    VIBRATION
 ========================================================= */
 
-export const vibrateAlarm =
-  (): void => {
-    if (
-      typeof navigator === "undefined"
-    ) {
-      return;
-    }
+export const vibrateAlarm = (): void => {
+  if (typeof navigator === "undefined") {
+    return;
+  }
 
-    if (!navigator.vibrate) {
-      return;
-    }
+  if (!navigator.vibrate) {
+    return;
+  }
 
-    try {
-      navigator.vibrate([
-        700,
-        300,
-        700,
-        300,
-        1000,
-      ]);
-    } catch (error) {
-      console.error(
-        "Life OS: Vibration error",
-        error
-      );
-    }
-  };
+  try {
+    navigator.vibrate([
+      700,
+      300,
+      700,
+      300,
+      1000,
+    ]);
+  } catch (error) {
+    console.error(
+      "Life OS: Vibration error",
+      error
+    );
+  }
+};
 
-export const stopAlarmVibration =
-  (): void => {
-    if (
-      typeof navigator === "undefined"
-    ) {
-      return;
-    }
+export const stopAlarmVibration = (): void => {
+  if (typeof navigator === "undefined") {
+    return;
+  }
 
-    if (!navigator.vibrate) {
-      return;
-    }
+  if (!navigator.vibrate) {
+    return;
+  }
 
-    try {
-      navigator.vibrate(0);
-    } catch {
-      // Ignore.
-    }
-  };
+  try {
+    navigator.vibrate(0);
+  } catch {
+    // Ignore.
+  }
+};
 
 /* =========================================================
    NOTIFICATION
 ========================================================= */
 
 export const requestAlarmNotificationPermission =
-  async (): Promise<
-    NotificationPermission | null
-  > => {
-    if (
-      typeof window === "undefined"
-    ) {
+  async (): Promise<NotificationPermission | null> => {
+    if (typeof window === "undefined") {
       return null;
     }
 
-    if (
-      !("Notification" in window)
-    ) {
+    if (!("Notification" in window)) {
       return null;
     }
 
@@ -447,238 +390,204 @@ export const requestAlarmNotificationPermission =
     }
   };
 
-const showAlarmNotification =
-  (
-    habit: Habit
-  ): void => {
-    if (
-      typeof window === "undefined"
-    ) {
-      return;
+const showAlarmNotification = (
+  habit: Habit
+): void => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  if (!("Notification" in window)) {
+    return;
+  }
+
+  if (
+    Notification.permission !==
+    "granted"
+  ) {
+    return;
+  }
+
+  try {
+    const notification =
+      new Notification(
+        `⏰ ${habit.name}`,
+        {
+          body: `Habit alarm - ${habit.time}`,
+          icon: "/icons/icon-192.png",
+          tag: `habit-alarm-${habit.id}`,
+          requireInteraction: true,
+        }
+      );
+
+    notification.onclick = () => {
+      window.focus();
+      notification.close();
+    };
+  } catch (error) {
+    console.error(
+      "Life OS: Notification error",
+      error
+    );
+  }
+};
+
+/* =========================================================
+   LOCAL STATE
+========================================================= */
+
+const getAlarmStates = (): AlarmState[] => {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  try {
+    const raw = localStorage.getItem(
+      ALARM_STORAGE_KEY
+    );
+
+    if (!raw) {
+      return [];
     }
 
-    if (
-      !("Notification" in window)
-    ) {
-      return;
+    const parsed = JSON.parse(raw);
+
+    if (!Array.isArray(parsed)) {
+      return [];
     }
 
-    if (
-      Notification.permission !==
-      "granted"
-    ) {
-      return;
-    }
+    return parsed as AlarmState[];
+  } catch {
+    return [];
+  }
+};
 
-    try {
-      const notification =
-        new Notification(
-          `⏰ ${habit.name}`,
-          {
-            body: `Habit alarm - ${habit.time}`,
-            icon: "/icons/icon-192.png",
-            tag: `habit-alarm-${habit.id}`,
-            requireInteraction: true,
-          }
-        );
+const saveAlarmStates = (
+  states: AlarmState[]
+): void => {
+  if (typeof window === "undefined") {
+    return;
+  }
 
-      notification.onclick =
-        () => {
-          window.focus();
-          notification.close();
+  try {
+    localStorage.setItem(
+      ALARM_STORAGE_KEY,
+      JSON.stringify(states)
+    );
+  } catch (error) {
+    console.error(
+      "Life OS: Alarm storage error",
+      error
+    );
+  }
+};
+
+const getAlarmState = (
+  habitId: string
+): AlarmState => {
+  const states = getAlarmStates();
+
+  const existing = states.find(
+    (state) =>
+      state.habitId === habitId
+  );
+
+  if (existing) {
+    return existing;
+  }
+
+  return {
+    habitId,
+  };
+};
+
+const updateAlarmState = (
+  habitId: string,
+  update: Partial<AlarmState>
+): void => {
+  const states = getAlarmStates();
+
+  const index = states.findIndex(
+    (state) =>
+      state.habitId === habitId
+  );
+
+  const current =
+    index >= 0
+      ? states[index]
+      : {
+          habitId,
         };
-    } catch (error) {
-      console.error(
-        "Life OS: Notification error",
-        error
-      );
-    }
+
+  const next: AlarmState = {
+    ...current,
+    ...update,
   };
+
+  if (index >= 0) {
+    states[index] = next;
+  } else {
+    states.push(next);
+  }
+
+  saveAlarmStates(states);
+};
+
+export const clearAlarmState = (
+  habitId: string
+): void => {
+  const states =
+    getAlarmStates().filter(
+      (state) =>
+        state.habitId !== habitId
+    );
+
+  saveAlarmStates(states);
+};
 
 /* =========================================================
-   LOCAL ALARM STATE
+   SETTINGS
 ========================================================= */
 
-const getAlarmStates =
-  (): AlarmState[] => {
-    if (
-      typeof window === "undefined"
-    ) {
-      return [];
-    }
+export const getHabitAlarm = (
+  habit: Habit
+): HabitAlarm => {
+  const state = getAlarmState(
+    habit.id
+  );
 
-    try {
-      const raw =
-        localStorage.getItem(
-          ALARM_STORAGE_KEY
-        );
+  return {
+    ...DEFAULT_ALARM,
+    ...(habit.alarm ?? {}),
+    ...(state.settings ?? {}),
+  };
+};
 
-      if (!raw) {
-        return [];
-      }
+export const saveHabitAlarmSettings = (
+  habitId: string,
+  settings: Partial<HabitAlarm>
+): HabitAlarm => {
+  const currentState =
+    getAlarmState(habitId);
 
-      const parsed =
-        JSON.parse(raw);
-
-      if (
-        !Array.isArray(parsed)
-      ) {
-        return [];
-      }
-
-      return parsed as AlarmState[];
-    } catch {
-      return [];
-    }
+  const currentSettings: HabitAlarm = {
+    ...DEFAULT_ALARM,
+    ...(currentState.settings ?? {}),
   };
 
-const saveAlarmStates =
-  (
-    states: AlarmState[]
-  ): void => {
-    if (
-      typeof window === "undefined"
-    ) {
-      return;
+  const nextSettings: HabitAlarm = {
+    ...currentSettings,
+    ...settings,
+  };
+
+  updateAlarmState(
+    habitId,
+    {
+      settings: nextSettings,
     }
+  );
 
-    try {
-      localStorage.setItem(
-        ALARM_STORAGE_KEY,
-        JSON.stringify(states)
-      );
-    } catch (error) {
-      console.error(
-        "Life OS: Alarm storage error",
-        error
-      );
-    }
-  };
-
-const getAlarmState =
-  (
-    habitId: string
-  ): AlarmState => {
-    const states =
-      getAlarmStates();
-
-    const existing =
-      states.find(
-        (state) =>
-          state.habitId ===
-          habitId
-      );
-
-    if (existing) {
-      return existing;
-    }
-
-    return {
-      habitId,
-    };
-  };
-
-const updateAlarmState =
-  (
-    habitId: string,
-    update: Partial<AlarmState>
-  ): void => {
-    const states =
-      getAlarmStates();
-
-    const index =
-      states.findIndex(
-        (state) =>
-          state.habitId ===
-          habitId
-      );
-
-    const current =
-      index >= 0
-        ? states[index]
-        : {
-            habitId,
-          };
-
-    const next: AlarmState = {
-      ...current,
-      ...update,
-    };
-
-    if (index >= 0) {
-      states[index] = next;
-    } else {
-      states.push(next);
-    }
-
-    saveAlarmStates(
-      states
-    );
-  };
-
-export const clearAlarmState =
-  (
-    habitId: string
-  ): void => {
-    const states =
-      getAlarmStates().filter(
-        (state) =>
-          state.habitId !==
-          habitId
-      );
-
-    saveAlarmStates(
-      states
-    );
-  };
-
-/* =========================================================
-   ALARM SETTINGS
-========================================================= */
-
-export const getHabitAlarm =
-  (
-    habit: Habit
-  ): HabitAlarm => {
-    const state =
-      getAlarmState(
-        habit.id
-      );
-
-    return {
-      ...DEFAULT_ALARM,
-      ...(habit.alarm ?? {}),
-      ...(state.settings ?? {}),
-    };
-  };
-
-export const saveHabitAlarmSettings =
-  (
-    habitId: string,
-    settings: Partial<HabitAlarm>
-  ): HabitAlarm => {
-    const currentHabitState =
-      getAlarmState(
-        habitId
-      );
-
-    const currentSettings: HabitAlarm = {
-      ...DEFAULT_ALARM,
-      ...(currentHabitState.settings ?? {}),
-    };
-
-    const nextSettings: HabitAlarm = {
-      ...currentSettings,
-      ...settings,
-    };
-
-    updateAlarmState(
-      habitId,
-      {
-        settings: nextSettings,
-      }
-    );
-
+  if (typeof window !== "undefined") {
     window.dispatchEvent(
       new CustomEvent(
         "life-os-habit-alarm-settings-changed",
@@ -690,144 +599,183 @@ export const saveHabitAlarmSettings =
         }
       )
     );
+  }
 
-    return nextSettings;
+  return nextSettings;
+};
+
+export const updateHabitAlarm = (
+  habit: Habit,
+  settings: Partial<HabitAlarm>
+): Habit => {
+  const nextAlarm =
+    saveHabitAlarmSettings(
+      habit.id,
+      settings
+    );
+
+  return {
+    ...habit,
+    alarm: nextAlarm,
   };
-
-export const updateHabitAlarm =
-  (
-    habit: Habit,
-    settings: Partial<HabitAlarm>
-  ): Habit => {
-    const nextAlarm =
-      saveHabitAlarmSettings(
-        habit.id,
-        settings
-      );
-
-    return {
-      ...habit,
-      alarm: nextAlarm,
-    };
-  };
+};
 
 /* =========================================================
    HELPERS
 ========================================================= */
 
-const normalizeTime =
-  (
-    time: string
-  ): string | null => {
-    if (!time) {
-      return null;
-    }
+const normalizeTime = (
+  time: string
+): string | null => {
+  if (!time) {
+    return null;
+  }
 
-    const value =
-      time.trim();
+  const value = time.trim();
 
-    const match =
-      value.match(
-        /^([01]\d|2[0-3]):([0-5]\d)$/
-      );
+  const match = value.match(
+    /^([01]\d|2[0-3]):([0-5]\d)$/
+  );
 
-    if (!match) {
-      return null;
-    }
+  if (!match) {
+    return null;
+  }
 
-    return `${match[1]}:${match[2]}`;
-  };
+  return `${match[1]}:${match[2]}`;
+};
 
-const getCurrentTime =
-  (): string => {
-    const now =
-      new Date();
+const getCurrentTime = (): string => {
+  const now = new Date();
 
-    const hours =
-      String(
-        now.getHours()
-      ).padStart(
-        2,
-        "0"
-      );
+  const hours = String(
+    now.getHours()
+  ).padStart(2, "0");
 
-    const minutes =
-      String(
-        now.getMinutes()
-      ).padStart(
-        2,
-        "0"
-      );
+  const minutes = String(
+    now.getMinutes()
+  ).padStart(2, "0");
 
-    return `${hours}:${minutes}`;
-  };
+  return `${hours}:${minutes}`;
+};
 
-const isHabitDateValid =
-  (
-    habit: Habit
-  ): boolean => {
-    const now =
-      new Date();
+const getDateKey = (
+  date: Date
+): string => {
+  const year = date.getFullYear();
 
-    const today =
-      new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate()
-      );
+  const month = String(
+    date.getMonth() + 1
+  ).padStart(2, "0");
 
-    const start =
-      new Date(
-        `${habit.startDate}T00:00:00`
-      );
+  const day = String(
+    date.getDate()
+  ).padStart(2, "0");
 
-    const end =
-      new Date(
-        `${habit.endDate}T23:59:59`
-      );
+  return `${year}-${month}-${day}`;
+};
 
-    if (
-      Number.isNaN(
-        start.getTime()
-      ) ||
-      Number.isNaN(
-        end.getTime()
-      )
-    ) {
-      return false;
-    }
+const isHabitDateValid = (
+  habit: Habit
+): boolean => {
+  const now = new Date();
 
-    return (
-      today >= start &&
-      today <= end
-    );
-  };
+  const today = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate()
+  );
 
-const isRepeatAllowedToday =
-  (
-    alarm: HabitAlarm
-  ): boolean => {
-    const day =
-      new Date().getDay();
+  const start = new Date(
+    `${habit.startDate}T00:00:00`
+  );
 
-    switch (
+  const end = new Date(
+    `${habit.endDate}T23:59:59`
+  );
+
+  if (
+    Number.isNaN(start.getTime()) ||
+    Number.isNaN(end.getTime())
+  ) {
+    return false;
+  }
+
+  return (
+    today >= start &&
+    today <= end
+  );
+};
+
+/* =========================================================
+   REPEAT
+========================================================= */
+
+const isRepeatAllowedToday = (
+  alarm: HabitAlarm
+): boolean => {
+  const state = getAlarmStates().find(
+    (item) =>
+      item.settings?.repeat ===
       alarm.repeat
-    ) {
-      case "weekdays":
-        return (
-          day >= 1 &&
-          day <= 5
-        );
+  );
 
-      case "weekly":
-        return true;
+  const day = new Date().getDay();
 
-      case "none":
-      case "daily":
-      default:
+  switch (alarm.repeat) {
+    case "weekdays":
+      return day >= 1 && day <= 5;
+
+    case "weekly":
+      if (!state?.lastTriggeredAt) {
         return true;
-    }
-  };
+      }
+
+      const last = new Date(
+        state.lastTriggeredAt
+      );
+
+      const difference =
+        Date.now() -
+        last.getTime();
+
+      return (
+        difference >=
+        7 * 24 * 60 * 60 * 1000
+      );
+
+    case "none":
+    case "daily":
+    default:
+      return true;
+  }
+};
+
+/* =========================================================
+   CAN TRIGGER TODAY
+========================================================= */
+
+const hasTriggeredToday = (
+  state: AlarmState
+): boolean => {
+  if (!state.lastTriggeredAt) {
+    return false;
+  }
+
+  const last = new Date(
+    state.lastTriggeredAt
+  );
+
+  const today = new Date();
+
+  return (
+    last.getFullYear() ===
+      today.getFullYear() &&
+    last.getMonth() ===
+      today.getMonth() &&
+    last.getDate() ===
+      today.getDate()
+  );
+};
 
 /* =========================================================
    TRIGGER
@@ -837,57 +785,62 @@ export const triggerHabitAlarm =
   async (
     habit: Habit
   ): Promise<void> => {
-    if (
-      typeof window === "undefined"
-    ) {
+    if (typeof window === "undefined") {
       return;
     }
 
     const alarm =
-      getHabitAlarm(
-        habit
-      );
+      getHabitAlarm(habit);
 
     if (!alarm.enabled) {
       return;
     }
 
+    if (!isHabitDateValid(habit)) {
+      return;
+    }
+
     const habitTime =
-      normalizeTime(
-        habit.time
-      );
+      normalizeTime(habit.time);
 
     if (!habitTime) {
       return;
     }
 
-    if (
-      !isHabitDateValid(
-        habit
-      )
-    ) {
-      return;
-    }
-
-    if (
-      !isRepeatAllowedToday(
-        alarm
-      )
-    ) {
-      return;
-    }
-
-    const now =
-      new Date();
+    const now = new Date();
 
     const state =
-      getAlarmState(
-        habit.id
-      );
+      getAlarmState(habit.id);
+
+    /*
+      Snooze alarm:
+      snoozeUntil পার হয়ে গেলে alarm আবার বাজবে।
+    */
+    const snoozeDue =
+      state.snoozeUntil &&
+      now >=
+        new Date(
+          state.snoozeUntil
+        );
+
+    /*
+      Normal scheduled alarm.
+    */
+    const scheduledNow =
+      getCurrentTime() ===
+      habitTime;
 
     if (
-      state.lastTriggeredAt
+      !scheduledNow &&
+      !snoozeDue
     ) {
+      return;
+    }
+
+    /*
+      Trigger guard.
+    */
+    if (state.lastTriggeredAt) {
       const lastTriggered =
         new Date(
           state.lastTriggeredAt
@@ -899,26 +852,31 @@ export const triggerHabitAlarm =
 
       if (
         difference >= 0 &&
-        difference <
-          TRIGGER_GUARD
+        difference < TRIGGER_GUARD
       ) {
         return;
       }
     }
 
+    /*
+      "none" = দিনে একবার।
+    */
     if (
-      state.snoozeUntil
+      alarm.repeat === "none" &&
+      hasTriggeredToday(state) &&
+      !snoozeDue
     ) {
-      const snoozeUntil =
-        new Date(
-          state.snoozeUntil
-        );
+      return;
+    }
 
-      if (
-        now < snoozeUntil
-      ) {
-        return;
-      }
+    /*
+      Snooze trigger হলে repeat check লাগবে না।
+    */
+    if (
+      !snoozeDue &&
+      !isRepeatAllowedToday(alarm)
+    ) {
+      return;
     }
 
     updateAlarmState(
@@ -935,15 +893,11 @@ export const triggerHabitAlarm =
       alarm.sound
     );
 
-    if (
-      alarm.vibration
-    ) {
+    if (alarm.vibration) {
       vibrateAlarm();
     }
 
-    showAlarmNotification(
-      habit
-    );
+    showAlarmNotification(habit);
 
     window.dispatchEvent(
       new CustomEvent(
@@ -968,14 +922,9 @@ export const checkHabitAlarms =
   async (
     habits: Habit[]
   ): Promise<void> => {
-    if (
-      typeof window === "undefined"
-    ) {
+    if (typeof window === "undefined") {
       return;
     }
-
-    const currentTime =
-      getCurrentTime();
 
     for (
       const habit of habits
@@ -983,31 +932,6 @@ export const checkHabitAlarms =
       if (
         habit.status !==
         "active"
-      ) {
-        continue;
-      }
-
-      const alarm =
-        getHabitAlarm(
-          habit
-        );
-
-      if (!alarm.enabled) {
-        continue;
-      }
-
-      const habitTime =
-        normalizeTime(
-          habit.time
-        );
-
-      if (!habitTime) {
-        continue;
-      }
-
-      if (
-        habitTime !==
-        currentTime
       ) {
         continue;
       }
@@ -1026,31 +950,26 @@ export const snoozeHabitAlarm =
   (
     habit: Habit
   ): void => {
-    if (
-      typeof window === "undefined"
-    ) {
+    if (typeof window === "undefined") {
       return;
     }
 
     const alarm =
-      getHabitAlarm(
-        habit
-      );
+      getHabitAlarm(habit);
 
     const minutes =
-      alarm.snoozeMinutes;
+      Number(
+        alarm.snoozeMinutes
+      );
 
     if (
-      !Number.isFinite(
-        minutes
-      ) ||
+      !Number.isFinite(minutes) ||
       minutes <= 0
     ) {
       return;
     }
 
     stopAlarmSound();
-
     stopAlarmVibration();
 
     const snoozeUntil =
@@ -1093,7 +1012,6 @@ export const stopHabitAlarm =
     habitId: string
   ): void => {
     stopAlarmSound();
-
     stopAlarmVibration();
 
     updateAlarmState(
@@ -1104,9 +1022,7 @@ export const stopHabitAlarm =
       }
     );
 
-    if (
-      typeof window === "undefined"
-    ) {
+    if (typeof window === "undefined") {
       return;
     }
 
@@ -1167,8 +1083,7 @@ export const disableHabitAlarm =
    ALARM RUNNER
 ========================================================= */
 
-let currentHabits:
-  Habit[] = [];
+let currentHabits: Habit[] = [];
 
 let alarmInterval:
   ReturnType<
@@ -1188,9 +1103,7 @@ export const startHabitAlarmRunner =
   (
     habits: Habit[]
   ): void => {
-    if (
-      typeof window === "undefined"
-    ) {
+    if (typeof window === "undefined") {
       return;
     }
 
@@ -1219,20 +1132,16 @@ export const startHabitAlarmRunner =
 
 export const stopHabitAlarmRunner =
   (): void => {
-    if (
-      alarmInterval
-    ) {
+    if (alarmInterval) {
       clearInterval(
         alarmInterval
       );
 
-      alarmInterval =
-        null;
+      alarmInterval = null;
     }
 
     currentHabits = [];
 
     stopAlarmSound();
-
     stopAlarmVibration();
   };
