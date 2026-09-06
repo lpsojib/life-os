@@ -1,953 +1,529 @@
 "use client";
 
 import {
-  ArrowDown,
-  ArrowLeft,
-  ArrowUp,
-  Bold,
-  Check,
-  CheckSquare,
   Pin,
   PinOff,
-  Plus,
   Trash2,
   X,
 } from "lucide-react";
 
-import {
-  KeyboardEvent,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
-
-import {
-  Note,
-  NoteBlock,
-} from "../types/notebook.types";
-
-import {
-  createLocalId,
-  deleteNote,
-  saveNote,
-  toggleNotePin,
-} from "../services/notebook.service";
-
-/* =========================================================
-   PROPS
-========================================================= */
+import { Note } from "../types/notebook.types";
 
 interface NoteEditorProps {
   note: Note;
   onChange?: (note: Note) => void;
-  onSave?: (
-    note: Note,
-  ) => Promise<void> | void;
-  onDelete?: () =>
-    | Promise<void>
-    | void;
-  onClose: () => void;
+  onSave?: (note: Note) => void;
+  onDelete?: (note: Note) => void;
+  onTogglePin?: (note: Note) => void;
+  onClose?: () => void;
 }
 
-/* =========================================================
-   COMPONENT
-========================================================= */
+function createBlockId(): string {
+  return `block-${Math.random()
+    .toString(36)
+    .slice(2)}-${Math.random()
+    .toString(36)
+    .slice(2)}`;
+}
 
 export default function NoteEditor({
   note,
   onChange,
   onSave,
   onDelete,
+  onTogglePin,
   onClose,
 }: NoteEditorProps) {
   /*
-   * IMPORTANT:
-   * We initialize state directly from note.
+   * Send the changed note to parent.
    *
-   * We DO NOT use:
-   *
-   * useEffect(() => {
-   *   setCurrentNote(note);
-   * }, [note]);
-   *
-   * This prevents React's cascading-render warning.
+   * No state.
+   * No effect.
+   * No ref.
+   * No Date.now().
    */
-  const [currentNote, setCurrentNote] =
-    useState<Note>(() => ({
-      ...note,
-      blocks: note.blocks.map(
-        (block) => ({
-          ...block,
-        }),
-      ),
-    }));
+  const updateNote = (
+    nextNote: Note,
+  ) => {
+    onChange?.(nextNote);
+    onSave?.(nextNote);
+  };
 
-  const [selectedType, setSelectedType] =
-    useState<
-      "text" | "checklist" | null
-    >(null);
-
-  const [saving, setSaving] =
-    useState(false);
-
-  const [deleting, setDeleting] =
-    useState(false);
-
-  const saveTimer =
-    useRef<ReturnType<
-      typeof setTimeout
-    > | null>(null);
-
-  /* =======================================================
-     CLEANUP AUTO SAVE TIMER
-  ======================================================= */
-
-  useEffect(() => {
-    return () => {
-      if (saveTimer.current) {
-        clearTimeout(
-          saveTimer.current,
-        );
-
-        saveTimer.current = null;
-      }
-    };
-  }, []);
-
-  /* =======================================================
-     UPDATE NOTE
-  ======================================================= */
-
-  function updateNote(
-    updater:
-      | Partial<Note>
-      | ((previous: Note) => Note),
-  ) {
-    setCurrentNote((previous) => {
-      const updated =
-        typeof updater === "function"
-          ? updater(previous)
-          : {
-              ...previous,
-              ...updater,
-            };
-
-      const finalNote: Note = {
-        ...updated,
-        updatedAt: Date.now(),
-      };
-
-      onChange?.(finalNote);
-
-      scheduleSave(finalNote);
-
-      return finalNote;
-    });
-  }
-
-  /* =======================================================
-     AUTO SAVE
-  ======================================================= */
-
-  function scheduleSave(
-    updatedNote: Note,
-  ) {
-    if (saveTimer.current) {
-      clearTimeout(
-        saveTimer.current,
-      );
-    }
-
-    saveTimer.current =
-      setTimeout(() => {
-        void persistNote(
-          updatedNote,
-        );
-      }, 400);
-  }
-
-  /* =======================================================
-     SAVE
-  ======================================================= */
-
-  async function persistNote(
-    updatedNote: Note,
-  ) {
-    try {
-      setSaving(true);
-
-      const saved =
-        await saveNote(
-          updatedNote,
-        );
-
-      setCurrentNote(
-        (previous) => ({
-          ...previous,
-          ...saved,
-        }),
-      );
-
-      onChange?.(saved);
-
-      if (onSave) {
-        await onSave(saved);
-      }
-    } catch (error) {
-      console.error(
-        "Failed to save note:",
-        error,
-      );
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  /* =======================================================
-     TITLE
-  ======================================================= */
-
-  function handleTitleChange(
+  const changeTitle = (
     value: string,
-  ) {
+  ) => {
     updateNote({
+      ...note,
       title: value,
     });
-  }
+  };
 
-  /* =======================================================
-     BLOCK UPDATE
-  ======================================================= */
-
-  function updateBlock(
+  const changeBlock = (
     blockId: string,
-    changes: Partial<NoteBlock>,
-  ) {
-    updateNote((previous) => ({
-      ...previous,
+    value: string,
+  ) => {
+    const blocks =
+      note.blocks.map(
+        (block) =>
+          block.id === blockId
+            ? {
+                ...block,
+                text: value,
+              }
+            : block,
+      );
 
-      blocks:
-        previous.blocks.map(
-          (block) =>
-            block.id === blockId
-              ? {
-                  ...block,
-                  ...changes,
-                }
-              : block,
-        ),
-    }));
-  }
+    updateNote({
+      ...note,
+      blocks,
+    });
+  };
 
-  /* =======================================================
-     ADD BLOCK
-  ======================================================= */
+  const toggleCheck = (
+    blockId: string,
+  ) => {
+    const blocks =
+      note.blocks.map(
+        (block) =>
+          block.id === blockId
+            ? {
+                ...block,
+                checked:
+                  !block.checked,
+              }
+            : block,
+      );
 
-  function addBlock(
-    type:
-      | "text"
-      | "checklist",
-    afterId?: string,
-  ) {
-    const newBlock: NoteBlock =
-      type === "checklist"
+    updateNote({
+      ...note,
+      blocks,
+    });
+  };
+
+  const addBlock = (
+    index: number,
+  ) => {
+    const currentBlock =
+      note.blocks[index];
+
+    const newBlock =
+      currentBlock?.type ===
+      "checklist"
         ? {
-            id: createLocalId(),
-            type: "checklist",
+            id: createBlockId(),
+            type: "checklist" as const,
             text: "",
             checked: false,
           }
         : {
-            id: createLocalId(),
-            type: "text",
+            id: createBlockId(),
+            type: "text" as const,
             text: "",
           };
 
-    updateNote((previous) => {
-      if (!afterId) {
-        return {
-          ...previous,
-          blocks: [
-            ...previous.blocks,
-            newBlock,
-          ],
-        };
-      }
-
-      const index =
-        previous.blocks.findIndex(
-          (block) =>
-            block.id === afterId,
-        );
-
-      if (index === -1) {
-        return {
-          ...previous,
-          blocks: [
-            ...previous.blocks,
-            newBlock,
-          ],
-        };
-      }
-
-      const blocks = [
-        ...previous.blocks,
-      ];
-
-      blocks.splice(
+    const blocks = [
+      ...note.blocks.slice(
+        0,
         index + 1,
-        0,
-        newBlock,
+      ),
+      newBlock,
+      ...note.blocks.slice(
+        index + 1,
+      ),
+    ];
+
+    updateNote({
+      ...note,
+      blocks,
+    });
+  };
+
+  const deleteBlock = (
+    blockId: string,
+  ) => {
+    let blocks =
+      note.blocks.filter(
+        (block) =>
+          block.id !== blockId,
       );
 
-      return {
-        ...previous,
-        blocks,
-      };
-    });
-  }
-
-  /* =======================================================
-     DELETE BLOCK
-  ======================================================= */
-
-  function removeBlock(
-    blockId: string,
-  ) {
-    updateNote((previous) => {
-      let blocks =
-        previous.blocks.filter(
-          (block) =>
-            block.id !== blockId,
-        );
-
-      /*
-       * Keep one empty text block.
-       */
-      if (blocks.length === 0) {
-        blocks = [
-          {
-            id: createLocalId(),
-            type: "text",
-            text: "",
-          },
-        ];
-      }
-
-      return {
-        ...previous,
-        blocks,
-      };
-    });
-  }
-
-  /* =======================================================
-     MOVE BLOCK
-  ======================================================= */
-
-  function moveBlock(
-    blockId: string,
-    direction: "up" | "down",
-  ) {
-    updateNote((previous) => {
-      const blocks = [
-        ...previous.blocks,
+    if (blocks.length === 0) {
+      blocks = [
+        {
+          id: createBlockId(),
+          type: "text",
+          text: "",
+        },
       ];
+    }
 
-      const index =
-        blocks.findIndex(
-          (block) =>
-            block.id === blockId,
-        );
-
-      if (index === -1) {
-        return previous;
-      }
-
-      const newIndex =
-        direction === "up"
-          ? index - 1
-          : index + 1;
-
-      if (
-        newIndex < 0 ||
-        newIndex >= blocks.length
-      ) {
-        return previous;
-      }
-
-      const [
-        movedBlock,
-      ] = blocks.splice(
-        index,
-        1,
-      );
-
-      blocks.splice(
-        newIndex,
-        0,
-        movedBlock,
-      );
-
-      return {
-        ...previous,
-        blocks,
-      };
+    updateNote({
+      ...note,
+      blocks,
     });
-  }
+  };
 
-  /* =======================================================
-     KEYBOARD
-  ======================================================= */
+  const moveUp = (
+    index: number,
+  ) => {
+    if (index <= 0) {
+      return;
+    }
 
-  function handleBlockKeyDown(
-    event: KeyboardEvent<HTMLTextAreaElement>,
-    block: NoteBlock,
-  ) {
+    const blocks = [
+      ...note.blocks,
+    ];
+
+    const temp = blocks[index];
+
+    blocks[index] =
+      blocks[index - 1];
+
+    blocks[index - 1] = temp;
+
+    updateNote({
+      ...note,
+      blocks,
+    });
+  };
+
+  const moveDown = (
+    index: number,
+  ) => {
+    if (
+      index >=
+      note.blocks.length - 1
+    ) {
+      return;
+    }
+
+    const blocks = [
+      ...note.blocks,
+    ];
+
+    const temp = blocks[index];
+
+    blocks[index] =
+      blocks[index + 1];
+
+    blocks[index + 1] = temp;
+
+    updateNote({
+      ...note,
+      blocks,
+    });
+  };
+
+  const handleKeyDown = (
+    event: React.KeyboardEvent<HTMLTextAreaElement>,
+    index: number,
+  ) => {
+    const block =
+      note.blocks[index];
+
+    if (!block) {
+      return;
+    }
+
     /*
-     * ENTER
-     *
-     * Creates another block
-     * of the same type.
+     * Enter = new block
      */
     if (event.key === "Enter") {
       event.preventDefault();
 
-      addBlock(
-        block.type,
-        block.id,
-      );
+      addBlock(index);
 
       return;
     }
 
     /*
-     * BACKSPACE
-     *
-     * Empty block gets deleted.
+     * Backspace on empty block
      */
     if (
       event.key === "Backspace" &&
-      block.text.length === 0
+      block.text === "" &&
+      note.blocks.length > 1
     ) {
       event.preventDefault();
 
-      if (
-        currentNote.blocks
-          .length > 1
-      ) {
-        removeBlock(block.id);
-      }
-
-      return;
+      deleteBlock(block.id);
     }
-  }
+  };
 
-  /* =======================================================
-     SELECT TYPE
-  ======================================================= */
+  const makeText = () => {
+    const blocks =
+      note.blocks.map(
+        (block) => ({
+          id: block.id,
+          type: "text" as const,
+          text: block.text,
+        }),
+      );
 
-  function handleTypeSelect(
-    type:
-      | "text"
-      | "checklist",
-  ) {
-    setSelectedType(
-      (previous) =>
-        previous === type
-          ? null
-          : type,
+    updateNote({
+      ...note,
+      blocks,
+    });
+  };
+
+  const makeChecklist = () => {
+    const blocks =
+      note.blocks.map(
+        (block) => ({
+          id: block.id,
+          type: "checklist" as const,
+          text: block.text,
+          checked:
+            block.checked ?? false,
+        }),
+      );
+
+    updateNote({
+      ...note,
+      blocks,
+    });
+  };
+
+  const togglePin = () => {
+    const updatedNote: Note = {
+      ...note,
+      pinned: !note.pinned,
+    };
+
+    onChange?.(updatedNote);
+    onSave?.(updatedNote);
+    onTogglePin?.(updatedNote);
+  };
+
+  const deleteNote = () => {
+    onDelete?.(note);
+  };
+
+  const allText =
+    note.blocks.length > 0 &&
+    note.blocks.every(
+      (block) =>
+        block.type === "text",
     );
-  }
 
-  /* =======================================================
-     ADD SELECTED TYPE
-  ======================================================= */
-
-  function addSelectedBlock() {
-    if (!selectedType) {
-      return;
-    }
-
-    addBlock(
-      selectedType,
+  const allChecklist =
+    note.blocks.length > 0 &&
+    note.blocks.every(
+      (block) =>
+        block.type === "checklist",
     );
-  }
-
-  /* =======================================================
-     PIN / UNPIN
-  ======================================================= */
-
-  async function handleTogglePin() {
-    try {
-      const updated =
-        await toggleNotePin(
-          currentNote.id,
-        );
-
-      if (!updated) {
-        return;
-      }
-
-      setCurrentNote(updated);
-
-      onChange?.(updated);
-
-      if (onSave) {
-        await onSave(updated);
-      }
-    } catch (error) {
-      console.error(
-        "Failed to toggle note pin:",
-        error,
-      );
-    }
-  }
-
-  /* =======================================================
-     DELETE NOTE
-  ======================================================= */
-
-  async function handleDelete() {
-    if (deleting) {
-      return;
-    }
-
-    const confirmed =
-      window.confirm(
-        "Delete this note?",
-      );
-
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      setDeleting(true);
-
-      /*
-       * Cancel pending save.
-       */
-      if (saveTimer.current) {
-        clearTimeout(
-          saveTimer.current,
-        );
-
-        saveTimer.current = null;
-      }
-
-      await deleteNote(
-        currentNote.id,
-      );
-
-      if (onDelete) {
-        await onDelete();
-      } else {
-        onClose();
-      }
-    } catch (error) {
-      console.error(
-        "Failed to delete note:",
-        error,
-      );
-    } finally {
-      setDeleting(false);
-    }
-  }
-
-  /* =======================================================
-     BOLD
-  ======================================================= */
-
-  function handleBold() {
-    /*
-     * execCommand is used only
-     * for browser text selection.
-     */
-    try {
-      document.execCommand(
-        "bold",
-        false,
-      );
-    } catch (error) {
-      console.error(
-        "Bold command failed:",
-        error,
-      );
-    }
-  }
-
-  /* =======================================================
-     RENDER
-  ======================================================= */
 
   return (
-    <div className="flex min-h-full flex-col bg-white">
-      {/* =================================================
-          TOP BAR
-      ================================================= */}
-
-      <div className="sticky top-0 z-20 flex items-center justify-between border-b border-gray-200 bg-white px-3 py-2 sm:px-5">
-        {/* BACK */}
-
-        <button
-          type="button"
-          onClick={onClose}
-          className="flex h-9 w-9 items-center justify-center rounded-full text-gray-700 transition hover:bg-gray-100"
-          aria-label="Close"
-        >
-          <ArrowLeft
-            size={19}
-          />
-        </button>
-
-        {/* ACTIONS */}
-
+    <div className="flex h-full min-h-0 flex-col bg-white">
+      {/* Header */}
+      <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-4 py-3">
         <div className="flex items-center gap-1">
-          {saving && (
-            <span className="mr-2 text-xs text-gray-400">
-              Saving...
-            </span>
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100"
+              aria-label="Close"
+            >
+              <X size={17} />
+            </button>
           )}
-
-          {/* PIN */}
 
           <button
             type="button"
-            onClick={
-              handleTogglePin
-            }
-            className={`flex h-9 w-9 items-center justify-center rounded-full transition ${
-              currentNote.pinned
+            onClick={togglePin}
+            className={`flex h-8 w-8 items-center justify-center rounded-lg ${
+              note.pinned
                 ? "bg-green-50 text-green-600"
-                : "text-gray-600 hover:bg-gray-100"
+                : "text-gray-500 hover:bg-gray-100"
             }`}
             aria-label={
-              currentNote.pinned
-                ? "Unpin"
-                : "Pin"
+              note.pinned
+                ? "Unpin note"
+                : "Pin note"
             }
           >
-            {currentNote.pinned ? (
-              <PinOff
-                size={18}
-              />
+            {note.pinned ? (
+              <PinOff size={16} />
             ) : (
-              <Pin size={18} />
+              <Pin size={16} />
             )}
           </button>
+        </div>
 
-          {/* DELETE */}
-
+        {onDelete && (
           <button
             type="button"
-            onClick={
-              handleDelete
-            }
-            disabled={deleting}
-            className="flex h-9 w-9 items-center justify-center rounded-full text-red-500 transition hover:bg-red-50 disabled:opacity-50"
-            aria-label="Delete"
+            onClick={deleteNote}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 hover:bg-red-50 hover:text-red-500"
+            aria-label="Delete note"
           >
-            <Trash2
-              size={18}
-            />
+            <Trash2 size={16} />
           </button>
-        </div>
+        )}
       </div>
 
-      {/* =================================================
-          EDITOR AREA
-      ================================================= */}
+      {/* Editor */}
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-3xl px-4 py-5 sm:px-6">
+          {/* Title */}
+          <input
+            type="text"
+            value={note.title}
+            onChange={(event) =>
+              changeTitle(
+                event.target.value,
+              )
+            }
+            placeholder="Title"
+            className="mb-4 w-full border-0 bg-transparent text-xl font-semibold leading-7 text-black outline-none placeholder:text-gray-300"
+          />
 
-      <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-5 sm:px-7 sm:py-7">
-        {/* TITLE */}
+          {/* Blocks */}
+          <div className="space-y-1">
+            {note.blocks.map(
+              (
+                block,
+                index,
+              ) => (
+                <div
+                  key={block.id}
+                  className="group flex items-start"
+                >
+                  {/* Checkbox */}
+                  {block.type ===
+                    "checklist" && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        toggleCheck(
+                          block.id,
+                        )
+                      }
+                      className={`mt-1 mr-1.5 flex h-[17px] w-[17px] shrink-0 items-center justify-center rounded-[4px] border ${
+                        block.checked
+                          ? "border-green-600 bg-green-600 text-white"
+                          : "border-gray-400 bg-white"
+                      }`}
+                      aria-label={
+                        block.checked
+                          ? "Uncheck"
+                          : "Check"
+                      }
+                    >
+                      {block.checked && (
+                        <span className="text-[10px] font-bold">
+                          ✓
+                        </span>
+                      )}
+                    </button>
+                  )}
 
-        <input
-          value={
-            currentNote.title
-          }
-          onChange={(event) =>
-            handleTitleChange(
-              event.target.value,
-            )
-          }
-          placeholder="Title"
-          className="mb-4 w-full border-0 bg-transparent text-xl font-semibold leading-tight text-black outline-none placeholder:text-gray-400 sm:text-2xl"
-        />
-
-        {/* BLOCKS */}
-
-        <div className="space-y-1">
-          {currentNote.blocks.map(
-            (
-              block,
-              index,
-            ) => (
-              <div
-                key={block.id}
-                className="group relative flex items-start gap-1 rounded-md py-0.5"
-              >
-                {/* =================================================
-                    CHECKBOX
-                ================================================= */}
-
-                {block.type ===
-                  "checklist" && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      updateBlock(
+                  {/* Text */}
+                  <textarea
+                    value={block.text}
+                    onChange={(event) =>
+                      changeBlock(
                         block.id,
-                        {
-                          checked:
-                            !Boolean(
-                              block.checked,
-                            ),
-                        },
+                        event.target.value,
                       )
                     }
-                    className={`mt-[4px] flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded border transition ${
+                    onKeyDown={(event) =>
+                      handleKeyDown(
+                        event,
+                        index,
+                      )
+                    }
+                    rows={1}
+                    placeholder={
+                      block.type ===
+                      "checklist"
+                        ? "List item"
+                        : "Write something..."
+                    }
+                    className={`min-h-[28px] flex-1 resize-none overflow-hidden border-0 bg-transparent p-0 text-[14px] leading-[1.45] text-black outline-none placeholder:text-gray-300 ${
                       block.checked
-                        ? "border-green-600 bg-green-600 text-white"
-                        : "border-gray-400 bg-white"
+                        ? "text-gray-400 line-through"
+                        : ""
                     }`}
-                    aria-label="Toggle checklist"
-                  >
-                    {block.checked && (
-                      <Check
-                        size={13}
-                        strokeWidth={
-                          2.5
-                        }
-                      />
-                    )}
-                  </button>
-                )}
+                  />
 
-                {/* =================================================
-                    TEXTAREA
-                ================================================= */}
+                  {/* Block controls */}
+                  <div className="ml-1 flex shrink-0 items-center opacity-0 transition group-hover:opacity-100">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        moveUp(index)
+                      }
+                      disabled={
+                        index === 0
+                      }
+                      className="px-1 text-xs text-gray-400 hover:text-gray-700 disabled:opacity-20"
+                    >
+                      ↑
+                    </button>
 
-                <textarea
-                  value={
-                    block.text
-                  }
-                  onChange={(
-                    event,
-                  ) =>
-                    updateBlock(
-                      block.id,
-                      {
-                        text:
-                          event
-                            .target
-                            .value,
-                      },
-                    )
-                  }
-                  onKeyDown={(
-                    event,
-                  ) =>
-                    handleBlockKeyDown(
-                      event,
-                      block,
-                    )
-                  }
-                  rows={1}
-                  placeholder={
-                    block.type ===
-                    "checklist"
-                      ? "Checklist item"
-                      : "Write something..."
-                  }
-                  className={`min-h-[26px] flex-1 resize-none overflow-hidden border-0 bg-transparent px-0 py-0 text-[15px] leading-[1.4] text-black outline-none placeholder:text-gray-400 ${
-                    block.type ===
-                      "checklist" &&
-                    block.checked
-                      ? "text-gray-400 line-through"
-                      : ""
-                  }`}
-                  onInput={(
-                    event,
-                  ) => {
-                    const target =
-                      event.currentTarget;
+                    <button
+                      type="button"
+                      onClick={() =>
+                        moveDown(index)
+                      }
+                      disabled={
+                        index ===
+                        note.blocks
+                          .length -
+                          1
+                      }
+                      className="px-1 text-xs text-gray-400 hover:text-gray-700 disabled:opacity-20"
+                    >
+                      ↓
+                    </button>
 
-                    target.style.height =
-                      "auto";
-
-                    target.style.height = `${target.scrollHeight}px`;
-                  }}
-                />
-
-                {/* =================================================
-                    BLOCK CONTROLS
-                ================================================= */}
-
-                <div className="mt-0.5 flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
-                  {/* UP */}
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      moveBlock(
-                        block.id,
-                        "up",
-                      )
-                    }
-                    disabled={
-                      index === 0
-                    }
-                    className="flex h-7 w-7 items-center justify-center rounded text-gray-500 transition hover:bg-gray-100 disabled:pointer-events-none disabled:opacity-20"
-                    aria-label="Move block up"
-                  >
-                    <ArrowUp
-                      size={14}
-                    />
-                  </button>
-
-                  {/* DOWN */}
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      moveBlock(
-                        block.id,
-                        "down",
-                      )
-                    }
-                    disabled={
-                      index ===
-                      currentNote
-                        .blocks
-                        .length -
-                        1
-                    }
-                    className="flex h-7 w-7 items-center justify-center rounded text-gray-500 transition hover:bg-gray-100 disabled:pointer-events-none disabled:opacity-20"
-                    aria-label="Move block down"
-                  >
-                    <ArrowDown
-                      size={14}
-                    />
-                  </button>
-
-                  {/* DELETE */}
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      removeBlock(
-                        block.id,
-                      )
-                    }
-                    className="flex h-7 w-7 items-center justify-center rounded text-red-500 transition hover:bg-red-50"
-                    aria-label="Delete block"
-                  >
-                    <X
-                      size={15}
-                    />
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        deleteBlock(
+                          block.id,
+                        )
+                      }
+                      className="px-1 text-xs text-gray-400 hover:text-red-500"
+                      aria-label="Delete block"
+                    >
+                      ×
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ),
-          )}
+              ),
+            )}
+          </div>
         </div>
       </div>
 
-      {/* =================================================
-          BOTTOM TOOLBAR
-      ================================================= */}
-
-      <div className="sticky bottom-0 z-20 border-t border-gray-200 bg-white px-3 py-2.5 sm:px-5">
-        <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-2">
-          {/* LEFT */}
-
-          <div className="flex items-center gap-1">
-            {/* BOLD */}
-
-            <button
-              type="button"
-              onClick={
-                handleBold
-              }
-              className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-700 transition hover:bg-gray-100"
-              aria-label="Bold"
-            >
-              <Bold
-                size={18}
-              />
-            </button>
-
-            {/* TEXT */}
-
-            <button
-              type="button"
-              onClick={() =>
-                handleTypeSelect(
-                  "text",
-                )
-              }
-              className={`flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-sm transition ${
-                selectedType ===
-                "text"
-                  ? "bg-green-50 text-green-600"
-                  : "text-gray-700 hover:bg-gray-100"
-              }`}
-            >
-              <Plus
-                size={15}
-              />
-
-              <span>
-                Text
-              </span>
-            </button>
-
-            {/* CHECKLIST */}
-
-            <button
-              type="button"
-              onClick={() =>
-                handleTypeSelect(
-                  "checklist",
-                )
-              }
-              className={`flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-sm transition ${
-                selectedType ===
-                "checklist"
-                  ? "bg-green-50 text-green-600"
-                  : "text-gray-700 hover:bg-gray-100"
-              }`}
-            >
-              <CheckSquare
-                size={16}
-              />
-
-              <span>
-                Checklist
-              </span>
-            </button>
-          </div>
-
-          {/* ADD */}
+      {/* Bottom selector */}
+      <div className="shrink-0 border-t border-gray-200 bg-white px-4 py-3">
+        <div className="mx-auto flex max-w-3xl justify-center gap-2">
+          <button
+            type="button"
+            onClick={makeText}
+            className={`rounded-lg px-4 py-2 text-xs font-medium transition ${
+              allText
+                ? "bg-green-600 text-white"
+                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+            }`}
+          >
+            Text
+          </button>
 
           <button
             type="button"
-            onClick={
-              addSelectedBlock
-            }
-            disabled={
-              !selectedType
-            }
-            className="flex h-9 items-center gap-1.5 rounded-lg bg-green-600 px-3.5 text-sm font-medium text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-40"
+            onClick={makeChecklist}
+            className={`rounded-lg px-4 py-2 text-xs font-medium transition ${
+              allChecklist
+                ? "bg-green-600 text-white"
+                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+            }`}
           >
-            <Plus
-              size={16}
-            />
-
-            <span>
-              Add
-            </span>
+            Checklist
           </button>
         </div>
       </div>
