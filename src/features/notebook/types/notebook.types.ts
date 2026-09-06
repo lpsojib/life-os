@@ -2,39 +2,22 @@ export type NoteBlockType =
   | "text"
   | "checklist";
 
-export interface NoteBlock {
+export type NoteBlock = {
   id: string;
-
   type: NoteBlockType;
-
-  /**
-   * Normal text বা HTML formatted text.
-   *
-   * Example:
-   * Hello world
-   *
-   * অথবা:
-   * Hello <strong>world</strong>
-   */
   text: string;
-
   checked?: boolean;
-}
+};
 
-export interface Note {
+export type Note = {
   id: string;
-
   title: string;
-
-  description?: string;
-
-  type?: string;
-
   blocks: NoteBlock[];
+  pinned: boolean;
+  createdAt: number;
+  updatedAt: number;
+};
 
-  pinned?: boolean;
-
-  createdAt: string;
-
-  updatedAt: string;
-}
+export type LocalNote = Note & {
+  syncStatus?: "pending" | "synced";
+};

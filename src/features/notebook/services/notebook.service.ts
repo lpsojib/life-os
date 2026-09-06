@@ -1,23 +1,21 @@
-"use client";
-
 import {
   collection,
   deleteDoc,
   doc,
   getDocs,
   setDoc,
-  updateDoc,
 } from "firebase/firestore";
 
 import { auth, db } from "@/lib/firebase";
 
 import {
+  LocalNote,
   Note,
   NoteBlock,
 } from "../types/notebook.types";
 
 /* =========================================================
-   CONSTANTS
+   DATABASE CONFIG
 ========================================================= */
 
 const DB_NAME = "life-os-notebook";
@@ -25,33 +23,20 @@ const DB_VERSION = 1;
 const STORE_NAME = "notes";
 
 /* =========================================================
-   TYPES
+   ID
 ========================================================= */
 
-interface LocalNoteRecord {
-  id: string;
-  note: Note;
-  syncStatus: "pending" | "synced";
-  updatedAt: string;
-}
-
-/* =========================================================
-   FIREBASE COLLECTION
-========================================================= */
-
-function getNotesCollection() {
-  const user = auth.currentUser;
-
-  if (!user) {
-    throw new Error("User is not authenticated.");
+export function createLocalId(): string {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
+    return crypto.randomUUID();
   }
 
-  return collection(
-    db,
-    "users",
-    user.uid,
-    "notes",
-  );
+  return `note-${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2, 10)}`;
 }
 
 /* =========================================================
@@ -62,35 +47,50 @@ function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     if (
       typeof window === "undefined" ||
-      !("indexedDB" in window)
+      !window.indexedDB
     ) {
       reject(
         new Error(
-          "IndexedDB is not available in this browser.",
+          "IndexedDB is only available in the browser.",
         ),
       );
       return;
     }
 
-    const request =
-      indexedDB.open(
-        DB_NAME,
-        DB_VERSION,
-      );
+    const request = indexedDB.open(
+      DB_NAME,
+      DB_VERSION,
+    );
 
     request.onupgradeneeded = () => {
-      const database =
-        request.result;
+      const database = request.result;
 
       if (
         !database.objectStoreNames.contains(
           STORE_NAME,
         )
       ) {
-        database.createObjectStore(
-          STORE_NAME,
+        const store =
+          database.createObjectStore(
+            STORE_NAME,
+            {
+              keyPath: "id",
+            },
+          );
+
+        store.createIndex(
+          "updatedAt",
+          "updatedAt",
           {
-            keyPath: "id",
+            unique: false,
+          },
+        );
+
+        store.createIndex(
+          "syncStatus",
+          "syncStatus",
+          {
+            unique: false,
           },
         );
       }
@@ -104,7 +104,7 @@ function openDatabase(): Promise<IDBDatabase> {
       reject(
         request.error ??
           new Error(
-            "Could not open notebook database.",
+            "Failed to open notebook database.",
           ),
       );
     };
@@ -112,14 +112,11 @@ function openDatabase(): Promise<IDBDatabase> {
 }
 
 /* =========================================================
-   LOCAL PUT
+   LOCAL SAVE
 ========================================================= */
 
 async function putLocalNote(
-  note: Note,
-  syncStatus:
-    | "pending"
-    | "synced" = "pending",
+  note: LocalNote,
 ): Promise<void> {
   const database =
     await openDatabase();
@@ -137,16 +134,7 @@ async function putLocalNote(
           STORE_NAME,
         );
 
-      const record: LocalNoteRecord =
-        {
-          id: note.id,
-          note,
-          syncStatus,
-          updatedAt:
-            note.updatedAt,
-        };
-
-      store.put(record);
+      store.put(note);
 
       transaction.oncomplete =
         () => {
@@ -160,7 +148,18 @@ async function putLocalNote(
         reject(
           transaction.error ??
             new Error(
-              "Could not save local note.",
+              "Failed to save local note.",
+            ),
+        );
+      };
+
+      transaction.onabort = () => {
+        database.close();
+
+        reject(
+          transaction.error ??
+            new Error(
+              "Notebook transaction aborted.",
             ),
         );
       };
@@ -173,7 +172,7 @@ async function putLocalNote(
 ========================================================= */
 
 async function getLocalNotes(): Promise<
-  LocalNoteRecord[]
+  LocalNote[]
 > {
   const database =
     await openDatabase();
@@ -195,28 +194,35 @@ async function getLocalNotes(): Promise<
         store.getAll();
 
       request.onsuccess = () => {
-        database.close();
-
-        const records =
+        const notes =
           Array.isArray(
             request.result,
           )
-            ? (request.result as LocalNoteRecord[])
+            ? (request.result as LocalNote[])
             : [];
 
-        resolve(records);
+        notes.sort(
+          (a, b) =>
+            b.updatedAt -
+            a.updatedAt,
+        );
+
+        resolve(notes);
       };
 
       request.onerror = () => {
-        database.close();
-
         reject(
           request.error ??
             new Error(
-              "Could not read local notes.",
+              "Failed to read local notes.",
             ),
         );
       };
+
+      transaction.oncomplete =
+        () => {
+          database.close();
+        };
     },
   );
 }
@@ -227,7 +233,7 @@ async function getLocalNotes(): Promise<
 
 async function getLocalNote(
   id: string,
-): Promise<Note | null> {
+): Promise<LocalNote | null> {
   const database =
     await openDatabase();
 
@@ -248,28 +254,26 @@ async function getLocalNote(
         store.get(id);
 
       request.onsuccess = () => {
-        database.close();
-
-        const record =
-          request.result as
-            | LocalNoteRecord
-            | undefined;
-
         resolve(
-          record?.note ?? null,
+          request.result
+            ? (request.result as LocalNote)
+            : null,
         );
       };
 
       request.onerror = () => {
-        database.close();
-
         reject(
           request.error ??
             new Error(
-              "Could not read local note.",
+              "Failed to read local note.",
             ),
         );
       };
+
+      transaction.oncomplete =
+        () => {
+          database.close();
+        };
     },
   );
 }
@@ -311,7 +315,7 @@ async function removeLocalNote(
         reject(
           transaction.error ??
             new Error(
-              "Could not delete local note.",
+              "Failed to delete local note.",
             ),
         );
       };
@@ -324,30 +328,58 @@ async function removeLocalNote(
 ========================================================= */
 
 function normalizeBlock(
-  block: NoteBlock,
+  value: unknown,
 ): NoteBlock {
-  if (
+  const block =
+    (value ?? {}) as Record<
+      string,
+      unknown
+    >;
+
+  const id =
+    typeof block.id === "string" &&
+    block.id.length > 0
+      ? block.id
+      : createLocalId();
+
+  const type =
     block.type === "checklist"
-  ) {
+      ? "checklist"
+      : "text";
+
+  /*
+   * New format:
+   * text
+   *
+   * Old format:
+   * content
+   *
+   * Both are supported while
+   * reading old notes.
+   */
+  const text =
+    typeof block.text === "string"
+      ? block.text
+      : typeof block.content ===
+          "string"
+        ? block.content
+        : "";
+
+  if (type === "checklist") {
     return {
-      ...block,
+      id,
       type: "checklist",
-      text:
-        typeof block.text === "string"
-          ? block.text
-          : "",
-      checked:
-        block.checked === true,
+      text,
+      checked: Boolean(
+        block.checked,
+      ),
     };
   }
 
   return {
-    ...block,
+    id,
     type: "text",
-    text:
-      typeof block.text === "string"
-        ? block.text
-        : "",
+    text,
   };
 }
 
@@ -355,164 +387,315 @@ function normalizeBlock(
    NORMALIZE NOTE
 ========================================================= */
 
-function normalizeNote(
-  data: Partial<Note> & {
+export function normalizeNote(
+  input: Partial<Note> & {
     id: string;
   },
 ): Note {
+  const now = Date.now();
+
   const rawBlocks =
-    Array.isArray(data.blocks)
-      ? data.blocks
+    Array.isArray(input.blocks)
+      ? input.blocks
       : [];
 
   const blocks =
-    rawBlocks.map(
-      normalizeBlock,
-    );
+    rawBlocks.length > 0
+      ? rawBlocks.map(
+          normalizeBlock,
+        )
+      : [
+          {
+            id: createLocalId(),
+            type: "text" as const,
+            text: "",
+          },
+        ];
 
   return {
-    id: data.id,
+    id: input.id,
 
     title:
-      typeof data.title === "string"
-        ? data.title
+      typeof input.title ===
+      "string"
+        ? input.title
         : "",
-
-    type:
-      data.type === "checklist"
-        ? "checklist"
-        : "text",
 
     blocks,
 
-    pinned:
-      data.pinned === true,
+    pinned: Boolean(
+      input.pinned,
+    ),
 
     createdAt:
-      typeof data.createdAt === "string"
-        ? data.createdAt
-        : new Date().toISOString(),
+      typeof input.createdAt ===
+      "number"
+        ? input.createdAt
+        : now,
 
     updatedAt:
-      typeof data.updatedAt === "string"
-        ? data.updatedAt
-        : new Date().toISOString(),
+      typeof input.updatedAt ===
+      "number"
+        ? input.updatedAt
+        : now,
   };
 }
 
 /* =========================================================
-   CREATE LOCAL ID
+   FIRESTORE SAFE NOTE
 ========================================================= */
 
-function createLocalId(): string {
-  if (
-    typeof crypto !== "undefined" &&
-    typeof crypto.randomUUID ===
-      "function"
-  ) {
-    return crypto.randomUUID();
-  }
+function toFirestoreNote(
+  note: Note,
+): Record<string, unknown> {
+  return {
+    id: note.id,
 
-  return `note-${Date.now()}-${Math.random()
-    .toString(36)
-    .slice(2)}`;
+    title:
+      typeof note.title ===
+      "string"
+        ? note.title
+        : "",
+
+    blocks: note.blocks.map(
+      (block) => {
+        const safeBlock: Record<
+          string,
+          unknown
+        > = {
+          id: block.id,
+          type: block.type,
+          text:
+            typeof block.text ===
+            "string"
+              ? block.text
+              : "",
+        };
+
+        /*
+         * Only checklist blocks
+         * receive checked.
+         *
+         * Therefore undefined is
+         * never sent to Firestore.
+         */
+        if (
+          block.type ===
+          "checklist"
+        ) {
+          safeBlock.checked =
+            Boolean(
+              block.checked,
+            );
+        }
+
+        return safeBlock;
+      },
+    ),
+
+    pinned: Boolean(
+      note.pinned,
+    ),
+
+    createdAt:
+      note.createdAt,
+
+    updatedAt:
+      note.updatedAt,
+  };
 }
 
 /* =========================================================
-   CREATE NOTE
+   CLEAN LOCAL NOTE
+========================================================= */
+
+function cleanLocalNote(
+  note: LocalNote,
+): Note {
+  const {
+    syncStatus: _syncStatus,
+    ...cleanNote
+  } = note;
+
+  return cleanNote;
+}
+
+/* =========================================================
+   ADD NOTE
 ========================================================= */
 
 export async function addNote(
-  title = "",
+  data: Partial<Note> = {},
 ): Promise<Note> {
-  const now =
-    new Date().toISOString();
+  const now = Date.now();
 
-  const note: Note =
+  const note =
     normalizeNote({
-      id: createLocalId(),
-      title,
-      type: "text",
-      blocks: [
-        {
-          id: createLocalId(),
-          type: "text",
-          text: "",
-        },
-      ],
-      pinned: false,
-      createdAt: now,
+      id:
+        typeof data.id ===
+          "string" &&
+        data.id.length > 0
+          ? data.id
+          : createLocalId(),
+
+      title:
+        typeof data.title ===
+        "string"
+          ? data.title
+          : "",
+
+      blocks:
+        Array.isArray(
+          data.blocks,
+        )
+          ? data.blocks
+          : [],
+
+      pinned:
+        Boolean(data.pinned),
+
+      createdAt:
+        typeof data.createdAt ===
+        "number"
+          ? data.createdAt
+          : now,
+
       updatedAt: now,
     });
 
   /*
-   * Save locally first.
-   * This makes creating notes fast
-   * even when the user is offline.
+   * ALWAYS save locally first.
    */
-  await putLocalNote(
-    note,
-    "pending",
-  );
+  await putLocalNote({
+    ...note,
+    syncStatus: "pending",
+  });
 
   /*
-   * Try Firebase sync.
-   * If offline, local note remains available.
+   * Then try Firebase.
    */
-  try {
-    await saveNoteToFirebase(
-      note,
-    );
+  const user =
+    auth.currentUser;
 
-    await putLocalNote(
-      note,
-      "synced",
-    );
-  } catch (error) {
-    console.warn(
-      "Note Firebase sync skipped:",
-      error,
-    );
+  if (user) {
+    try {
+      await setDoc(
+        doc(
+          db,
+          "users",
+          user.uid,
+          "notes",
+          note.id,
+        ),
+        toFirestoreNote(note),
+      );
+
+      await putLocalNote({
+        ...note,
+        syncStatus: "synced",
+      });
+    } catch (error) {
+      console.error(
+        "Firebase note creation failed. Local copy preserved.",
+        error,
+      );
+    }
   }
 
   return note;
 }
 
 /* =========================================================
-   SAVE NOTE TO FIREBASE
+   SAVE / UPDATE NOTE
 ========================================================= */
 
-async function saveNoteToFirebase(
-  note: Note,
-): Promise<void> {
-  const user = auth.currentUser;
+export async function saveNote(
+  data: Partial<Note> & {
+    id?: string;
+  },
+): Promise<Note> {
+  const now = Date.now();
 
-  if (!user) {
-    throw new Error(
-      "User is not authenticated.",
-    );
+  const existing =
+    data.id
+      ? await getLocalNote(
+          data.id,
+        )
+      : null;
+
+  const note =
+    normalizeNote({
+      id:
+        typeof data.id ===
+          "string" &&
+        data.id.length > 0
+          ? data.id
+          : existing?.id ??
+            createLocalId(),
+
+      title:
+        data.title ??
+        existing?.title ??
+        "",
+
+      blocks:
+        data.blocks ??
+        existing?.blocks ??
+        [],
+
+      pinned:
+        data.pinned ??
+        existing?.pinned ??
+        false,
+
+      createdAt:
+        data.createdAt ??
+        existing?.createdAt ??
+        now,
+
+      updatedAt: now,
+    });
+
+  /*
+   * Local-first.
+   */
+  await putLocalNote({
+    ...note,
+    syncStatus: "pending",
+  });
+
+  /*
+   * Firebase.
+   */
+  const user =
+    auth.currentUser;
+
+  if (user) {
+    try {
+      await setDoc(
+        doc(
+          db,
+          "users",
+          user.uid,
+          "notes",
+          note.id,
+        ),
+        toFirestoreNote(note),
+      );
+
+      await putLocalNote({
+        ...note,
+        syncStatus: "synced",
+      });
+    } catch (error) {
+      console.error(
+        "Firebase note update failed. Local copy preserved.",
+        error,
+      );
+    }
   }
 
-  const noteReference = doc(
-    getNotesCollection(),
-    note.id,
-  );
-
-  await setDoc(
-    noteReference,
-    {
-      id: note.id,
-      title: note.title,
-      type: note.type,
-      blocks: note.blocks,
-      pinned: note.pinned,
-      createdAt: note.createdAt,
-      updatedAt: note.updatedAt,
-    },
-    {
-      merge: true,
-    },
-  );
+  return note;
 }
 
 /* =========================================================
@@ -522,192 +705,160 @@ async function saveNoteToFirebase(
 export async function getNotes(): Promise<
   Note[]
 > {
-  const localRecords =
+  const localNotes =
     await getLocalNotes();
 
-  const localNotes =
-    localRecords
-      .map(
-        (record) =>
-          normalizeNote(
-            record.note,
-          ),
-      )
-      .sort(
-        (a, b) =>
-          new Date(
-            b.updatedAt,
-          ).getTime() -
-          new Date(
-            a.updatedAt,
-          ).getTime(),
-      );
+  const user =
+    auth.currentUser;
 
   /*
-   * If user is not logged in,
-   * return local notes.
+   * Offline / not logged in.
    */
-  if (!auth.currentUser) {
-    return localNotes;
+  if (!user) {
+    return localNotes.map(
+      cleanLocalNote,
+    );
   }
 
   try {
     const snapshot =
       await getDocs(
-        getNotesCollection(),
+        collection(
+          db,
+          "users",
+          user.uid,
+          "notes",
+        ),
       );
 
-    const firebaseNotes =
-      snapshot.docs.map(
-        (snapshotDocument) => {
-          const data =
-            snapshotDocument.data();
-
-          return normalizeNote({
-            id: snapshotDocument.id,
-            ...data,
-          });
-        },
-      );
+    const merged =
+      new Map<
+        string,
+        LocalNote
+      >();
 
     /*
-     * Merge Firebase and local notes.
-     * Local pending notes are preserved.
+     * Start with local data.
      */
-    const noteMap =
-      new Map<string, Note>();
-
-    for (const note of firebaseNotes) {
-      noteMap.set(
+    for (const note of localNotes) {
+      merged.set(
         note.id,
         note,
       );
     }
 
-    for (const record of localRecords) {
-      const localNote =
-        normalizeNote(
-          record.note,
+    /*
+     * Merge Firebase data.
+     */
+    for (const item of snapshot.docs) {
+      const data =
+        item.data();
+
+      const remoteNote =
+        normalizeNote({
+          id: item.id,
+
+          title:
+            typeof data.title ===
+            "string"
+              ? data.title
+              : "",
+
+          blocks:
+            Array.isArray(
+              data.blocks,
+            )
+              ? data.blocks
+              : [],
+
+          pinned:
+            Boolean(
+              data.pinned,
+            ),
+
+          createdAt:
+            typeof data.createdAt ===
+            "number"
+              ? data.createdAt
+              : Date.now(),
+
+          updatedAt:
+            typeof data.updatedAt ===
+            "number"
+              ? data.updatedAt
+              : Date.now(),
+        });
+
+      const local =
+        merged.get(
+          remoteNote.id,
         );
 
-      const firebaseNote =
-        noteMap.get(
-          localNote.id,
-        );
-
+      /*
+       * Firebase is newer
+       * or local does not exist.
+       */
       if (
-        !firebaseNote ||
-        record.syncStatus ===
-          "pending" ||
-        new Date(
-          localNote.updatedAt,
-        ).getTime() >
-          new Date(
-            firebaseNote.updatedAt,
-          ).getTime()
+        !local ||
+        remoteNote.updatedAt >=
+          local.updatedAt
       ) {
-        noteMap.set(
-          localNote.id,
-          localNote,
+        const syncedNote =
+          {
+            ...remoteNote,
+            syncStatus:
+              "synced" as const,
+          };
+
+        merged.set(
+          remoteNote.id,
+          syncedNote,
+        );
+
+        await putLocalNote(
+          syncedNote,
         );
       }
     }
 
-    const mergedNotes =
-      Array.from(
-        noteMap.values(),
-      ).sort(
+    return Array.from(
+      merged.values(),
+    )
+      .map(cleanLocalNote)
+      .sort(
         (a, b) =>
-          new Date(
-            b.updatedAt,
-          ).getTime() -
-          new Date(
-            a.updatedAt,
-          ).getTime(),
+          b.updatedAt -
+          a.updatedAt,
       );
-
-    /*
-     * Update local cache.
-     */
-    for (const note of mergedNotes) {
-      const existing =
-        localRecords.find(
-          (record) =>
-            record.id === note.id,
-        );
-
-      await putLocalNote(
-        note,
-        existing?.syncStatus ===
-          "pending"
-          ? "pending"
-          : "synced",
-      );
-    }
-
-    return mergedNotes;
   } catch (error) {
-    console.warn(
-      "Could not load Firebase notes. Using local notes.",
+    console.error(
+      "Failed to load notes from Firebase. Using local notes.",
       error,
     );
 
-    return localNotes;
+    return localNotes.map(
+      cleanLocalNote,
+    );
   }
 }
 
 /* =========================================================
-   SAVE / UPDATE NOTE
+   GET SINGLE NOTE
 ========================================================= */
 
-export async function saveNote(
-  note: Note,
-): Promise<Note> {
-  const updatedNote =
-    normalizeNote({
-      ...note,
-      updatedAt:
-        new Date().toISOString(),
-    });
+export async function getNote(
+  id: string,
+): Promise<Note | null> {
+  const note =
+    await getLocalNote(id);
 
-  /*
-   * Local-first save.
-   */
-  await putLocalNote(
-    updatedNote,
-    "pending",
+  if (!note) {
+    return null;
+  }
+
+  return cleanLocalNote(
+    note,
   );
-
-  /*
-   * Firebase sync.
-   */
-  try {
-    await saveNoteToFirebase(
-      updatedNote,
-    );
-
-    await putLocalNote(
-      updatedNote,
-      "synced",
-    );
-  } catch (error) {
-    console.warn(
-      "Note saved locally. Firebase sync will retry later.",
-      error,
-    );
-  }
-
-  return updatedNote;
-}
-
-/* =========================================================
-   UPDATE NOTE
-========================================================= */
-
-export async function updateNote(
-  note: Note,
-): Promise<Note> {
-  return saveNote(note);
 }
 
 /* =========================================================
@@ -715,82 +866,66 @@ export async function updateNote(
 ========================================================= */
 
 export async function deleteNote(
-  noteId: string,
+  id: string,
 ): Promise<void> {
   /*
-   * Delete locally first.
+   * Delete local first.
    */
-  await removeLocalNote(
-    noteId,
-  );
+  await removeLocalNote(id);
+
+  const user =
+    auth.currentUser;
 
   /*
-   * Delete from Firebase.
+   * Offline:
+   * local delete is enough.
    */
+  if (!user) {
+    return;
+  }
+
   try {
-    const user =
-      auth.currentUser;
-
-    if (!user) {
-      return;
-    }
-
     await deleteDoc(
       doc(
-        getNotesCollection(),
-        noteId,
+        db,
+        "users",
+        user.uid,
+        "notes",
+        id,
       ),
     );
   } catch (error) {
-    console.warn(
-      "Firebase note deletion failed:",
+    console.error(
+      "Failed to delete note from Firebase.",
       error,
     );
+
+    throw error;
   }
 }
 
 /* =========================================================
-   TOGGLE PIN
+   PIN / UNPIN
 ========================================================= */
 
 export async function toggleNotePin(
-  note: Note,
-): Promise<Note> {
-  const updatedNote =
-    normalizeNote({
-      ...note,
-      pinned: !note.pinned,
-      updatedAt:
-        new Date().toISOString(),
-    });
+  id: string,
+): Promise<Note | null> {
+  const note =
+    await getLocalNote(id);
 
-  return saveNote(
-    updatedNote,
-  );
-}
+  if (!note) {
+    return null;
+  }
 
-/* =========================================================
-   SYNC ONE NOTE
-========================================================= */
-
-export async function syncOneNote(
-  note: Note,
-): Promise<Note> {
-  const normalized =
-    normalizeNote({
-      ...note,
-    });
-
-  await saveNoteToFirebase(
-    normalized,
-  );
-
-  await putLocalNote(
-    normalized,
-    "synced",
-  );
-
-  return normalized;
+  return saveNote({
+    id: note.id,
+    title: note.title,
+    blocks: note.blocks,
+    pinned: !note.pinned,
+    createdAt:
+      note.createdAt,
+  });
 }
 
 /* =========================================================
@@ -798,97 +933,57 @@ export async function syncOneNote(
 ========================================================= */
 
 export async function syncPendingNotes(): Promise<void> {
-  if (!auth.currentUser) {
+  const user =
+    auth.currentUser;
+
+  if (!user) {
     return;
   }
 
-  try {
-    const records =
-      await getLocalNotes();
+  const localNotes =
+    await getLocalNotes();
 
-    const pending =
-      records.filter(
-        (record) =>
-          record.syncStatus ===
-          "pending",
+  const pendingNotes =
+    localNotes.filter(
+      (note) =>
+        note.syncStatus ===
+        "pending",
+    );
+
+  for (const note of pendingNotes) {
+    try {
+      await setDoc(
+        doc(
+          db,
+          "users",
+          user.uid,
+          "notes",
+          note.id,
+        ),
+        toFirestoreNote(note),
       );
 
-    for (const record of pending) {
-      try {
-        const note =
-          normalizeNote(
-            record.note,
-          );
-
-        await saveNoteToFirebase(
-          note,
-        );
-
-        await putLocalNote(
-          note,
-          "synced",
-        );
-      } catch (error) {
-        console.warn(
-          `Could not sync note ${record.id}:`,
-          error,
-        );
-      }
+      await putLocalNote({
+        ...note,
+        syncStatus: "synced",
+      });
+    } catch (error) {
+      console.error(
+        "Failed to sync note:",
+        note.id,
+        error,
+      );
     }
-  } catch (error) {
-    console.warn(
-      "Could not sync pending notes:",
-      error,
-    );
   }
 }
 
 /* =========================================================
-   GET LOCAL RECORDS
-========================================================= */
-
-export async function getLocalRecords(): Promise<
-  Note[]
-> {
-  const records =
-    await getLocalNotes();
-
-  return records
-    .map(
-      (record) =>
-        normalizeNote(
-          record.note,
-        ),
-    )
-    .sort(
-      (a, b) =>
-        new Date(
-          b.updatedAt,
-        ).getTime() -
-        new Date(
-          a.updatedAt,
-        ).getTime(),
-    );
-}
-
-/* =========================================================
-   CLEAR LOCAL NOTE
-========================================================= */
-
-export async function removeLocalRecord(
-  noteId: string,
-): Promise<void> {
-  await removeLocalNote(
-    noteId,
-  );
-}
-
-/* =========================================================
-   AUTO SYNC WHEN ONLINE
+   ONLINE EVENT
 ========================================================= */
 
 if (
-  typeof window !== "undefined"
+  typeof window !==
+  "undefined"
 ) {
   window.addEventListener(
     "online",
