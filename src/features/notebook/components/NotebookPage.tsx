@@ -29,20 +29,12 @@ import type { Note } from "../types/notebook.types";
 
 import NoteEditor from "./NoteEditor";
 
-/* =========================================================
-   FILTER TYPE
-========================================================= */
-
 type NoteFilter =
   | "all"
   | "paragraph"
   | "checkbox"
   | "both"
   | "pinned";
-
-/* =========================================================
-   NOTEBOOK PAGE
-========================================================= */
 
 export default function NotebookPage() {
   const {
@@ -52,9 +44,7 @@ export default function NotebookPage() {
     reload: refresh,
   } = useNotes();
 
-  const [search, setSearch] =
-    useState("");
-
+  const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] =
     useState<NoteFilter>("all");
 
@@ -67,39 +57,30 @@ export default function NotebookPage() {
   const [deletingId, setDeletingId] =
     useState<string | null>(null);
 
-  /* =======================================================
-     FILTER NOTES
-  ======================================================= */
-
+  /*
+   * Filter notes
+   */
   const filteredNotes = useMemo(() => {
-    const query =
-      search.trim().toLowerCase();
+    const query = search.trim().toLowerCase();
 
     return notes.filter((note) => {
-      const blocks =
-        Array.isArray(note.blocks)
-          ? note.blocks
-          : [];
+      const blocks = Array.isArray(note.blocks)
+        ? note.blocks
+        : [];
 
-      const hasParagraph =
-        blocks.some(
-          (block) =>
-            block.type === "text" &&
-            typeof block.text === "string" &&
-            block.text.trim().length > 0,
-        );
+      const hasParagraph = blocks.some(
+        (block) =>
+          block.type === "text" &&
+          typeof block.text === "string" &&
+          block.text.trim().length > 0,
+      );
 
-      const hasCheckbox =
-        blocks.some(
-          (block) =>
-            block.type === "checklist" &&
-            typeof block.text === "string" &&
-            block.text.trim().length > 0,
-        );
-
-      /* =====================================================
-         FILTER
-      ===================================================== */
+      const hasCheckbox = blocks.some(
+        (block) =>
+          block.type === "checklist" &&
+          typeof block.text === "string" &&
+          block.text.trim().length > 0,
+      );
 
       if (
         activeFilter === "paragraph" &&
@@ -129,10 +110,6 @@ export default function NotebookPage() {
         return false;
       }
 
-      /* =====================================================
-         SEARCH
-      ===================================================== */
-
       if (!query) {
         return true;
       }
@@ -142,31 +119,25 @@ export default function NotebookPage() {
           ? note.title.toLowerCase()
           : "";
 
-      const blockText =
-        blocks
-          .map((block) =>
-            typeof block.text === "string"
-              ? block.text
-              : "",
-          )
-          .join(" ")
-          .toLowerCase();
+      const blockText = blocks
+        .map((block) =>
+          typeof block.text === "string"
+            ? block.text
+            : "",
+        )
+        .join(" ")
+        .toLowerCase();
 
       return (
         title.includes(query) ||
         blockText.includes(query)
       );
     });
-  }, [
-    notes,
-    search,
-    activeFilter,
-  ]);
+  }, [notes, search, activeFilter]);
 
-  /* =======================================================
-     COUNTS
-  ======================================================= */
-
+  /*
+   * Counts
+   */
   const counts = useMemo(() => {
     let paragraph = 0;
     let checkbox = 0;
@@ -174,31 +145,25 @@ export default function NotebookPage() {
     let pinned = 0;
 
     for (const note of notes) {
-      const blocks =
-        Array.isArray(note.blocks)
-          ? note.blocks
-          : [];
+      const blocks = Array.isArray(note.blocks)
+        ? note.blocks
+        : [];
 
-      const hasParagraph =
-        blocks.some(
-          (block) =>
-            block.type === "text" &&
-            typeof block.text === "string" &&
-            block.text.trim().length > 0,
-        );
+      const hasParagraph = blocks.some(
+        (block) =>
+          block.type === "text" &&
+          typeof block.text === "string" &&
+          block.text.trim().length > 0,
+      );
 
-      const hasCheckbox =
-        blocks.some(
-          (block) =>
-            block.type === "checklist" &&
-            typeof block.text === "string" &&
-            block.text.trim().length > 0,
-        );
+      const hasCheckbox = blocks.some(
+        (block) =>
+          block.type === "checklist" &&
+          typeof block.text === "string" &&
+          block.text.trim().length > 0,
+      );
 
-      if (
-        hasParagraph &&
-        hasCheckbox
-      ) {
+      if (hasParagraph && hasCheckbox) {
         both++;
       } else if (hasParagraph) {
         paragraph++;
@@ -219,10 +184,9 @@ export default function NotebookPage() {
     };
   }, [notes]);
 
-  /* =======================================================
-     CREATE NOTE
-  ======================================================= */
-
+  /*
+   * Create note
+   */
   async function handleCreateNote() {
     if (creating) {
       return;
@@ -231,11 +195,7 @@ export default function NotebookPage() {
     setCreating(true);
 
     try {
-      /*
-       * Title intentionally empty.
-       */
-      const note =
-        await addNote("");
+      const note = await addNote("");
 
       setEditingNote(note);
 
@@ -250,26 +210,19 @@ export default function NotebookPage() {
     }
   }
 
-  /* =======================================================
-     EDITOR CHANGE
-  ======================================================= */
-
-  function handleEditorChange(
-    note: Note,
-  ) {
+  /*
+   * Editor change
+   */
+  function handleEditorChange(note: Note) {
     setEditingNote(note);
   }
 
-  /* =======================================================
-     SAVE NOTE
-  ======================================================= */
-
-  async function handleSaveNote(
-    note: Note,
-  ) {
+  /*
+   * Save note
+   */
+  async function handleSaveNote(note: Note) {
     try {
-      const saved =
-        await saveNote(note);
+      const saved = await saveNote(note);
 
       setEditingNote(saved);
 
@@ -282,17 +235,15 @@ export default function NotebookPage() {
     }
   }
 
-  /* =======================================================
-     DELETE NOTE
-  ======================================================= */
-
+  /*
+   * Delete note
+   */
   async function handleDeleteNote(
     noteId: string,
   ) {
-    const confirmed =
-      window.confirm(
-        "Are you sure you want to delete this note?",
-      );
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this note?",
+    );
 
     if (!confirmed) {
       return;
@@ -303,9 +254,7 @@ export default function NotebookPage() {
     try {
       await deleteNote(noteId);
 
-      if (
-        editingNote?.id === noteId
-      ) {
+      if (editingNote?.id === noteId) {
         setEditingNote(null);
       }
 
@@ -320,20 +269,15 @@ export default function NotebookPage() {
     }
   }
 
-  /* =======================================================
-     TOGGLE PIN
-  ======================================================= */
-
-  async function handleTogglePin(
-    note: Note,
-  ) {
+  /*
+   * Toggle pin
+   */
+  async function handleTogglePin(note: Note) {
     try {
       const updated =
         await toggleNotePin(note);
 
-      if (
-        editingNote?.id === note.id
-      ) {
+      if (editingNote?.id === note.id) {
         setEditingNote(updated);
       }
 
@@ -346,20 +290,11 @@ export default function NotebookPage() {
     }
   }
 
-  /* =======================================================
-     PAGE
-  ======================================================= */
-
   return (
     <div className="min-h-full bg-gray-50 p-4 sm:p-6">
       <div className="mx-auto max-w-7xl">
-
-        {/* =================================================
-            HEADER
-        ================================================= */}
-
+        {/* Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-gray-900">
               Notebook
@@ -401,13 +336,9 @@ export default function NotebookPage() {
           </button>
         </div>
 
-        {/* =================================================
-            SEARCH
-        ================================================= */}
-
+        {/* Search */}
         <div className="mt-6 rounded-2xl border border-gray-200 bg-white p-3 shadow-sm">
           <div className="flex items-center gap-3 px-1">
-
             <Search
               size={19}
               className="shrink-0 text-gray-400"
@@ -417,9 +348,7 @@ export default function NotebookPage() {
               type="text"
               value={search}
               onChange={(event) =>
-                setSearch(
-                  event.target.value,
-                )
+                setSearch(event.target.value)
               }
               placeholder="Search notes..."
               className="
@@ -434,23 +363,15 @@ export default function NotebookPage() {
           </div>
         </div>
 
-        {/* =================================================
-            FILTERS
-        ================================================= */}
-
+        {/* Filters */}
         <div className="mt-4 overflow-x-auto pb-1">
           <div className="flex min-w-max gap-2">
-
             <FilterButton
-              active={
-                activeFilter === "all"
-              }
+              active={activeFilter === "all"}
               onClick={() =>
                 setActiveFilter("all")
               }
-              icon={
-                <FileText size={15} />
-              }
+              icon={<FileText size={15} />}
               label="All Notes"
               count={notes.length}
             />
@@ -460,13 +381,9 @@ export default function NotebookPage() {
                 activeFilter === "paragraph"
               }
               onClick={() =>
-                setActiveFilter(
-                  "paragraph",
-                )
+                setActiveFilter("paragraph")
               }
-              icon={
-                <FileText size={15} />
-              }
+              icon={<FileText size={15} />}
               label="Paragraph"
               count={counts.paragraph}
             />
@@ -476,27 +393,19 @@ export default function NotebookPage() {
                 activeFilter === "checkbox"
               }
               onClick={() =>
-                setActiveFilter(
-                  "checkbox",
-                )
+                setActiveFilter("checkbox")
               }
-              icon={
-                <CheckSquare size={15} />
-              }
+              icon={<CheckSquare size={15} />}
               label="Checkbox"
               count={counts.checkbox}
             />
 
             <FilterButton
-              active={
-                activeFilter === "both"
-              }
+              active={activeFilter === "both"}
               onClick={() =>
                 setActiveFilter("both")
               }
-              icon={
-                <Layers3 size={15} />
-              }
+              icon={<Layers3 size={15} />}
               label="Both"
               count={counts.both}
             />
@@ -506,31 +415,20 @@ export default function NotebookPage() {
                 activeFilter === "pinned"
               }
               onClick={() =>
-                setActiveFilter(
-                  "pinned",
-                )
+                setActiveFilter("pinned")
               }
-              icon={
-                <Pin size={15} />
-              }
+              icon={<Pin size={15} />}
               label="Pinned"
               count={counts.pinned}
             />
-
           </div>
         </div>
 
-        {/* =================================================
-            STATUS
-        ================================================= */}
-
+        {/* Status */}
         <div className="mt-6 flex items-center justify-between">
-
           <div>
             <h2 className="font-semibold text-gray-800">
-              {getFilterName(
-                activeFilter,
-              )}
+              {getFilterName(activeFilter)}
             </h2>
 
             <p className="mt-0.5 text-xs text-gray-400">
@@ -548,75 +446,51 @@ export default function NotebookPage() {
           )}
         </div>
 
-        {/* =================================================
-            ERROR / OFFLINE
-        ================================================= */}
-
+        {/* Offline / Error */}
         {error && (
           <div className="mt-4 rounded-xl border border-yellow-100 bg-yellow-50 px-4 py-3 text-xs text-yellow-700">
-            Offline mode — your local notes are still available.
+            Offline mode — your local notes are
+            still available.
           </div>
         )}
 
-        {/* =================================================
-            NOTES
-        ================================================= */}
-
+        {/* Notes */}
         {filteredNotes.length === 0 ? (
           <EmptyState
-            onCreate={
-              handleCreateNote
-            }
+            onCreate={handleCreateNote}
           />
         ) : (
           <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-
-            {filteredNotes.map(
-              (note) => (
-                <NoteCard
-                  key={note.id}
-                  note={note}
-                  deleting={
-                    deletingId === note.id
-                  }
-                  onOpen={() =>
-                    setEditingNote(note)
-                  }
-                  onDelete={() =>
-                    handleDeleteNote(
-                      note.id,
-                    )
-                  }
-                  onPin={() =>
-                    handleTogglePin(
-                      note,
-                    )
-                  }
-                />
-              ),
-            )}
-
+            {filteredNotes.map((note) => (
+              <NoteCard
+                key={note.id}
+                note={note}
+                deleting={
+                  deletingId === note.id
+                }
+                onOpen={() =>
+                  setEditingNote(note)
+                }
+                onDelete={() =>
+                  handleDeleteNote(note.id)
+                }
+                onPin={() =>
+                  handleTogglePin(note)
+                }
+              />
+            ))}
           </div>
         )}
       </div>
 
-      {/* =================================================
-          NOTE EDITOR
-      ================================================= */}
-
+      {/* Note Editor */}
       {editingNote && (
         <NoteEditor
           note={editingNote}
-          onChange={
-            handleEditorChange
-          }
-          onSave={
-            handleSaveNote
-          }
+          onChange={handleEditorChange}
+          onSave={handleSaveNote}
           onDelete={() =>
-            handleDeleteNote(
-              editingNote.id,
-            )
+            handleDeleteNote(editingNote.id)
           }
           onClose={() =>
             setEditingNote(null)
@@ -668,9 +542,7 @@ function FilterButton({
     >
       {icon}
 
-      <span>
-        {label}
-      </span>
+      <span>{label}</span>
 
       <span
         className={`
@@ -702,7 +574,6 @@ function EmptyState({
 }) {
   return (
     <div className="mt-5 rounded-2xl border border-dashed border-gray-200 bg-white p-12 text-center">
-
       <FileText
         size={40}
         className="mx-auto text-gray-300"
@@ -759,42 +630,27 @@ function NoteCard({
   onDelete: () => void;
   onPin: () => void;
 }) {
-  const blocks =
-    Array.isArray(note.blocks)
-      ? note.blocks
-      : [];
+  const blocks = Array.isArray(note.blocks)
+    ? note.blocks
+    : [];
 
-  /* =======================================================
-     TEXT BLOCKS
-  ======================================================= */
+  const textParts = blocks
+    .filter(
+      (block) =>
+        block.type === "text" &&
+        typeof block.text === "string" &&
+        block.text.trim().length > 0,
+    )
+    .map((block) => block.text);
 
-  const textParts =
-    blocks
-      .filter(
-        (block) =>
-          block.type === "text" &&
-          typeof block.text === "string" &&
-          block.text.trim().length > 0,
-      )
-      .map(
-        (block) => block.text,
-      );
-
-  /* =======================================================
-     CHECKLIST BLOCKS
-  ======================================================= */
-
-  const checklistParts =
-    blocks
-      .filter(
-        (block) =>
-          block.type === "checklist" &&
-          typeof block.text === "string" &&
-          block.text.trim().length > 0,
-      )
-      .map(
-        (block) => block.text,
-      );
+  const checklistParts = blocks
+    .filter(
+      (block) =>
+        block.type === "checklist" &&
+        typeof block.text === "string" &&
+        block.text.trim().length > 0,
+    )
+    .map((block) => block.text);
 
   const hasParagraph =
     textParts.length > 0;
@@ -802,35 +658,29 @@ function NoteCard({
   const hasCheckbox =
     checklistParts.length > 0;
 
-  /* =======================================================
-     PREVIEW
-  ======================================================= */
-
   const preview =
     textParts.join(" ") ||
     checklistParts.join(" • ") ||
     "Empty note";
 
   return (
-    <div className="
-      group
-      relative
-      overflow-hidden
-      rounded-2xl
-      border
-      border-gray-200
-      bg-white
-      p-5
-      shadow-sm
-      transition
-      hover:-translate-y-0.5
-      hover:shadow-md
-    ">
-
-      {/* =================================================
-          PIN
-      ================================================= */}
-
+    <div
+      className="
+        group
+        relative
+        overflow-hidden
+        rounded-2xl
+        border
+        border-gray-200
+        bg-white
+        p-5
+        shadow-sm
+        transition
+        hover:-translate-y-0.5
+        hover:shadow-md
+      "
+    >
+      {/* Pin */}
       <button
         type="button"
         onClick={onPin}
@@ -856,10 +706,7 @@ function NoteCard({
         <Pin size={17} />
       </button>
 
-      {/* =================================================
-          OPEN
-      ================================================= */}
-
+      {/* Open */}
       <button
         type="button"
         onClick={onOpen}
@@ -869,86 +716,85 @@ function NoteCard({
           {note.title || "Untitled Note"}
         </h4>
 
-        <p className="
-          mt-3
-          line-clamp-4
-          text-sm
-          leading-6
-          text-gray-500
-        ">
+        <p
+          className="
+            mt-3
+            line-clamp-4
+            text-sm
+            leading-6
+            text-gray-500
+          "
+        >
           {preview}
         </p>
 
-        {/* =================================================
-            TYPE BADGES
-        ================================================= */}
-
+        {/* Type badges */}
         <div className="mt-4 flex flex-wrap gap-2">
-
           {hasParagraph && (
-            <span className="
-              rounded-lg
-              bg-blue-50
-              px-2.5
-              py-1
-              text-[10px]
-              font-medium
-              text-blue-600
-            ">
+            <span
+              className="
+                rounded-lg
+                bg-blue-50
+                px-2.5
+                py-1
+                text-[10px]
+                font-medium
+                text-blue-600
+              "
+            >
               Paragraph
             </span>
           )}
 
           {hasCheckbox && (
-            <span className="
-              rounded-lg
-              bg-orange-50
-              px-2.5
-              py-1
-              text-[10px]
-              font-medium
-              text-orange-600
-            ">
+            <span
+              className="
+                rounded-lg
+                bg-orange-50
+                px-2.5
+                py-1
+                text-[10px]
+                font-medium
+                text-orange-600
+              "
+            >
               Checkbox
             </span>
           )}
 
           {hasParagraph &&
             hasCheckbox && (
-              <span className="
-                rounded-lg
-                bg-purple-50
-                px-2.5
-                py-1
-                text-[10px]
-                font-medium
-                text-purple-600
-              ">
+              <span
+                className="
+                  rounded-lg
+                  bg-purple-50
+                  px-2.5
+                  py-1
+                  text-[10px]
+                  font-medium
+                  text-purple-600
+                "
+              >
                 Both
               </span>
             )}
-
         </div>
       </button>
 
-      {/* =================================================
-          FOOTER
-      ================================================= */}
-
-      <div className="
-        mt-5
-        flex
-        items-center
-        justify-between
-        border-t
-        border-gray-100
-        pt-3
-      ">
-
+      {/* Footer */}
+      <div
+        className="
+          mt-5
+          flex
+          items-center
+          justify-between
+          border-t
+          border-gray-100
+          pt-3
+        "
+      >
         <span className="text-[11px] text-gray-400">
-          {formatDate(
-            note.updatedAt,
-          )}
+          {formatDate(note.updatedAt)}
         </span>
 
         <button
@@ -977,7 +823,6 @@ function NoteCard({
             ? "Deleting..."
             : "Delete"}
         </button>
-
       </div>
     </div>
   );
@@ -989,7 +834,7 @@ function NoteCard({
 
 function getFilterName(
   filter: NoteFilter,
-) {
+): string {
   switch (filter) {
     case "paragraph":
       return "Paragraph Notes";
@@ -1012,26 +857,16 @@ function getFilterName(
    DATE
 ========================================================= */
 
-function formatDate(
-  value: string,
-) {
-  const date =
-    new Date(value);
+function formatDate(value: string): string {
+  const date = new Date(value);
 
-  if (
-    Number.isNaN(
-      date.getTime(),
-    )
-  ) {
+  if (Number.isNaN(date.getTime())) {
     return "";
   }
 
-  return date.toLocaleDateString(
-    "en-US",
-    {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    },
-  );
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
