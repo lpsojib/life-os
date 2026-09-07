@@ -59,10 +59,6 @@ export default function NotebookPage() {
 
   /* =====================================================
      INITIAL LOAD
-     
-     React Strict Mode / React 19 lint rule-এর কারণে
-     effect-এর ভিতরে সরাসরি loadNotes() call না করে
-     requestAnimationFrame ব্যবহার করা হয়েছে।
   ===================================================== */
 
   useEffect(() => {
@@ -99,6 +95,7 @@ export default function NotebookPage() {
 
     return () => {
       cancelled = true;
+
       window.cancelAnimationFrame(
         frame,
       );
@@ -107,6 +104,9 @@ export default function NotebookPage() {
 
   /* =====================================================
      ONLINE SYNC
+
+     Pending offline notes Firebase-এ sync হবে
+     কিন্তু typing-এর সময় কোনো save হবে না।
   ===================================================== */
 
   useEffect(() => {
@@ -142,6 +142,9 @@ export default function NotebookPage() {
 
   /* =====================================================
      CREATE NOTE
+
+     New note প্রথমে local database-এ তৈরি হবে।
+     Editor-এ typing করলে আর parent update হবে না।
   ===================================================== */
 
   const handleCreateNote =
@@ -150,6 +153,7 @@ export default function NotebookPage() {
         const newNote =
           await addNote({
             title: "",
+
             blocks: [
               {
                 id: `block-${Date.now()}`,
@@ -157,12 +161,14 @@ export default function NotebookPage() {
                 text: "",
               },
             ],
+
             pinned: false,
           });
 
         setNotes(
           (previous) => [
             newNote,
+
             ...previous.filter(
               (note) =>
                 note.id !==
@@ -194,48 +200,13 @@ export default function NotebookPage() {
     }, []);
 
   /* =====================================================
-     NOTE CHANGE
-  ===================================================== */
-
-  const handleNoteChange =
-    useCallback(
-      (updatedNote: Note) => {
-        setNotes(
-          (previous) => {
-            const exists =
-              previous.some(
-                (note) =>
-                  note.id ===
-                  updatedNote.id,
-              );
-
-            if (!exists) {
-              return [
-                updatedNote,
-                ...previous,
-              ];
-            }
-
-            return previous
-              .map((note) =>
-                note.id ===
-                updatedNote.id
-                  ? updatedNote
-                  : note,
-              )
-              .sort(
-                (a, b) =>
-                  b.updatedAt -
-                  a.updatedAt,
-              );
-          },
-        );
-      },
-      [],
-    );
-
-  /* =====================================================
      SAVE NOTE
+
+     IMPORTANT:
+     এই function শুধুমাত্র Save button click করলে
+     call হবে।
+
+     Typing-এর সময় এই function call হবে না।
   ===================================================== */
 
   const handleSaveNote =
@@ -249,17 +220,46 @@ export default function NotebookPage() {
               updatedNote,
             );
 
-          handleNoteChange(
-            savedNote,
+          setNotes(
+            (previous) => {
+              const exists =
+                previous.some(
+                  (note) =>
+                    note.id ===
+                    savedNote.id,
+                );
+
+              if (!exists) {
+                return [
+                  savedNote,
+                  ...previous,
+                ];
+              }
+
+              return previous
+                .map((note) =>
+                  note.id ===
+                  savedNote.id
+                    ? savedNote
+                    : note,
+                )
+                .sort(
+                  (a, b) =>
+                    b.updatedAt -
+                    a.updatedAt,
+                );
+            },
           );
         } catch (error) {
           console.error(
             "Failed to save note:",
             error,
           );
+
+          throw error;
         }
       },
-      [handleNoteChange],
+      [],
     );
 
   /* =====================================================
@@ -301,6 +301,9 @@ export default function NotebookPage() {
 
   /* =====================================================
      PIN / UNPIN
+
+     Pin action আলাদাভাবে immediately save হবে।
+     এটা typing-এর সাথে connected না।
   ===================================================== */
 
   const handleTogglePin =
@@ -316,8 +319,20 @@ export default function NotebookPage() {
             return;
           }
 
-          handleNoteChange(
-            updatedNote,
+          setNotes(
+            (previous) =>
+              previous
+                .map((item) =>
+                  item.id ===
+                  updatedNote.id
+                    ? updatedNote
+                    : item,
+                )
+                .sort(
+                  (a, b) =>
+                    b.updatedAt -
+                    a.updatedAt,
+                ),
           );
         } catch (error) {
           console.error(
@@ -326,7 +341,7 @@ export default function NotebookPage() {
           );
         }
       },
-      [handleNoteChange],
+      [],
     );
 
   /* =====================================================
@@ -360,16 +375,23 @@ export default function NotebookPage() {
 
   /* =====================================================
      EDITOR
+     
+     key ব্যবহার করা হয়েছে যাতে নতুন note select করলে
+     NoteEditor-এর local draft নতুন note দিয়ে শুরু হয়।
+
+     সবচেয়ে গুরুত্বপূর্ণ:
+     এখানে আর onChange নেই।
+
+     তাই typing -> parent state -> Firebase
+     এই chain আর হবে না।
   ===================================================== */
 
   if (selectedNote) {
     return (
       <div className="h-full min-h-0">
         <NoteEditor
+          key={selectedNote.id}
           note={selectedNote}
-          onChange={
-            handleNoteChange
-          }
           onSave={
             handleSaveNote
           }
