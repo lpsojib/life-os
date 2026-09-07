@@ -5,6 +5,7 @@ import {
   PinOff,
   Trash2,
   X,
+  GripVertical,
 } from "lucide-react";
 
 import {
@@ -41,7 +42,6 @@ function createBlockId(): string {
 function cloneNote(note: Note): Note {
   return {
     ...note,
-
     blocks: note.blocks.map(
       (block) => ({
         ...block,
@@ -57,19 +57,13 @@ export default function NoteEditor({
   onTogglePin,
   onClose,
 }: NoteEditorProps) {
-  /*
-   * =====================================================
-   * LOCAL DRAFT
-   *
-   * Typing-এর সময় শুধু এই local state update হবে।
-   *
-   * Parent state update হবে না।
-   * Firebase call হবে না।
-   * IndexedDB save হবে না।
-   *
-   * শুধু Save button চাপলে parent-এর onSave চলবে।
-   * =====================================================
-   */
+  /* =====================================================
+     LOCAL DRAFT
+
+     Typing-এর সময় parent বা Firebase update হবে না।
+
+     শুধু Save button চাপলে onSave() call হবে।
+  ===================================================== */
 
   const [draft, setDraft] =
     useState<Note>(() =>
@@ -81,6 +75,16 @@ export default function NoteEditor({
 
   const [savedMessage, setSavedMessage] =
     useState(false);
+
+  /* =====================================================
+     DRAG STATE
+  ===================================================== */
+
+  const [draggedIndex, setDraggedIndex] =
+    useState<number | null>(null);
+
+  const [dragOverIndex, setDragOverIndex] =
+    useState<number | null>(null);
 
   /* =====================================================
      TITLE
@@ -225,6 +229,11 @@ export default function NoteEditor({
               blockId,
           );
 
+        /*
+         * সব block delete হয়ে গেলে
+         * একটি empty text block থাকবে।
+         */
+
         if (
           blocks.length === 0
         ) {
@@ -288,6 +297,8 @@ export default function NoteEditor({
   const moveDown = (
     index: number,
   ) => {
+    setSavedMessage(false);
+
     setDraft(
       (previous) => {
         if (
@@ -317,8 +328,121 @@ export default function NoteEditor({
         };
       },
     );
+  };
+
+  /* =====================================================
+     DRAG START
+  ===================================================== */
+
+  const handleDragStart = (
+    event: React.DragEvent<HTMLDivElement>,
+    index: number,
+  ) => {
+    setDraggedIndex(index);
+    setDragOverIndex(index);
+
+    event.dataTransfer.effectAllowed =
+      "move";
+
+    event.dataTransfer.setData(
+      "text/plain",
+      String(index),
+    );
+  };
+
+  /* =====================================================
+     DRAG OVER
+  ===================================================== */
+
+  const handleDragOver = (
+    event: React.DragEvent<HTMLDivElement>,
+    index: number,
+  ) => {
+    event.preventDefault();
+
+    event.dataTransfer.dropEffect =
+      "move";
+
+    if (
+      dragOverIndex !== index
+    ) {
+      setDragOverIndex(index);
+    }
+  };
+
+  /* =====================================================
+     DROP
+  ===================================================== */
+
+  const handleDrop = (
+    event: React.DragEvent<HTMLDivElement>,
+    targetIndex: number,
+  ) => {
+    event.preventDefault();
+
+    const sourceValue =
+      event.dataTransfer.getData(
+        "text/plain",
+      );
+
+    const sourceIndex =
+      sourceValue !== ""
+        ? Number(sourceValue)
+        : draggedIndex;
+
+    if (
+      sourceIndex === null ||
+      sourceIndex === undefined ||
+      Number.isNaN(sourceIndex) ||
+      sourceIndex === targetIndex
+    ) {
+      setDraggedIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
 
     setSavedMessage(false);
+
+    setDraft(
+      (previous) => {
+        const blocks = [
+          ...previous.blocks,
+        ];
+
+        const [movedBlock] =
+          blocks.splice(
+            sourceIndex,
+            1,
+          );
+
+        if (!movedBlock) {
+          return previous;
+        }
+
+        blocks.splice(
+          targetIndex,
+          0,
+          movedBlock,
+        );
+
+        return {
+          ...previous,
+          blocks,
+        };
+      },
+    );
+
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
+  /* =====================================================
+     DRAG END
+  ===================================================== */
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+    setDragOverIndex(null);
   };
 
   /* =====================================================
@@ -337,9 +461,7 @@ export default function NoteEditor({
     }
 
     /*
-     * Enter
-     *
-     * Same type-এর নতুন block তৈরি করবে।
+     * Enter = নতুন একই ধরনের block
      */
 
     if (
@@ -354,9 +476,8 @@ export default function NoteEditor({
     }
 
     /*
-     * Backspace
-     *
-     * Empty block হলে remove করবে।
+     * Empty block + Backspace
+     * = block delete
      */
 
     if (
@@ -421,9 +542,6 @@ export default function NoteEditor({
 
   /* =====================================================
      PIN / UNPIN
-     
-     Pin action immediately save করা হবে।
-     Content typing-এর সাথে এর কোনো relation নেই।
   ===================================================== */
 
   const togglePin = async () => {
@@ -437,10 +555,8 @@ export default function NoteEditor({
     setSavedMessage(false);
 
     /*
-     * onTogglePin থাকলে সেটাই ব্যবহার করবে।
-     *
-     * Page-এ বর্তমানে onTogglePin পাঠানো হচ্ছে না,
-     * তাই fallback হিসেবে onSave ব্যবহার করছি।
+     * যদি page থেকে onTogglePin দেওয়া থাকে,
+     * তাহলে সেটা ব্যবহার করবে।
      */
 
     if (onTogglePin) {
@@ -451,6 +567,10 @@ export default function NoteEditor({
       return;
     }
 
+    /*
+     * Otherwise normal Save.
+     */
+
     if (onSave) {
       try {
         setSaving(true);
@@ -460,6 +580,10 @@ export default function NoteEditor({
         );
 
         setSavedMessage(true);
+
+        window.setTimeout(() => {
+          setSavedMessage(false);
+        }, 2000);
       } finally {
         setSaving(false);
       }
@@ -468,14 +592,13 @@ export default function NoteEditor({
 
   /* =====================================================
      SAVE
-     
-     IMPORTANT:
-     একমাত্র এই button-এ click করলেই
-     Firebase + IndexedDB save হবে।
   ===================================================== */
 
   const handleSave = async () => {
-    if (!onSave || saving) {
+    if (
+      !onSave ||
+      saving
+    ) {
       return;
     }
 
@@ -487,10 +610,6 @@ export default function NoteEditor({
       await onSave(draft);
 
       setSavedMessage(true);
-
-      /*
-       * কয়েক সেকেন্ড পরে Saved message hide হবে।
-       */
 
       window.setTimeout(() => {
         setSavedMessage(false);
@@ -518,6 +637,25 @@ export default function NoteEditor({
   };
 
   /* =====================================================
+     TEXTAREA AUTO HEIGHT
+  ===================================================== */
+
+  const handleInput = (
+    event: React.FormEvent<HTMLTextAreaElement>,
+  ) => {
+    const textarea =
+      event.currentTarget;
+
+    textarea.style.height =
+      "auto";
+
+    textarea.style.height = `${Math.max(
+      28,
+      textarea.scrollHeight,
+    )}px`;
+  };
+
+  /* =====================================================
      TYPE STATUS
   ===================================================== */
 
@@ -535,33 +673,6 @@ export default function NoteEditor({
         block.type ===
         "checklist",
     );
-
-  /* =====================================================
-     AUTO RESIZE TEXTAREA
-  ===================================================== */
-
-  const handleInput = (
-    event: React.FormEvent<HTMLTextAreaElement>,
-  ) => {
-    const textarea =
-      event.currentTarget;
-
-    /*
-     * Textarea নিজে নিজে content অনুযায়ী
-     * height adjust করবে।
-     *
-     * এটা event-এর ভিতরে হচ্ছে,
-     * render-এর সময় নয়।
-     */
-
-    textarea.style.height =
-      "auto";
-
-    textarea.style.height = `${Math.max(
-      28,
-      textarea.scrollHeight,
-    )}px`;
-  };
 
   /* =====================================================
      RENDER
@@ -619,7 +730,7 @@ export default function NoteEditor({
 
         </div>
 
-        {/* RIGHT SIDE */}
+        {/* RIGHT ACTIONS */}
 
         <div className="flex items-center gap-2">
 
@@ -648,7 +759,7 @@ export default function NoteEditor({
             </button>
           )}
 
-          {/* DELETE */}
+          {/* DELETE NOTE */}
 
           {onDelete && (
             <button
@@ -667,7 +778,7 @@ export default function NoteEditor({
       </div>
 
       {/* =================================================
-          EDITOR
+          EDITOR AREA
       ================================================= */}
 
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -696,141 +807,210 @@ export default function NoteEditor({
               (
                 block,
                 index,
-              ) => (
-                <div
-                  key={block.id}
-                  className="group flex items-start"
-                >
+              ) => {
+                const isDragging =
+                  draggedIndex ===
+                  index;
 
-                  {/* CHECKBOX */}
+                const isDragOver =
+                  dragOverIndex ===
+                    index &&
+                  draggedIndex !==
+                    index;
 
-                  {block.type ===
-                    "checklist" && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        toggleCheck(
-                          block.id,
-                        )
-                      }
-                      className={`mt-1 mr-1.5 flex h-[17px] w-[17px] shrink-0 items-center justify-center rounded-[4px] border ${
-                        block.checked
-                          ? "border-green-600 bg-green-600 text-white"
-                          : "border-gray-400 bg-white"
-                      }`}
-                      aria-label={
-                        block.checked
-                          ? "Uncheck"
-                          : "Check"
-                      }
-                    >
-                      {block.checked && (
-                        <span className="text-[10px] font-bold">
-                          ✓
-                        </span>
-                      )}
-                    </button>
-                  )}
-
-                  {/* TEXT */}
-
-                  <textarea
-                    value={
-                      block.text
-                    }
-                    onChange={(
+                return (
+                  <div
+                    key={block.id}
+                    draggable
+                    onDragStart={(
                       event,
                     ) =>
-                      changeBlock(
-                        block.id,
-                        event.target
-                          .value,
-                      )
-                    }
-                    onInput={
-                      handleInput
-                    }
-                    onKeyDown={(
-                      event,
-                    ) =>
-                      handleKeyDown(
+                      handleDragStart(
                         event,
                         index,
                       )
                     }
-                    rows={1}
-                    placeholder={
-                      block.type ===
-                      "checklist"
-                        ? "List item"
-                        : "Write something..."
+                    onDragOver={(
+                      event,
+                    ) =>
+                      handleDragOver(
+                        event,
+                        index,
+                      )
                     }
-                    className={`min-h-[28px] flex-1 resize-none overflow-hidden border-0 bg-transparent p-0 text-[14px] leading-[1.4] text-black outline-none placeholder:text-gray-300 ${
-                      block.checked
-                        ? "text-gray-400 line-through"
+                    onDrop={(event) =>
+                      handleDrop(
+                        event,
+                        index,
+                      )
+                    }
+                    onDragEnd={
+                      handleDragEnd
+                    }
+                    className={`group relative flex items-start rounded-md py-1 transition ${
+                      isDragging
+                        ? "scale-[0.99] opacity-40"
+                        : ""
+                    } ${
+                      isDragOver
+                        ? "border-t-2 border-green-500"
                         : ""
                     }`}
-                  />
+                  >
 
-                  {/* BLOCK CONTROLS */}
+                    {/* =================================
+                        DRAG HANDLE
+                    ================================= */}
 
-                  <div className="ml-1 flex shrink-0 items-center opacity-0 transition group-hover:opacity-100">
-
-                    {/* UP */}
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        moveUp(index)
-                      }
-                      disabled={
-                        index === 0
-                      }
-                      className="px-1 text-xs text-gray-400 transition hover:text-gray-700 disabled:opacity-20"
-                      aria-label="Move block up"
+                    <div
+                      className="flex h-7 w-5 shrink-0 cursor-grab touch-none items-center justify-center text-gray-300 active:cursor-grabbing"
+                      title="Drag to move"
                     >
-                      ↑
-                    </button>
+                      <GripVertical
+                        size={16}
+                      />
+                    </div>
 
-                    {/* DOWN */}
+                    {/* =================================
+                        CHECKBOX
+                    ================================= */}
 
-                    <button
-                      type="button"
-                      onClick={() =>
-                        moveDown(
+                    {block.type ===
+                      "checklist" && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          toggleCheck(
+                            block.id,
+                          )
+                        }
+                        className={`mt-1 mr-1.5 flex h-[17px] w-[17px] shrink-0 items-center justify-center rounded-[4px] border ${
+                          block.checked
+                            ? "border-green-600 bg-green-600 text-white"
+                            : "border-gray-400 bg-white"
+                        }`}
+                        aria-label={
+                          block.checked
+                            ? "Uncheck"
+                            : "Check"
+                        }
+                      >
+                        {block.checked && (
+                          <span className="text-[10px] font-bold">
+                            ✓
+                          </span>
+                        )}
+                      </button>
+                    )}
+
+                    {/* =================================
+                        TEXT
+                    ================================= */}
+
+                    <textarea
+                      value={
+                        block.text
+                      }
+                      onChange={(
+                        event,
+                      ) =>
+                        changeBlock(
+                          block.id,
+                          event.target
+                            .value,
+                        )
+                      }
+                      onInput={
+                        handleInput
+                      }
+                      onKeyDown={(
+                        event,
+                      ) =>
+                        handleKeyDown(
+                          event,
                           index,
                         )
                       }
-                      disabled={
-                        index ===
-                        draft.blocks
-                          .length -
-                          1
+                      rows={1}
+                      placeholder={
+                        block.type ===
+                        "checklist"
+                          ? "List item"
+                          : "Write something..."
                       }
-                      className="px-1 text-xs text-gray-400 transition hover:text-gray-700 disabled:opacity-20"
-                      aria-label="Move block down"
-                    >
-                      ↓
-                    </button>
+                      className={`min-h-[28px] flex-1 resize-none overflow-hidden border-0 bg-transparent p-0 text-[14px] leading-[1.4] text-black outline-none placeholder:text-gray-300 ${
+                        block.checked
+                          ? "text-gray-400 line-through"
+                          : ""
+                      }`}
+                    />
 
-                    {/* DELETE BLOCK */}
+                    {/* =================================
+                        BLOCK CONTROLS
 
-                    <button
-                      type="button"
-                      onClick={() =>
-                        deleteBlock(
-                          block.id,
-                        )
-                      }
-                      className="px-1 text-xs text-gray-400 transition hover:text-red-500"
-                      aria-label="Delete block"
-                    >
-                      ×
-                    </button>
+                        ALWAYS VISIBLE
+                    ================================= */}
 
+                    <div className="ml-1 flex shrink-0 items-center">
+
+                      {/* MOVE UP */}
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          moveUp(
+                            index,
+                          )
+                        }
+                        disabled={
+                          index === 0
+                        }
+                        className="flex h-7 w-7 items-center justify-center rounded-md text-xs text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-20"
+                        aria-label="Move block up"
+                      >
+                        ↑
+                      </button>
+
+                      {/* MOVE DOWN */}
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          moveDown(
+                            index,
+                          )
+                        }
+                        disabled={
+                          index ===
+                          draft.blocks
+                            .length -
+                            1
+                        }
+                        className="flex h-7 w-7 items-center justify-center rounded-md text-xs text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-20"
+                        aria-label="Move block down"
+                      >
+                        ↓
+                      </button>
+
+                      {/* DELETE BLOCK */}
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          deleteBlock(
+                            block.id,
+                          )
+                        }
+                        className="flex h-7 w-7 items-center justify-center rounded-md text-sm text-gray-400 transition hover:bg-red-50 hover:text-red-500"
+                        aria-label="Delete block"
+                      >
+                        ×
+                      </button>
+
+                    </div>
                   </div>
-                </div>
-              ),
+                );
+              },
             )}
 
           </div>
@@ -843,7 +1023,7 @@ export default function NoteEditor({
 
       <div className="shrink-0 border-t border-gray-200 bg-white px-4 py-3">
 
-        <div className="mx-auto flex max-w-3xl items-center justify-center gap-2">
+        <div className="mx-auto flex max-w-3xl justify-center gap-2">
 
           {/* TEXT */}
 
