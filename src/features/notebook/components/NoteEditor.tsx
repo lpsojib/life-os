@@ -61,28 +61,6 @@ function cloneNote(note: Note): Note {
 }
 
 /* =====================================================
-   TEXTAREA AUTO RESIZE
-
-   Existing multiline text-এর height ঠিক রাখার
-   জন্য এই function ব্যবহার হচ্ছে।
-===================================================== */
-
-function resizeTextarea(
-  textarea: HTMLTextAreaElement | null,
-) {
-  if (!textarea) {
-    return;
-  }
-
-  textarea.style.height = "0px";
-
-  textarea.style.height = `${Math.max(
-    32,
-    textarea.scrollHeight,
-  )}px`;
-}
-
-/* =====================================================
    NOTE EDITOR
 ===================================================== */
 
@@ -96,13 +74,17 @@ export default function NoteEditor({
   /* =====================================================
      LOCAL DRAFT
 
-     Parent/Firebase-এ typing-এর সময় update হবে না।
-     শুধু Save চাপলে save হবে।
+     NoteEditor নতুন note-এর সাথে mount হলে
+     এই initial value নেওয়া হবে।
+
+     Parent থেকে নতুন note এলে parent-এ
+     key={note.id} ব্যবহার করতে হবে।
   ===================================================== */
 
-  const [draft, setDraft] = useState<Note>(
-    () => cloneNote(note),
-  );
+  const [draft, setDraft] =
+    useState<Note>(() =>
+      cloneNote(note),
+    );
 
   const [saving, setSaving] =
     useState(false);
@@ -113,8 +95,8 @@ export default function NoteEditor({
   /* =====================================================
      ACTIVE BLOCK
 
-     Text / Checklist button শুধু active block-এ
-     কাজ করবে।
+     Bottom Text / Checklist button শুধু
+     selected block-এর উপর কাজ করবে।
   ===================================================== */
 
   const [activeBlockId, setActiveBlockId] =
@@ -124,8 +106,6 @@ export default function NoteEditor({
 
   /* =====================================================
      TEXTAREA REFS
-
-     প্রতিটি block-এর textarea reference।
   ===================================================== */
 
   const textareaRefs = useRef<
@@ -146,33 +126,62 @@ export default function NoteEditor({
     useState<number | null>(null);
 
   /* =====================================================
-     AUTO RESIZE EXISTING BLOCKS
+     AUTO RESIZE
 
-     Note open হওয়ার পর multiline paragraph-এর
-     textarea height automatically calculate হবে।
+     খুব গুরুত্বপূর্ণ:
 
-     এখানে কোনো setState নেই, তাই cascading render
-     error হবে না।
+     textarea-কে 28px / 32px height-এ আটকে
+     রাখা হবে না।
+
+     Content যত লম্বা হবে textarea তত height
+     নেবে।
+
+     100+ line হলেও পুরো text-এর height
+     automatically নেওয়া হবে।
   ===================================================== */
 
+  const resizeAllTextareas = () => {
+    Object.values(
+      textareaRefs.current,
+    ).forEach((textarea) => {
+      if (!textarea) {
+        return;
+      }
+
+      /*
+       * আগে height reset করছি।
+       * এতে content ছোট-বড় দুই ক্ষেত্রেই
+       * সঠিক scrollHeight পাওয়া যাবে।
+       */
+      textarea.style.height = "auto";
+
+      /*
+       * scrollHeight = পুরো content-এর actual height
+       */
+      textarea.style.height = `${textarea.scrollHeight}px`;
+
+      /*
+       * textarea যেন নিজের ভিতরে scroll না করে।
+       */
+      textarea.style.overflowY = "hidden";
+    });
+  };
+
+  /*
+   * Note load / block change হওয়ার পর
+   * textarea-এর actual content height calculate হবে।
+   *
+   * এখানে কোনো setState নেই।
+   * তাই cascading render error হবে না।
+   */
   useEffect(() => {
     const frame =
       window.requestAnimationFrame(() => {
-        draft.blocks.forEach(
-          (block) => {
-            resizeTextarea(
-              textareaRefs.current[
-                block.id
-              ],
-            );
-          },
-        );
+        resizeAllTextareas();
       });
 
     return () => {
-      window.cancelAnimationFrame(
-        frame,
-      );
+      window.cancelAnimationFrame(frame);
     };
   }, [draft.blocks]);
 
@@ -224,7 +233,7 @@ export default function NoteEditor({
   };
 
   /* =====================================================
-     ACTIVE BLOCK
+     BLOCK ACTIVE
   ===================================================== */
 
   const setActiveBlock = (
@@ -234,7 +243,7 @@ export default function NoteEditor({
   };
 
   /* =====================================================
-     CHECKLIST TOGGLE
+     CHECKLIST
   ===================================================== */
 
   const toggleCheck = (
@@ -265,9 +274,6 @@ export default function NoteEditor({
 
   /* =====================================================
      ADD BLOCK
-
-     Enter চাপলে বর্তমান block-এর type অনুযায়ী
-     নতুন block তৈরি হবে।
   ===================================================== */
 
   const addBlock = (
@@ -383,7 +389,7 @@ export default function NoteEditor({
   };
 
   /* =====================================================
-     MOVE BLOCK UP
+     MOVE UP
   ===================================================== */
 
   const moveUp = (
@@ -419,7 +425,7 @@ export default function NoteEditor({
   };
 
   /* =====================================================
-     MOVE BLOCK DOWN
+     MOVE DOWN
   ===================================================== */
 
   const moveDown = (
@@ -592,7 +598,8 @@ export default function NoteEditor({
     /* =================================================
        ENTER
 
-       Same type-এর নতুন block।
+       বর্তমান block-এর একই type-এর
+       নতুন block তৈরি হবে।
     ================================================= */
 
     if (
@@ -607,9 +614,9 @@ export default function NoteEditor({
     }
 
     /* =================================================
-       EMPTY BLOCK + BACKSPACE
+       BACKSPACE
 
-       Empty block হলে previous block delete হবে।
+       Empty block delete।
     ================================================= */
 
     if (
@@ -624,10 +631,11 @@ export default function NoteEditor({
   };
 
   /* =====================================================
-     MAKE CURRENT BLOCK TEXT
+     TEXT MODE
 
-     শুধু active block Text হবে।
-     অন্য কোনো block পরিবর্তন হবে না।
+     শুধু ACTIVE BLOCK text হবে।
+
+     অন্য কোনো line পরিবর্তন হবে না।
   ===================================================== */
 
   const makeText = () => {
@@ -658,10 +666,11 @@ export default function NoteEditor({
   };
 
   /* =====================================================
-     MAKE CURRENT BLOCK CHECKLIST
+     CHECKLIST MODE
 
-     শুধু active block Checklist হবে।
-     অন্য line পরিবর্তন হবে না।
+     শুধু ACTIVE BLOCK checklist হবে।
+
+     আগের text blocks checklist হবে না।
   ===================================================== */
 
   const makeChecklist = () => {
@@ -714,7 +723,7 @@ export default function NoteEditor({
     "checklist";
 
   /* =====================================================
-     PIN / UNPIN
+     PIN
   ===================================================== */
 
   const togglePin = async () => {
@@ -801,17 +810,25 @@ export default function NoteEditor({
   };
 
   /* =====================================================
-     TEXTAREA INPUT
+     INPUT
 
-     Typing করার সময় textarea height update।
+     প্রতিবার লেখা পরিবর্তন হলে সাথে সাথে
+     textarea পুরো content অনুযায়ী বড় হবে।
   ===================================================== */
 
   const handleInput = (
     event: React.FormEvent<HTMLTextAreaElement>,
   ) => {
-    resizeTextarea(
-      event.currentTarget,
-    );
+    const textarea =
+      event.currentTarget;
+
+    textarea.style.height =
+      "auto";
+
+    textarea.style.height = `${textarea.scrollHeight}px`;
+
+    textarea.style.overflowY =
+      "hidden";
   };
 
   /* =====================================================
@@ -873,15 +890,11 @@ export default function NoteEditor({
 
         <div className="flex items-center gap-2">
 
-          {/* SAVED */}
-
           {savedMessage && (
             <span className="text-[11px] font-medium text-green-600">
               Saved
             </span>
           )}
-
-          {/* SAVE */}
 
           {onSave && (
             <button
@@ -897,8 +910,6 @@ export default function NoteEditor({
                 : "Save"}
             </button>
           )}
-
-          {/* DELETE NOTE */}
 
           {onDelete && (
             <button
@@ -1020,9 +1031,6 @@ export default function NoteEditor({
 
                     {/* =================================
                         CHECKBOX
-
-                        Checklist block হলে শুধু
-                        checkbox থাকবে।
                     ================================= */}
 
                     {block.type ===
@@ -1036,7 +1044,7 @@ export default function NoteEditor({
                             block.id,
                           );
                         }}
-                        className={`mt-1 mr-2 flex h-[19px] w-[19px] shrink-0 items-center justify-center rounded-[5px] border ${
+                        className={`mt-1 mr-2 flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-[5px] border ${
                           block.checked
                             ? "border-green-600 bg-green-600 text-white"
                             : "border-gray-400 bg-white"
@@ -1058,8 +1066,16 @@ export default function NoteEditor({
                     {/* =================================
                         TEXTAREA
 
-                        Multiline text-এর জন্য
-                        dynamic height।
+                        গুরুত্বপূর্ণ CSS:
+
+                        - text-[17px]
+                        - leading-[1.55]
+                        - min-h-[0]
+                        - h-auto
+                        - overflow-hidden
+
+                        ফলে textarea 28px-এ আটকে
+                        থাকবে না।
                     ================================= */}
 
                     <textarea
@@ -1067,6 +1083,24 @@ export default function NoteEditor({
                         textareaRefs.current[
                           block.id
                         ] = element;
+
+                        /*
+                         * নতুন textarea mount হওয়ার
+                         * সময়ও height calculate হবে।
+                         */
+                        if (element) {
+                          window.requestAnimationFrame(
+                            () => {
+                              element.style.height =
+                                "auto";
+
+                              element.style.height = `${element.scrollHeight}px`;
+
+                              element.style.overflowY =
+                                "hidden";
+                            },
+                          );
+                        }
                       }}
                       value={
                         block.text
@@ -1108,7 +1142,13 @@ export default function NoteEditor({
                           ? "List item"
                           : "Write something..."
                       }
-                      className={`min-h-[32px] flex-1 resize-none overflow-hidden border-0 bg-transparent p-0 text-[16px] leading-[1.5] text-black outline-none placeholder:text-gray-300 ${
+                      style={{
+                        height:
+                          "auto",
+                        overflowY:
+                          "hidden",
+                      }}
+                      className={`h-auto min-h-0 flex-1 resize-none overflow-hidden border-0 bg-transparent p-0 text-[17px] leading-[1.55] text-black outline-none placeholder:text-gray-300 ${
                         block.checked
                           ? "text-gray-400 line-through"
                           : ""
@@ -1118,7 +1158,10 @@ export default function NoteEditor({
                     {/* =================================
                         BLOCK CONTROLS
 
-                        Active block-এ এগুলো থাকবে না।
+                        Active block-এ hidden।
+
+                        তাই text select/focus করলে
+                        ↑ ↓ × দেখা যাবে না।
                     ================================= */}
 
                     {!isActive && (
