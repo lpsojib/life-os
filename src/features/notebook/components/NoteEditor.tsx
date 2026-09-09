@@ -1381,7 +1381,7 @@ export default function NoteEditor({
                           block.fontFamily ??
                           DEFAULT_FONT_FAMILY,
                       }}
-                      className="m-0 flex-1 self-center resize-none overflow-hidden border-0 bg-transparent p-0 text-black outline-none placeholder:text-gray-300"
+                      className="relative top-[2px] m-0 flex-1 self-center resize-none overflow-hidden border-0 bg-transparent p-0 text-black outline-none placeholder:text-gray-300"
                     />
 
                     {/* =================================
