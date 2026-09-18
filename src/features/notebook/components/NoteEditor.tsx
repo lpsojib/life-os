@@ -58,17 +58,14 @@ interface NoteEditorProps {
 /* =====================================================
    DEFAULT CONTENT SETTINGS
 
-   এখানে content area-এর default vertical
-   height/gap কম রাখা হয়েছে।
+   Default:
+   Font Size = 16px
+   Line Height = 1.4
 ===================================================== */
 
-const DEFAULT_FONT_SIZE = 14;
+const DEFAULT_FONT_SIZE = 16;
 
-/*
- * আগে 1.6 ছিল।
- * এখন 1.0 করা হয়েছে।
- */
-const DEFAULT_LINE_HEIGHT = 1.0;
+const DEFAULT_LINE_HEIGHT = 1.4;
 
 const DEFAULT_FONT_FAMILY =
   "Hind Siliguri";
@@ -165,8 +162,6 @@ export default function NoteEditor({
 
   /* =====================================================
      ACTIVE BLOCK
-
-     Formatting/Text/Checklist শুধু এই block-এ কাজ করবে।
   ===================================================== */
 
   const [activeBlockId, setActiveBlockId] =
@@ -188,9 +183,6 @@ export default function NoteEditor({
 
   /* =====================================================
      DRAG STATE
-
-     কোনো 6-dot handle নেই।
-     পুরো checklist row drag করা যাবে।
   ===================================================== */
 
   const [draggedIndex, setDraggedIndex] =
@@ -318,9 +310,9 @@ export default function NoteEditor({
 
   /* =====================================================
      ADD NEW BLOCK
-     
-     Current block-এর type অনুযায়ী নতুন block হবে।
-     
+
+     Current block-এর type অনুযায়ী নতুন block হবে.
+
      Text → Text
      Checklist → Checklist
 ===================================================== */
@@ -408,9 +400,6 @@ export default function NoteEditor({
       newBlock.id,
     );
 
-    /*
-     * নতুন line-এ focus।
-     */
     window.setTimeout(() => {
       const textarea =
         textareaRefs.current[
@@ -428,7 +417,7 @@ export default function NoteEditor({
 
   /* =====================================================
      DELETE BLOCK
-     
+
      Checklist-এর × button-এর জন্য।
 ===================================================== */
 
@@ -450,9 +439,6 @@ export default function NoteEditor({
             block.id !== blockId,
         );
 
-      /*
-       * অন্তত একটি text block থাকবে।
-       */
       if (
         blocks.length === 0
       ) {
@@ -586,7 +572,6 @@ export default function NoteEditor({
   /* =====================================================
      DRAG START
 
-     6-dot icon নেই।
      Checklist row নিজেই draggable।
 ===================================================== */
 
@@ -743,12 +728,8 @@ export default function NoteEditor({
       return;
     }
 
-    /*
-     * ENTER
-     *
-     * শুধু নতুন line তৈরি হবে।
-     * আগের line-এর type পরিবর্তন হবে না।
-     */
+    /* ENTER */
+
     if (
       event.key === "Enter" &&
       !event.shiftKey
@@ -760,9 +741,8 @@ export default function NoteEditor({
       return;
     }
 
-    /*
-     * Empty block + Backspace
-     */
+    /* Empty block + Backspace */
+
     if (
       event.key ===
         "Backspace" &&
@@ -779,7 +759,7 @@ export default function NoteEditor({
 
   /* =====================================================
      MAKE TEXT
-     
+
      ONLY ACTIVE BLOCK
 ===================================================== */
 
@@ -810,7 +790,7 @@ export default function NoteEditor({
 
   /* =====================================================
      MAKE CHECKLIST
-     
+
      ONLY ACTIVE BLOCK
 ===================================================== */
 
@@ -842,7 +822,7 @@ export default function NoteEditor({
 
   /* =====================================================
      UPDATE ACTIVE BLOCK
-     
+
      Formatting only active block।
 ===================================================== */
 
@@ -975,9 +955,6 @@ export default function NoteEditor({
 
   /* =====================================================
      TEXTAREA INPUT
-     
-     Content area যতটুকু দরকার ততটুকুই height নেবে।
-     Empty line-এর জন্য extra height নয়।
 ===================================================== */
 
   const handleInput = (
@@ -989,9 +966,6 @@ export default function NoteEditor({
     textarea.style.height =
       "auto";
 
-    /*
-     * যত line আছে পুরো content-এর height নেওয়া হবে।
-     */
     textarea.style.height =
       `${Math.max(
         22,
@@ -1001,12 +975,7 @@ export default function NoteEditor({
 
   /* =====================================================
      RESTORE FULL TEXTAREA HEIGHT
-
-     Note reopen/render হলে saved paragraph-এর
-     পুরো text অনুযায়ী textarea height আবার calculate হবে।
-
-     এখানে কোনো setState নেই।
-  ===================================================== */
+===================================================== */
 
   useLayoutEffect(() => {
     const frame =
@@ -1148,9 +1117,6 @@ export default function NoteEditor({
 
       {/* =================================================
           CONTENT AREA
-
-          IMPORTANT:
-          এখানে line gap ইচ্ছাকৃতভাবে খুব কম।
       ================================================= */}
 
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -1171,19 +1137,7 @@ export default function NoteEditor({
             className="mb-3 w-full border-0 bg-transparent text-xl font-semibold leading-7 text-black outline-none placeholder:text-gray-300"
           />
 
-          {/* =============================================
-              CONTENT BLOCKS
-
-              আগে:
-              space-y-1
-              py-1
-
-              এখন:
-              space-y-0
-              py-0
-
-              তাই দুই লাইনের মাঝের gap অনেক কম।
-          ============================================= */}
+          {/* CONTENT BLOCKS */}
 
           <div className="space-y-0">
 
@@ -1256,10 +1210,7 @@ export default function NoteEditor({
                     }`}
                   >
 
-                    {/* =================================
-                        CHECKBOX
-                        ONLY CHECKLIST
-                    ================================= */}
+                    {/* CHECKBOX */}
 
                     {isChecklist && (
                       <button
@@ -1288,11 +1239,7 @@ export default function NoteEditor({
                       </button>
                     )}
 
-                    {/* =================================
-                        CONTENT TEXTAREA
-
-                        VERY SMALL HEIGHT/GAP
-                    ================================= */}
+                    {/* CONTENT TEXTAREA */}
 
                     <textarea
                       ref={(
@@ -1353,19 +1300,12 @@ export default function NoteEditor({
                           : "Write something..."
                       }
                       style={{
-                        /*
-                         * Content height কম।
-                         */
                         minHeight:
                           "22px",
 
                         height:
                           "auto",
 
-                        /*
-                         * Default line height
-                         * খুব compact।
-                         */
                         lineHeight:
                           block.lineHeight ??
                           DEFAULT_LINE_HEIGHT,
@@ -1381,14 +1321,15 @@ export default function NoteEditor({
                           block.fontFamily ??
                           DEFAULT_FONT_FAMILY,
                       }}
-                      className="relative top-[2px] m-0 flex-1 self-center resize-none overflow-hidden border-0 bg-transparent p-0 text-black outline-none placeholder:text-gray-300"
+                      className={`relative top-[2px] m-0 flex-1 self-center resize-none overflow-hidden border-0 bg-transparent p-0 outline-none placeholder:text-gray-300 ${
+                        isChecklist &&
+                        block.checked
+                          ? "text-green-600"
+                          : "text-black"
+                      }`}
                     />
 
-                    {/* =================================
-                        CHECKLIST CONTROLS
-
-                        ONLY CHECKLIST
-                    ================================= */}
+                    {/* CHECKLIST CONTROLS */}
 
                     {isChecklist && (
                       <div className="ml-2 flex shrink-0 items-center self-center">
@@ -1462,8 +1403,6 @@ export default function NoteEditor({
 
       {/* =================================================
           FORMAT TOOLBAR
-          
-          এই অংশের spacing পরিবর্তন করা হয়নি।
       ================================================= */}
 
       <div className="shrink-0 border-t border-gray-200 bg-white px-3 py-2">
