@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -25,9 +26,6 @@ export default function CompletedTaskList() {
 
   /**
    * Load completed tasks
-   *
-   * Firebase অথবা IndexedDB থেকে
-   * completed tasks load করবে।
    */
   const loadCompletedTasks = useCallback(async () => {
     if (!user) {
@@ -75,16 +73,13 @@ export default function CompletedTaskList() {
 
   /**
    * Online / Offline support
-   *
-   * Online হলে pending local data Firebase-এ sync হবে।
-   * তারপর completed task আবার load হবে।
    */
   useEffect(() => {
     if (!user) {
       return;
     }
 
-    const handleOnline = () => {
+    const onlineHandler = () => {
       const timer = window.setTimeout(() => {
         void (async () => {
           try {
@@ -100,27 +95,19 @@ export default function CompletedTaskList() {
         })();
       }, 0);
 
-      return () => {
+      window.setTimeout(() => {
         window.clearTimeout(timer);
-      };
+      }, 0);
     };
 
-    const handleOffline = () => {
+    const offlineHandler = () => {
       const timer = window.setTimeout(() => {
         void loadCompletedTasks();
       }, 0);
 
-      return () => {
+      window.setTimeout(() => {
         window.clearTimeout(timer);
-      };
-    };
-
-    const onlineHandler = () => {
-      handleOnline();
-    };
-
-    const offlineHandler = () => {
-      handleOffline();
+      }, 0);
     };
 
     window.addEventListener("online", onlineHandler);
@@ -134,8 +121,6 @@ export default function CompletedTaskList() {
 
   /**
    * Restore completed task
-   *
-   * Completed → Daily
    */
   const handleRestore = async (taskId: string) => {
     try {
@@ -143,10 +128,6 @@ export default function CompletedTaskList() {
 
       await restoreTask(taskId);
 
-      /**
-       * Restore করার সাথে সাথে
-       * completed list থেকে task remove হবে।
-       */
       setTasks((currentTasks) =>
         currentTasks.filter((task) => task.id !== taskId)
       );
@@ -158,12 +139,33 @@ export default function CompletedTaskList() {
   };
 
   /**
-   * Group completed tasks by date
+   * Group completed tasks by date.
+   *
+   * IMPORTANT:
+   * Latest completed date will always appear first.
+   * Within the same date, latest completed task appears first.
    */
   const groupedTasks = useMemo<CompletedGroup>(() => {
+    /**
+     * First sort all completed tasks by completedAt.
+     *
+     * Newest → Oldest
+     */
+    const sortedTasks = [...tasks].sort((a, b) => {
+      const timeA = a.completedAt
+        ? new Date(a.completedAt).getTime()
+        : 0;
+
+      const timeB = b.completedAt
+        ? new Date(b.completedAt).getTime()
+        : 0;
+
+      return timeB - timeA;
+    });
+
     const groups: CompletedGroup = {};
 
-    tasks.forEach((task) => {
+    sortedTasks.forEach((task) => {
       let date = "Unknown Date";
 
       if (task.completedAt) {
@@ -299,33 +301,50 @@ export default function CompletedTaskList() {
 
   /**
    * Completed tasks
+   *
+   * groupedTasks is already sorted:
+   * Latest date → Oldest date
    */
   return (
-    <div className="space-y-8">
+    <div className="space-y-7">
       {Object.entries(groupedTasks).map(
-        ([date, dateTasks]) => (
-          <section key={date}>
+        ([date, dateTasks], groupIndex) => (
+          <section
+            key={date}
+            className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm"
+          >
             {/* Date Header */}
-            <div className="mb-4 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-green-50 text-lg">
-                ✓
+            <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/80 px-4 py-4 sm:px-5">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-green-100 text-lg text-green-700">
+                  ✓
+                </div>
+
+                <div className="min-w-0">
+                  <h2 className="truncate text-sm font-semibold text-gray-900 sm:text-base">
+                    {date}
+                  </h2>
+
+                  <p className="mt-0.5 text-xs text-gray-500">
+                    {dateTasks.length}{" "}
+                    {dateTasks.length === 1
+                      ? "task"
+                      : "tasks"}{" "}
+                    completed
+                  </p>
+                </div>
               </div>
 
-              <div>
-                <h2 className="text-base font-semibold text-gray-900">
-                  {date}
-                </h2>
-
-                <p className="text-xs text-gray-500">
-                  {dateTasks.length}{" "}
-                  {dateTasks.length === 1 ? "task" : "tasks"}{" "}
-                  completed
-                </p>
-              </div>
+              {/* Latest badge */}
+              {groupIndex === 0 && (
+                <span className="shrink-0 rounded-full bg-green-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-green-700 sm:text-xs">
+                  Latest
+                </span>
+              )}
             </div>
 
             {/* Tasks */}
-            <div className="space-y-3">
+            <div className="space-y-3 p-3 sm:p-4">
               {dateTasks.map((task) => (
                 <CompletedTaskCard
                   key={task.id}
@@ -340,3 +359,4 @@ export default function CompletedTaskList() {
     </div>
   );
 }
+
