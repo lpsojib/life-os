@@ -1,3 +1,4 @@
+
 "use client";
 
 import {
@@ -300,7 +301,7 @@ export default function NoteList({
              LIST
           ============================================= */
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-1">
+          <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
             {filteredNotes.map(
               (note) => (
                 <div

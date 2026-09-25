@@ -1,4 +1,17 @@
+
 "use client";
+
+import {
+  AlignCenter,
+  AlignJustify,
+  AlignLeft,
+  AlignRight,
+  ChevronDown,
+  Pin,
+  PinOff,
+  Trash2,
+  X,
+} from "lucide-react";
 
 import {
   useEffect,
@@ -6,13 +19,6 @@ import {
   useRef,
   useState,
 } from "react";
-
-import {
-  Pin,
-  PinOff,
-  Trash2,
-  X,
-} from "lucide-react";
 
 import {
   Note,
@@ -28,6 +34,7 @@ type EditorBlock = NoteBlock & {
   fontSize?: number;
   lineHeight?: number;
   fontFamily?: string;
+  textAlign?: "left" | "center" | "right" | "justify";
 };
 
 type EditorNote = Omit<
@@ -57,10 +64,6 @@ interface NoteEditorProps {
 
 /* =====================================================
    DEFAULT CONTENT SETTINGS
-
-   Default:
-   Font Size = 16px
-   Line Height = 1.4
 ===================================================== */
 
 const DEFAULT_FONT_SIZE = 16;
@@ -69,6 +72,9 @@ const DEFAULT_LINE_HEIGHT = 1.4;
 
 const DEFAULT_FONT_FAMILY =
   "Hind Siliguri";
+
+const DEFAULT_TEXT_ALIGN =
+  "left" as const;
 
 /* =====================================================
    CREATE BLOCK ID
@@ -110,6 +116,10 @@ function normalizeBlock(
     fontFamily:
       editorBlock.fontFamily ??
       DEFAULT_FONT_FAMILY,
+
+    textAlign:
+      editorBlock.textAlign ??
+      DEFAULT_TEXT_ALIGN,
   };
 }
 
@@ -170,6 +180,18 @@ export default function NoteEditor({
     );
 
   /* =====================================================
+     STYLE MENU
+  ===================================================== */
+
+  const [styleOpen, setStyleOpen] =
+    useState(false);
+
+  const styleMenuRef =
+    useRef<HTMLDivElement | null>(
+      null,
+    );
+
+  /* =====================================================
      TEXTAREA REFS
   ===================================================== */
 
@@ -222,6 +244,41 @@ export default function NoteEditor({
 
     document.head.appendChild(link);
   }, []);
+
+  /* =====================================================
+     CLOSE STYLE MENU ON OUTSIDE CLICK
+  ===================================================== */
+
+  useEffect(() => {
+    if (!styleOpen) {
+      return;
+    }
+
+    const handleOutsideClick = (
+      event: MouseEvent,
+    ) => {
+      if (
+        styleMenuRef.current &&
+        !styleMenuRef.current.contains(
+          event.target as Node,
+        )
+      ) {
+        setStyleOpen(false);
+      }
+    };
+
+    document.addEventListener(
+      "mousedown",
+      handleOutsideClick,
+    );
+
+    return () => {
+      document.removeEventListener(
+        "mousedown",
+        handleOutsideClick,
+      );
+    };
+  }, [styleOpen]);
 
   /* =====================================================
      TITLE CHANGE
@@ -310,12 +367,7 @@ export default function NoteEditor({
 
   /* =====================================================
      ADD NEW BLOCK
-
-     Current block-এর type অনুযায়ী নতুন block হবে.
-
-     Text → Text
-     Checklist → Checklist
-===================================================== */
+  ===================================================== */
 
   const addBlock = (
     index: number,
@@ -353,6 +405,10 @@ export default function NoteEditor({
             fontFamily:
               currentBlock.fontFamily ??
               DEFAULT_FONT_FAMILY,
+
+            textAlign:
+              currentBlock.textAlign ??
+              DEFAULT_TEXT_ALIGN,
           }
         : {
             id: createBlockId(),
@@ -374,6 +430,10 @@ export default function NoteEditor({
             fontFamily:
               currentBlock.fontFamily ??
               DEFAULT_FONT_FAMILY,
+
+            textAlign:
+              currentBlock.textAlign ??
+              DEFAULT_TEXT_ALIGN,
           };
 
     setDraft((previous) => {
@@ -417,9 +477,7 @@ export default function NoteEditor({
 
   /* =====================================================
      DELETE BLOCK
-
-     Checklist-এর × button-এর জন্য।
-===================================================== */
+  ===================================================== */
 
   const deleteBlock = (
     blockId: string,
@@ -454,6 +512,8 @@ export default function NoteEditor({
               DEFAULT_LINE_HEIGHT,
             fontFamily:
               DEFAULT_FONT_FAMILY,
+            textAlign:
+              DEFAULT_TEXT_ALIGN,
           };
 
         blocks = [newBlock];
@@ -486,7 +546,7 @@ export default function NoteEditor({
 
   /* =====================================================
      MOVE UP
-===================================================== */
+  ===================================================== */
 
   const moveUp = (
     index: number,
@@ -528,7 +588,7 @@ export default function NoteEditor({
 
   /* =====================================================
      MOVE DOWN
-===================================================== */
+  ===================================================== */
 
   const moveDown = (
     index: number,
@@ -571,9 +631,7 @@ export default function NoteEditor({
 
   /* =====================================================
      DRAG START
-
-     Checklist row নিজেই draggable।
-===================================================== */
+  ===================================================== */
 
   const handleDragStart = (
     event: React.DragEvent<HTMLDivElement>,
@@ -604,7 +662,7 @@ export default function NoteEditor({
 
   /* =====================================================
      DRAG OVER
-===================================================== */
+  ===================================================== */
 
   const handleDragOver = (
     event: React.DragEvent<HTMLDivElement>,
@@ -627,7 +685,7 @@ export default function NoteEditor({
 
   /* =====================================================
      DROP
-===================================================== */
+  ===================================================== */
 
   const handleDrop = (
     event: React.DragEvent<HTMLDivElement>,
@@ -706,7 +764,7 @@ export default function NoteEditor({
 
   /* =====================================================
      DRAG END
-===================================================== */
+  ===================================================== */
 
   const handleDragEnd = () => {
     setDraggedIndex(null);
@@ -715,7 +773,7 @@ export default function NoteEditor({
 
   /* =====================================================
      KEYBOARD
-===================================================== */
+  ===================================================== */
 
   const handleKeyDown = (
     event: React.KeyboardEvent<HTMLTextAreaElement>,
@@ -741,7 +799,7 @@ export default function NoteEditor({
       return;
     }
 
-    /* Empty block + Backspace */
+    /* EMPTY BLOCK + BACKSPACE */
 
     if (
       event.key ===
@@ -759,9 +817,7 @@ export default function NoteEditor({
 
   /* =====================================================
      MAKE TEXT
-
-     ONLY ACTIVE BLOCK
-===================================================== */
+  ===================================================== */
 
   const makeText = () => {
     if (!activeBlockId) {
@@ -790,9 +846,7 @@ export default function NoteEditor({
 
   /* =====================================================
      MAKE CHECKLIST
-
-     ONLY ACTIVE BLOCK
-===================================================== */
+  ===================================================== */
 
   const makeChecklist = () => {
     if (!activeBlockId) {
@@ -822,9 +876,7 @@ export default function NoteEditor({
 
   /* =====================================================
      UPDATE ACTIVE BLOCK
-
-     Formatting only active block।
-===================================================== */
+  ===================================================== */
 
   const updateActiveBlock = (
     changes: Partial<EditorBlock>,
@@ -853,7 +905,7 @@ export default function NoteEditor({
 
   /* =====================================================
      BOLD
-===================================================== */
+  ===================================================== */
 
   const toggleBold = () => {
     if (!activeBlock) {
@@ -867,8 +919,25 @@ export default function NoteEditor({
   };
 
   /* =====================================================
+     ALIGNMENT
+  ===================================================== */
+
+  const updateAlignment = (
+    alignment:
+      | "left"
+      | "center"
+      | "right"
+      | "justify",
+  ) => {
+    updateActiveBlock({
+      textAlign:
+        alignment,
+    });
+  };
+
+  /* =====================================================
      PIN
-===================================================== */
+  ===================================================== */
 
   const togglePin = async () => {
     const updatedNote: EditorNote =
@@ -910,7 +979,7 @@ export default function NoteEditor({
 
   /* =====================================================
      SAVE
-===================================================== */
+  ===================================================== */
 
   const handleSave = async () => {
     if (
@@ -943,7 +1012,7 @@ export default function NoteEditor({
 
   /* =====================================================
      DELETE NOTE
-===================================================== */
+  ===================================================== */
 
   const handleDelete = async () => {
     if (!onDelete) {
@@ -955,7 +1024,7 @@ export default function NoteEditor({
 
   /* =====================================================
      TEXTAREA INPUT
-===================================================== */
+  ===================================================== */
 
   const handleInput = (
     event: React.FormEvent<HTMLTextAreaElement>,
@@ -975,28 +1044,32 @@ export default function NoteEditor({
 
   /* =====================================================
      RESTORE FULL TEXTAREA HEIGHT
-===================================================== */
+  ===================================================== */
 
   useLayoutEffect(() => {
     const frame =
-      window.requestAnimationFrame(() => {
-        Object.values(
-          textareaRefs.current,
-        ).forEach((textarea) => {
-          if (!textarea) {
-            return;
-          }
+      window.requestAnimationFrame(
+        () => {
+          Object.values(
+            textareaRefs.current,
+          ).forEach(
+            (textarea) => {
+              if (!textarea) {
+                return;
+              }
 
-          textarea.style.height =
-            "auto";
+              textarea.style.height =
+                "auto";
 
-          textarea.style.height =
-            `${Math.max(
-              22,
-              textarea.scrollHeight,
-            )}px`;
-        });
-      });
+              textarea.style.height =
+                `${Math.max(
+                  22,
+                  textarea.scrollHeight,
+                )}px`;
+            },
+          );
+        },
+      );
 
     return () => {
       window.cancelAnimationFrame(
@@ -1007,7 +1080,7 @@ export default function NoteEditor({
 
   /* =====================================================
      ACTIVE BLOCK
-===================================================== */
+  ===================================================== */
 
   const activeBlock =
     draft.blocks.find(
@@ -1025,8 +1098,24 @@ export default function NoteEditor({
     "checklist";
 
   /* =====================================================
+     ACTIVE ALIGNMENT ICON
+  ===================================================== */
+
+  const ActiveAlignmentIcon =
+    activeBlock?.textAlign ===
+    "center"
+      ? AlignCenter
+      : activeBlock?.textAlign ===
+          "right"
+        ? AlignRight
+        : activeBlock?.textAlign ===
+            "justify"
+          ? AlignJustify
+          : AlignLeft;
+
+  /* =====================================================
      RENDER
-===================================================== */
+  ===================================================== */
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-white">
@@ -1320,6 +1409,10 @@ export default function NoteEditor({
                         fontFamily:
                           block.fontFamily ??
                           DEFAULT_FONT_FAMILY,
+
+                        textAlign:
+                          block.textAlign ??
+                          DEFAULT_TEXT_ALIGN,
                       }}
                       className={`relative top-[2px] m-0 flex-1 self-center resize-none overflow-hidden border-0 bg-transparent p-0 outline-none placeholder:text-gray-300 ${
                         isChecklist &&
@@ -1407,172 +1500,393 @@ export default function NoteEditor({
 
       <div className="shrink-0 border-t border-gray-200 bg-white px-3 py-2">
 
-        <div className="mx-auto flex max-w-3xl items-center justify-center gap-1.5 overflow-x-auto">
+        <div className="mx-auto flex max-w-3xl items-center justify-center gap-1.5">
 
-          {/* BOLD */}
+          {/* STYLE */}
 
-          <button
-            type="button"
-            onClick={toggleBold}
-            disabled={!activeBlock}
-            title="Bold"
-            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-sm font-bold transition ${
-              activeBlock?.bold
-                ? "bg-gray-200 text-black"
-                : "text-gray-600 hover:bg-gray-100"
-            } disabled:opacity-40`}
+          <div
+            ref={styleMenuRef}
+            className="relative"
           >
-            B
-          </button>
 
-          <div className="mx-1 h-5 w-px shrink-0 bg-gray-200" />
+            <button
+              type="button"
+              onClick={() =>
+                setStyleOpen(
+                  (previous) =>
+                    !previous,
+                )
+              }
+              disabled={
+                !activeBlock
+              }
+              title="Text Style"
+              className={`flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs font-medium transition ${
+                styleOpen
+                  ? "border-green-500 bg-green-50 text-green-700"
+                  : "border-gray-200 bg-white text-gray-600 hover:bg-gray-100"
+              } disabled:opacity-40`}
+            >
+              <span>
+                Style
+              </span>
 
-          {/* FONT */}
+              <ChevronDown
+                size={13}
+                className={`transition-transform ${
+                  styleOpen
+                    ? "rotate-180"
+                    : ""
+                }`}
+              />
+            </button>
 
-          <select
-            value={
-              activeBlock?.fontFamily ??
-              DEFAULT_FONT_FAMILY
-            }
-            onChange={(event) =>
-              updateActiveBlock({
-                fontFamily:
-                  event.target.value,
-              })
-            }
-            disabled={!activeBlock}
-            className="h-8 min-w-[125px] shrink-0 rounded-md border border-gray-200 bg-white px-2 text-xs text-gray-700 outline-none focus:border-green-500 disabled:opacity-40"
-          >
-            <option value="Hind Siliguri">
-              Hind Siliguri
-            </option>
+            {/* STYLE PANEL */}
 
-            <option value="Arial">
-              Arial
-            </option>
+            {styleOpen && (
+              <div className="absolute bottom-full left-1/2 z-50 mb-2 w-[280px] -translate-x-1/2 rounded-xl border border-gray-200 bg-white p-3 shadow-xl">
 
-            <option value="Georgia">
-              Georgia
-            </option>
+                {/* FONT FAMILY */}
 
-            <option value="sans-serif">
-              Sans Serif
-            </option>
+                <div className="mb-3">
+                  <label className="mb-1.5 block text-[11px] font-medium text-gray-500">
+                    Font Family
+                  </label>
 
-            <option value="serif">
-              Serif
-            </option>
-          </select>
+                  <select
+                    value={
+                      activeBlock?.fontFamily ??
+                      DEFAULT_FONT_FAMILY
+                    }
+                    onChange={(
+                      event,
+                    ) =>
+                      updateActiveBlock(
+                        {
+                          fontFamily:
+                            event
+                              .target
+                              .value,
+                        },
+                      )
+                    }
+                    disabled={
+                      !activeBlock
+                    }
+                    className="h-9 w-full rounded-lg border border-gray-200 bg-white px-2.5 text-xs text-gray-700 outline-none focus:border-green-500"
+                  >
+                    <option value="Hind Siliguri">
+                      Hind Siliguri
+                    </option>
 
-          {/* FONT SIZE */}
+                    <option value="Arial">
+                      Arial
+                    </option>
 
-          <select
-            value={
-              activeBlock?.fontSize ??
-              DEFAULT_FONT_SIZE
-            }
-            onChange={(event) =>
-              updateActiveBlock({
-                fontSize:
-                  Number(
-                    event.target
-                      .value,
-                  ),
-              })
-            }
-            disabled={!activeBlock}
-            className="h-8 w-[65px] shrink-0 rounded-md border border-gray-200 bg-white px-2 text-xs text-gray-700 outline-none focus:border-green-500 disabled:opacity-40"
-          >
-            <option value={12}>
-              12
-            </option>
+                    <option value="Georgia">
+                      Georgia
+                    </option>
 
-            <option value={13}>
-              13
-            </option>
+                    <option value="sans-serif">
+                      Sans Serif
+                    </option>
 
-            <option value={14}>
-              14
-            </option>
+                    <option value="serif">
+                      Serif
+                    </option>
+                  </select>
+                </div>
 
-            <option value={16}>
-              16
-            </option>
+                {/* FONT SIZE + WEIGHT */}
 
-            <option value={18}>
-              18
-            </option>
+                <div className="mb-3 grid grid-cols-2 gap-2">
 
-            <option value={20}>
-              20
-            </option>
+                  <div>
+                    <label className="mb-1.5 block text-[11px] font-medium text-gray-500">
+                      Font Size
+                    </label>
 
-            <option value={24}>
-              24
-            </option>
+                    <select
+                      value={
+                        activeBlock?.fontSize ??
+                        DEFAULT_FONT_SIZE
+                      }
+                      onChange={(
+                        event,
+                      ) =>
+                        updateActiveBlock(
+                          {
+                            fontSize:
+                              Number(
+                                event
+                                  .target
+                                  .value,
+                              ),
+                          },
+                        )
+                      }
+                      disabled={
+                        !activeBlock
+                      }
+                      className="h-9 w-full rounded-lg border border-gray-200 bg-white px-2 text-xs text-gray-700 outline-none focus:border-green-500"
+                    >
+                      <option value={12}>
+                        12 px
+                      </option>
 
-            <option value={28}>
-              28
-            </option>
+                      <option value={13}>
+                        13 px
+                      </option>
 
-            <option value={32}>
-              32
-            </option>
-          </select>
+                      <option value={14}>
+                        14 px
+                      </option>
 
-          {/* LINE HEIGHT */}
+                      <option value={16}>
+                        16 px
+                      </option>
 
-          <select
-            value={
-              activeBlock?.lineHeight ??
-              DEFAULT_LINE_HEIGHT
-            }
-            onChange={(event) =>
-              updateActiveBlock({
-                lineHeight:
-                  Number(
-                    event.target
-                      .value,
-                  ),
-              })
-            }
-            disabled={!activeBlock}
-            className="h-8 w-[68px] shrink-0 rounded-md border border-gray-200 bg-white px-2 text-xs text-gray-700 outline-none focus:border-green-500 disabled:opacity-40"
-          >
-            <option value={0.9}>
-              0.9
-            </option>
+                      <option value={18}>
+                        18 px
+                      </option>
 
-            <option value={1}>
-              1.0
-            </option>
+                      <option value={20}>
+                        20 px
+                      </option>
 
-            <option value={1.1}>
-              1.1
-            </option>
+                      <option value={24}>
+                        24 px
+                      </option>
 
-            <option value={1.2}>
-              1.2
-            </option>
+                      <option value={28}>
+                        28 px
+                      </option>
 
-            <option value={1.4}>
-              1.4
-            </option>
+                      <option value={32}>
+                        32 px
+                      </option>
+                    </select>
+                  </div>
 
-            <option value={1.6}>
-              1.6
-            </option>
+                  <div>
+                    <label className="mb-1.5 block text-[11px] font-medium text-gray-500">
+                      Font Weight
+                    </label>
 
-            <option value={1.8}>
-              1.8
-            </option>
+                    <select
+                      value={
+                        activeBlock?.bold
+                          ? "700"
+                          : "400"
+                      }
+                      onChange={(
+                        event,
+                      ) =>
+                        updateActiveBlock(
+                          {
+                            bold:
+                              event
+                                .target
+                                .value ===
+                              "700",
+                          },
+                        )
+                      }
+                      disabled={
+                        !activeBlock
+                      }
+                      className="h-9 w-full rounded-lg border border-gray-200 bg-white px-2 text-xs text-gray-700 outline-none focus:border-green-500"
+                    >
+                      <option value="400">
+                        Regular
+                      </option>
 
-            <option value={2}>
-              2.0
-            </option>
-          </select>
+                      <option value="500">
+                        Medium
+                      </option>
 
-          <div className="mx-1 h-5 w-px shrink-0 bg-gray-200" />
+                      <option value="600">
+                        Semi Bold
+                      </option>
+
+                      <option value="700">
+                        Bold
+                      </option>
+                    </select>
+                  </div>
+
+                </div>
+
+                {/* LINE HEIGHT */}
+
+                <div className="mb-3">
+                  <label className="mb-1.5 block text-[11px] font-medium text-gray-500">
+                    Line Height
+                  </label>
+
+                  <select
+                    value={
+                      activeBlock?.lineHeight ??
+                      DEFAULT_LINE_HEIGHT
+                    }
+                    onChange={(
+                      event,
+                    ) =>
+                      updateActiveBlock(
+                        {
+                          lineHeight:
+                            Number(
+                              event
+                                .target
+                                .value,
+                            ),
+                        },
+                      )
+                    }
+                    disabled={
+                      !activeBlock
+                    }
+                    className="h-9 w-full rounded-lg border border-gray-200 bg-white px-2.5 text-xs text-gray-700 outline-none focus:border-green-500"
+                  >
+                    <option value={0.9}>
+                      0.9
+                    </option>
+
+                    <option value={1}>
+                      1.0
+                    </option>
+
+                    <option value={1.1}>
+                      1.1
+                    </option>
+
+                    <option value={1.2}>
+                      1.2
+                    </option>
+
+                    <option value={1.4}>
+                      1.4
+                    </option>
+
+                    <option value={1.6}>
+                      1.6
+                    </option>
+
+                    <option value={1.8}>
+                      1.8
+                    </option>
+
+                    <option value={2}>
+                      2.0
+                    </option>
+                  </select>
+                </div>
+
+                {/* ALIGNMENT */}
+
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-medium text-gray-500">
+                    Alignment
+                  </label>
+
+                  <div className="grid grid-cols-4 gap-1">
+
+                    {/* LEFT */}
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateAlignment(
+                          "left",
+                        )
+                      }
+                      className={`flex h-9 items-center justify-center rounded-lg transition ${
+                        (activeBlock?.textAlign ??
+                          DEFAULT_TEXT_ALIGN) ===
+                        "left"
+                          ? "bg-green-600 text-white"
+                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      }`}
+                      title="Align Left"
+                    >
+                      <AlignLeft
+                        size={16}
+                      />
+                    </button>
+
+                    {/* CENTER */}
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateAlignment(
+                          "center",
+                        )
+                      }
+                      className={`flex h-9 items-center justify-center rounded-lg transition ${
+                        activeBlock?.textAlign ===
+                        "center"
+                          ? "bg-green-600 text-white"
+                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      }`}
+                      title="Align Center"
+                    >
+                      <AlignCenter
+                        size={16}
+                      />
+                    </button>
+
+                    {/* RIGHT */}
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateAlignment(
+                          "right",
+                        )
+                      }
+                      className={`flex h-9 items-center justify-center rounded-lg transition ${
+                        activeBlock?.textAlign ===
+                        "right"
+                          ? "bg-green-600 text-white"
+                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      }`}
+                      title="Align Right"
+                    >
+                      <AlignRight
+                        size={16}
+                      />
+                    </button>
+
+                    {/* JUSTIFY */}
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateAlignment(
+                          "justify",
+                        )
+                      }
+                      className={`flex h-9 items-center justify-center rounded-lg transition ${
+                        activeBlock?.textAlign ===
+                        "justify"
+                          ? "bg-green-600 text-white"
+                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      }`}
+                      title="Justify"
+                    >
+                      <AlignJustify
+                        size={16}
+                      />
+                    </button>
+
+                  </div>
+                </div>
+
+              </div>
+            )}
+
+          </div>
 
           {/* TEXT */}
 
@@ -1593,7 +1907,9 @@ export default function NoteEditor({
 
           <button
             type="button"
-            onClick={makeChecklist}
+            onClick={
+              makeChecklist
+            }
             disabled={!activeBlock}
             className={`h-8 shrink-0 rounded-md px-3 text-xs font-medium transition ${
               isActiveChecklist
@@ -1603,6 +1919,22 @@ export default function NoteEditor({
           >
             Checklist
           </button>
+
+          {/* CURRENT ALIGNMENT INDICATOR */}
+
+          {activeBlock && (
+            <div
+              className="ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-gray-50 text-gray-500"
+              title={`Alignment: ${
+                activeBlock.textAlign ??
+                "left"
+              }`}
+            >
+              <ActiveAlignmentIcon
+                size={15}
+              />
+            </div>
+          )}
 
         </div>
       </div>
