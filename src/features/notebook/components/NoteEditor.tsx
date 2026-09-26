@@ -1,4 +1,3 @@
-
 "use client";
 
 import {
@@ -1498,7 +1497,7 @@ export default function NoteEditor({
           FORMAT TOOLBAR
       ================================================= */}
 
-      <div className="shrink-0 border-t border-gray-200 bg-white px-3 py-2">
+      <div className="relative z-40 shrink-0 border-t border-gray-200 bg-white px-3 py-2">
 
         <div className="mx-auto flex max-w-3xl items-center justify-center gap-1.5">
 
@@ -1541,14 +1540,44 @@ export default function NoteEditor({
               />
             </button>
 
-            {/* STYLE PANEL */}
+            {/* =================================================
+                STYLE PANEL
+                RESPONSIVE POSITION FIX
+            ================================================= */}
 
             {styleOpen && (
-              <div className="absolute bottom-full left-1/2 z-50 mb-2 w-[280px] -translate-x-1/2 rounded-xl border border-gray-200 bg-white p-3 shadow-xl">
+              <div
+                className="
+                  fixed
+                  bottom-[58px]
+                  left-3
+                  right-3
+                  z-[100]
+                  max-h-[calc(100vh-80px)]
+                  overflow-y-auto
+                  rounded-xl
+                  border
+                  border-gray-200
+                  bg-white
+                  p-3
+                  shadow-2xl
+
+                  sm:absolute
+                  sm:bottom-full
+                  sm:left-0
+                  sm:right-auto
+                  sm:mb-2
+                  sm:max-h-none
+                  sm:w-[360px]
+                  sm:translate-x-0
+                  sm:overflow-visible
+                "
+              >
 
                 {/* FONT FAMILY */}
 
                 <div className="mb-3">
+
                   <label className="mb-1.5 block text-[11px] font-medium text-gray-500">
                     Font Family
                   </label>
@@ -1575,6 +1604,7 @@ export default function NoteEditor({
                     }
                     className="h-9 w-full rounded-lg border border-gray-200 bg-white px-2.5 text-xs text-gray-700 outline-none focus:border-green-500"
                   >
+
                     <option value="Hind Siliguri">
                       Hind Siliguri
                     </option>
@@ -1594,7 +1624,9 @@ export default function NoteEditor({
                     <option value="serif">
                       Serif
                     </option>
+
                   </select>
+
                 </div>
 
                 {/* FONT SIZE + WEIGHT */}
@@ -1602,6 +1634,7 @@ export default function NoteEditor({
                 <div className="mb-3 grid grid-cols-2 gap-2">
 
                   <div>
+
                     <label className="mb-1.5 block text-[11px] font-medium text-gray-500">
                       Font Size
                     </label>
@@ -1630,6 +1663,7 @@ export default function NoteEditor({
                       }
                       className="h-9 w-full rounded-lg border border-gray-200 bg-white px-2 text-xs text-gray-700 outline-none focus:border-green-500"
                     >
+
                       <option value={12}>
                         12 px
                       </option>
@@ -1665,10 +1699,13 @@ export default function NoteEditor({
                       <option value={32}>
                         32 px
                       </option>
+
                     </select>
+
                   </div>
 
                   <div>
+
                     <label className="mb-1.5 block text-[11px] font-medium text-gray-500">
                       Font Weight
                     </label>
@@ -1697,6 +1734,7 @@ export default function NoteEditor({
                       }
                       className="h-9 w-full rounded-lg border border-gray-200 bg-white px-2 text-xs text-gray-700 outline-none focus:border-green-500"
                     >
+
                       <option value="400">
                         Regular
                       </option>
@@ -1712,7 +1750,9 @@ export default function NoteEditor({
                       <option value="700">
                         Bold
                       </option>
+
                     </select>
+
                   </div>
 
                 </div>
@@ -1720,6 +1760,7 @@ export default function NoteEditor({
                 {/* LINE HEIGHT */}
 
                 <div className="mb-3">
+
                   <label className="mb-1.5 block text-[11px] font-medium text-gray-500">
                     Line Height
                   </label>
@@ -1748,6 +1789,7 @@ export default function NoteEditor({
                     }
                     className="h-9 w-full rounded-lg border border-gray-200 bg-white px-2.5 text-xs text-gray-700 outline-none focus:border-green-500"
                   >
+
                     <option value={0.9}>
                       0.9
                     </option>
@@ -1779,12 +1821,15 @@ export default function NoteEditor({
                     <option value={2}>
                       2.0
                     </option>
+
                   </select>
+
                 </div>
 
                 {/* ALIGNMENT */}
 
                 <div>
+
                   <label className="mb-1.5 block text-[11px] font-medium text-gray-500">
                     Alignment
                   </label>
