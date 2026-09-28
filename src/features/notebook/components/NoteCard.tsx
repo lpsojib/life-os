@@ -53,7 +53,7 @@ export default function NoteCard({
 
   return (
     <article
-      className="group relative flex h-[210px] cursor-pointer flex-col overflow-hidden rounded-xl border border-gray-200 bg-white p-4 transition hover:border-gray-300 hover:shadow-sm"
+      className="group relative flex h-[190px] cursor-pointer flex-col overflow-hidden rounded-xl border border-gray-200 bg-white p-4 transition hover:border-gray-300 hover:shadow-sm"
       onClick={onClick}
     >
       {/* PIN INDICATOR */}
