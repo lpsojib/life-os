@@ -1,3 +1,4 @@
+
 "use client";
 
 import {
@@ -52,7 +53,7 @@ export default function NoteCard({
 
   return (
     <article
-      className="group relative cursor-pointer rounded-xl border border-gray-200 bg-white p-4 transition hover:border-gray-300 hover:shadow-sm"
+      className="group relative flex h-[210px] cursor-pointer flex-col overflow-hidden rounded-xl border border-gray-200 bg-white p-4 transition hover:border-gray-300 hover:shadow-sm"
       onClick={onClick}
     >
       {/* PIN INDICATOR */}
@@ -66,7 +67,7 @@ export default function NoteCard({
       {/* TITLE */}
 
       <h3
-        className={`pr-7 text-[15px] font-semibold leading-5 text-black ${
+        className={`min-h-[40px] pr-7 text-[15px] font-semibold leading-5 text-black ${
           note.title
             ? ""
             : "text-gray-400"
@@ -77,14 +78,16 @@ export default function NoteCard({
 
       {/* PREVIEW */}
 
-      <p className="mt-2 line-clamp-3 whitespace-pre-wrap break-words text-[13px] leading-[1.45] text-gray-600">
-        {preview ||
-          "No content yet"}
-      </p>
+      <div className="min-h-0 flex-1 overflow-hidden">
+        <p className="mt-2 line-clamp-5 whitespace-pre-wrap break-words text-[13px] leading-[1.45] text-gray-600">
+          {preview ||
+            "No content yet"}
+        </p>
+      </div>
 
       {/* FOOTER */}
 
-      <div className="mt-3 flex items-center justify-between">
+      <div className="mt-auto flex min-h-[28px] shrink-0 items-center justify-between pt-3">
         <span className="text-[11px] text-gray-400">
           {formattedDate}
         </span>
@@ -143,3 +146,4 @@ export default function NoteCard({
     </article>
   );
 }
+
