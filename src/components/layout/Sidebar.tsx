@@ -57,11 +57,11 @@ const menuItems = [
     href: "/finance",
     icon: Wallet,
   },
-  {
-    title: "Reminder",
-    href: "/reminder",
-    icon: Bell,
-  },
+{
+  title: "Reminder",
+  href: "/reminders",
+  icon: Bell,
+},
   {
     title: "About",
     href: "/about",
